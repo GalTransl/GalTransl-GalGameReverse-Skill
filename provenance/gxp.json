@@ -1,0 +1,15 @@
+{
+  "implementation": "python/archives/gxp.py",
+  "license": "GPL-3.0-only",
+  "origin": "Header inspection contributed independently; header boundary and raw-region behavior corrected using the reference below.",
+  "reference": {
+    "repository": "https://github.com/nanami5270/GARbro-Mod",
+    "commit": "bc26d991ef5cdc0e1ecb32122ee9a48c3375750c",
+    "path": "ArcFormats/Astronauts/ArcGXP.cs",
+    "symbols": ["PakOpener.TryOpenGxpFile", "PakOpener.OpenEntry"],
+    "license": "MIT",
+    "copyright": "Copyright (C) 2016 by morkt",
+    "license_file": "licenses/MIT-GARbro.txt",
+    "use": "Cross-check only: index starts at 0x30, data base is the 64-bit field at 0x28, and stored members may require decryption. No index decoder, key data, decryption routine or writer was ported."
+  }
+}
