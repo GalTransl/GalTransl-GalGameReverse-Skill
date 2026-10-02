@@ -108,6 +108,8 @@ assert patched == '#Alice\r\n你好[r]world[l]\r\n'
 
 默认由 agent 接收同名 `gt_output` 后执行回写和打包，不只提供命令让用户自行操作。所有产物写入新目录，原游戏文件保持只读；部署与启动沿用主流程授权边界。
 
+中文缺字、字体选择与覆盖关系见[字体排查流程](kirikiri/workflow.md#中文缺字与字体选择)。
+
 ## 验证与维护
 
 - 批处理回归：[test_kirikiri_extract.py](../tests/test_kirikiri_extract.py)、[多语言 SCN](../tests/test_kirikiri_multilang.py)、[Hxv4 文本](../tests/test_kirikiri_hxv4_text.py)。有限 KS 回归位于 `tests/test_engines_primary.py`。
