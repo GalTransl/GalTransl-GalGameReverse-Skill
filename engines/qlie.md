@@ -14,39 +14,36 @@
 | 译文打包入口 | [qlie_repack.py](../python/engines/qlie_repack.py)：从 `gt_output` 校验、回填、生成新 PACK；支持原文整包往返 |
 | 旧文本字段 API | [qlie.py](../python/engines/qlie.py)：有限 `id,name,message`、独立姓名、`^select` 的字符范围 API；下文保留说明 |
 
-PACK 1.x/2.x/3.1、未知 hash 版本、新建或删除成员、重命名、任意脚本 VM 尚不支持。本次 writer 是 **3.0 原包模板重建**，不能用 msg-tool 的 3.1 writer 直接替代。
+PACK 1.x/2.x/3.1、未知 hash 版本、新建或删除成员、重命名、任意脚本 VM 尚不支持。writer 只支持 **3.0 原包模板重建**，不能将其他版本的布局直接套用。
 
 ## PACK 3.0 与密钥链
 
 1. 尾部 28 字节是 `FilePackVer3.0\0\0`、条数、64 位索引偏移。`read_index(stream)` 只读索引和包尾密钥材料；不把整个包或大语音成员装入内存。
 2. 名称是按包内 ArcKey 解密后的 CP932 字节。`Entry.raw_name` 保存**解密后的名称字节**，这是 keyed 解密的输入；不能错用密文名称。仍须通过 `validate_names` 才能写盘。
 3. `mode` 必须显式指定：`legacy` 不带外部密钥；`key-file` 使用 key 文件；`keyed` 同时使用 key 文件和 256 字节 IconKeyImage。仅发现 `key.fkey` 不证明单密钥模式足够。
-4. 本样本的链为 `DLL/key.fkey` + 原日文 EXE 的图标密钥 → 首成员 `pack_keyfile_kfueheish15538fa9or.key` → 后续成员。每个包的内部 key 都单独解码；不能跨包复用。
+4. `keyed` 模式按外部 key 文件与 EXE 图标密钥 → 包内 key 成员 → 后续成员建立密钥链。每个包的内部 key 单独解码，不跨包复用。
 5. `read_member` 先核对**存储密文**的 QLIE checksum，再解密，再严格解压。压缩头错误常提示密钥模式/图标错误；禁止把解压失败的密文当原文返回。
 6. ArcKey 从末尾 `0x41c` 处的 256 字节生成。QLIE 使用 64-word 的 MT 变体、MMX 分 lane 加法和明文反馈，不等同于标准 MT19937 或对称地调用 decrypt 两遍。末尾不足 8 字节不加密，checksum 也只覆盖完整 qword；另用完整 SHA-256 保存输入身份。
 
 只从用户提供的游戏中静态读取密钥。`game_key_from_pe(bytes)` 不扫描进程，不加载可执行文件，也不附带任何游戏密钥。先限制 EXE 大小；不支持的 PE/Delphi 结构报错。
 
-## 实例：美少女万華鏡 -忘れな草と永遠の少女-
-
-2026-10-01 的本地样本验证：七个 `GameData/data*.pack` 均为 3.0；主剧情位于 `data6.pack`，`data7.pack` 主要是系统脚本，`data8.pack` 包含补丁及新增分支。以原日文 `美少女万華鏡２.exe` 的 IconKeyImage 和 `DLL/key.fkey` 成功解码。
+## 提取工作区
 
 在 Skill 根目录运行，替换 `GAME`、`NEW_EXTRACT` 为实际路径：
 
 ```text
-python -B -m python.engines.qlie_extract "GAME" "NEW_EXTRACT" --exe "美少女万華鏡２.exe" --key-file "DLL/key.fkey" --archives GameData/data0.pack GameData/data1.pack GameData/data2.pack GameData/data3.pack GameData/data6.pack GameData/data7.pack GameData/data8.pack
+python -B -m python.engines.qlie_extract "GAME" "NEW_EXTRACT" --exe "game.exe" --key-file "DLL/key.fkey" --archives GameData/story.pack GameData/update.pack
 ```
 
 `NEW_EXTRACT` 按主 Skill 约定选游戏下不存在的 `<游戏名>_extract`。可直接把 `NEW_EXTRACT/gt_input` 导入 GalTransl，翻译结果放回 `NEW_EXTRACT/gt_output`，保持同名与条目顺序。
 
 - 提取器只解出 `.s`、配套 `.txt` 和内部 key，媒体只读索引；累计脚本输出默认 64 MiB。完整包 SHA-256 以流方式计算。
-- 160 个 `.s` 均通过 CP932 严格解码与逐字节原文回填；98 个纯系统脚本不产生空 JSON。62 份翻译 JSON 共 **12,089 条**：6,240 条有姓名、12 个选项、8 段居中文字。条数包含基础包/补丁保留的版本，不能视为运行时去重后的剧情条数。
 - 同名/同路径剧本跨包时保留每个版本，不擅自断言包加载优先级；文件名冲突才加 `__aNN_mNNNNN` 后缀。报告记录精确来源及输出名。
-- `.txt` 保存在 `original` 供核对配置，不泛化为对白。汉化 EXE 的外部覆盖数据（例如 `.cn`、`.1/.2`）未解析；此路线导出 PACK 中的日文剧本。
+- `.txt` 保存在 `original` 供核对配置，不泛化为对白。汉化 EXE 的外部覆盖数据（例如 `.cn`、`.1/.2`）未解析；此路线只导出所选 PACK 内的剧本，不推断其语言或补丁状态。
 
 ## ImoScripter 多行方言与回填
 
-`avg/projectsetting.txt` 的 `FormatType=1`、`avg/setting.txt` 的 `ReturnCode=[n]` 是进入此路线的证据。样本中的 `ImoScripter_Format.s`、`Imo_ApplyMessageText`、`Misc_NameDivide` 用来核实以下规则；不把规则套到 FormatType=0。
+`avg/projectsetting.txt` 的 `FormatType=1`、`avg/setting.txt` 的 `ReturnCode=[n]` 是进入此路线的证据；下列规则不适用于 FormatType=0。
 
 - 姓名和正文只在同一空行分隔句中结合；空行后姓名清空，旁白不会继承上一人物。语音行 `％...％` 和控制行不送翻译。孤立姓名、句内未知控制流和未知文本标签报错。
 - `【身份名＠显示名】` 导出显示名。译名写回时保留原身份名，避免改变按身份名查找的语音音量设置；例如 `【Alice】` 翻译后为 `【Alice＠艾丽丝】`。变量姓名为上下文只读。`＠` 不是多人名分隔符。
@@ -67,17 +64,19 @@ assert rows(rebuilt) == translated
 
 ## 从 gt_output 打包
 
+译文按同名文件放回 `gt_output` 后告诉 agent，由 agent 执行校验与打包。
+
 ```text
 python -B -m python.engines.qlie_repack "GAME" "NEW_EXTRACT" "NEW_REBUILT"
 ```
 
-输出为 `NEW_REBUILT/GameData/data6.pack` 等**原归档同名文件**和 `reports/repack.json`，只重建含译文的包；同包内没有译文的成员按原密文复制。空翻译目录、未知文件名、原件或 manifest 被修改、译文条数/字段/控制结构错误均会拒绝，不生成冒充成功的包。
+输出为 `NEW_REBUILT/GameData/story.pack` 等**原归档同名文件**和 `reports/repack.json`，只重建含译文的包；同包内没有译文的成员按原密文复制。空翻译目录、未知文件名、原件或 manifest 被修改、译文条数/字段/控制结构错误均会拒绝，不生成冒充成功的包。
 
 ```text
 python -B -m python.engines.qlie_repack "GAME" "NEW_EXTRACT" "NEW_ROUNDTRIP" --source-roundtrip
 ```
 
-`--source-roundtrip` 使用原文 JSON，所有 `.s`（包括空系统脚本）提交给 writer。相同原文仍经过解密→保留原压缩流→重新加密及索引重建；不是整包直接复制。样本中的 `data0/6/7/8.pack` 均得到与原包完全一致的 SHA-256。
+`--source-roundtrip` 使用原文 JSON，所有 `.s`（包括空系统脚本）提交给 writer。相同原文仍经过解密→保留原压缩流→重新加密及索引重建；不是整包直接复制。生成后比较原包与重建包的哈希。
 
 writer 的明确边界：
 
@@ -85,7 +84,7 @@ writer 的明确边界：
 - 修改成员以**未压缩、原加密模式**重新存储，并更新 payload 偏移、存储/解码长度、密文 checksum 和包尾索引偏移。不实现 BPE 优化压缩，因此新包可能略大；未修改成员保留原压缩密文。
 - 底层 `rebuild(source, destination, replacements, mode=..., key_file=..., game_key=...)` 支持流式复制媒体，`destination` 必须是独立、空的可读写流。调用者以 `x+b` 创建新文件并负责失败清理。便捷 CLI 为安全使用 `write_new_tree`，限制单原包 128 MiB、整个产物 256 MiB；更大包按流式 API 单独处理。
 - 当前 CLI 严格使用 CP932。它不会偷偷转 CP936、损失字符或安装字符隧道；CP932 不可编码的中文需先独立验证运行时编码/字体方案。归档算法可保存任意 bytes，不能由此推断游戏支持对应文本编码。
-- 新包能完整重新解包、脚本语义一致，仍不等于游戏启动、补丁优先级、字体和选项跳转已经验证。真实修改测试覆盖 3 个剧本的长正文、译名、选择和 pc 文字；2 个新包重新解包成功，533 个未改成员逐字节一致。未启动游戏或覆盖游戏原件。
+- 新包须完整重新解包，核对脚本语义及未改成员字节；通过不等于游戏加载、补丁优先级、字体和选项跳转已验证。
 
 ## 旧文本字段 API（不同方言）
 

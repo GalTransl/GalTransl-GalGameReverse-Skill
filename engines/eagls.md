@@ -9,16 +9,15 @@
 | 对白 | [eagls_text.py](../python/engines/eagls_text.py)：`Profile`、`export_script`、`rebuild_script` |
 | 工作区 CLI | [eagls_extract.py](../python/engines/eagls_extract.py)：提取、原文往返、译文重封包 |
 
-当前支持有明确参数、成员连续存放的 SCPACK IDX/PAK，以及下述源文本方言。H_APPLI 的实测和命令见本页末尾。
+当前支持有明确参数、成员连续存放的 SCPACK IDX/PAK，以及下述源文本方言。工作区用法见下文。
 
 ## 识别与范围
 - 对应 SExtractor `Engine_EAGLS`，该提取器本身只是 BIN 文本规则代理。
 - 实质格式算法在 `tools/EAGLS/EAGLS_script_tool/scpacker.py`。
 - 目录线索是 `SCPACK.idx` 与 `SCPACK.pak` 配对，而非单个通用 magic。
 - `EAGLS/ALIS` 是工具覆盖的两组布局，不能仅由厂商名决定参数。
-- 源 README 说 GARbro 需选 ADVSYS 才能正常解包时，应考虑 `--alis`。
+- `--alis` 用于 ALIS 布局，须依据记录宽度、文本起点及索引验证选择，不能只凭工具显示的引擎标签。
 - 此处不把 ADVSYS 标签扩大解释为其他引擎支持。
-- 上游推荐优先使用 EAGLS_script_tool；旧 HSHINTAI 工具可能有偏移问题。
 - leaf 实现明确参数的字节算法，不运行原 CLI，也不猜密钥。
 
 ## 免安装准备：INI 与 wave 目录
@@ -84,7 +83,7 @@
 - 不把 name 猜测结果回写为脚本变量或函数名。
 - 编码采用明确、严格的 CP932/目标编码，失败不得忽略。
 - `dialogue_spans` 仅保留为旧预设的单行辅助器；批量导出使用 `eagls_text` 的引号边界扫描和字节跨度，避免把命令的字符串参数当对白。
-- 不能按行合并消息：实测一行可能包含多个 `&ID`；姓名命令可能紧跟上一句尾部或单独占行，应交给**后续第一条**消息，随后清空，不把其后的旁白全部标为同一说话人。
+- 不能按行合并消息：一行可能包含多个 `&ID`；姓名命令可能紧跟上一句尾部或单独占行，应交给**后续第一条**消息，随后清空，不把其后的旁白全部标为同一说话人。
 - 回填保留逗号参数、语音编号、资源字符串、消息 ID、换行及未修改文本的原始字节。重新从原件解析定位，核对 manifest，不信任外部提供的任意 offset。
 - 引号、真实换行、命令分隔符不能注入字段；尚未解释的控制样式字符序列必须保留。此实现不是完整 EAGLS 命令编译器，陌生对白语法需先扩展并验证。
 
@@ -98,33 +97,21 @@
 - 工作区 CLI 会执行以上步骤，并验证原文逐成员与整包往返一致后才发布提取结果。
 - 公共层负责备份和目录写盘，leaf 只返回 bytes/结构。
 
-## H_APPLI：已有中文补丁的实测（2026-10-01）
+## 工作区与已有字符映射
 
-只输入 `script/SCPACK.idx` 与 `script/SCPACK.pak`；不要递归吸入 `翻译补丁备份` 或既有提取目录。这个样本已汉化，提取结果是当前补丁的显示文字，不能声称恢复了日文原版。
+只选择实际使用的 `SCPACK.idx` / `SCPACK.pak`，不递归混入备份或既有提取目录。已有汉化补丁的输入不代表日文原版。
 
-| 项目 | 验证值 |
-|---|---|
-| IDX / PAK 大小 | 800,004 / 4,088,388 字节 |
-| 索引布局 | 名称 24 字节 + uint64 地址 + uint64 长度；base = 5963 |
-| IDX key | `1qaz2wsx3edc4rfv5tgb6yhn7ujm8ik,9ol.0p;/-@:^[]` |
-| 成员加密 | v2；key = `EAGLS_SYSTEM`；text_offset = 3600；label_size = 36 |
-| 存储与显示 | CP932 + UIF character_substitution，1042 对字符 |
-| 成员 / 有文本 / 空成员 | 284 / 202 / 82 |
-| GalTransl 记录 | 27,758 条，其中 12,087 条有姓名 |
-| 原文回填 | 284 个成员、IDX 与 PAK 全部字节一致 |
-| 变长测试 | `sc00_01.dat` 首句增加 22 字节；标签重定位、后续成员偏移及全包再提取通过 |
-
-**不要仅凭严格解码成功选择 GBK。** 本样本 CP932 和 GBK 都能解码全部成员，但 GBK 文字错误；CP932 直接读出的部分字也只是显示替身。已有 `uif_config.json` 的 `character_substitution.source_characters → target_characters` 才决定真实显示。提取时做正向映射，回填时做反向映射并严格 CP932 编码，再核对正向显示一致。若目标字符无法通过现有映射表示，停止该次回填；不自动改字体或创建映射。`tunnel_decoder.enable=true` 的配置不受支持。
+**不要仅凭严格解码成功选择 GBK。** CP932 与 GBK 可能同时可解码；已有字符替换时，解码文字也可能只是显示替身。`uif_config.json` 的 `character_substitution.source_characters → target_characters` 决定显示映射：提取正向还原，回填反向映射并严格 CP932 编码，再核对显示一致。无法用现有映射表示的字符需另行准备公共 JIS 方案；`tunnel_decoder.enable=true` 不受此接口支持。
 
 在技能根目录运行（下列游戏路径为示例）：
 
 ```text
-python -m python.engines.eagls_extract extract "<游戏目录>/script" "<游戏目录>/H_APPLI_extract" --uif-config "<游戏目录>/uif_config.json" --smoke-test
+python -m python.engines.eagls_extract extract "<游戏目录>/script" "<游戏目录>/game_extract" --uif-config "<游戏目录>/uif_config.json" --smoke-test
 ```
 
-默认参数仅对应上面的已验证 profile；其他游戏先核对，可通过 `--short-offsets`、`--text-offset`、`--version`、`--label-size`、`--encoding`、`--index-key`、`--script-key` 指定。没有 UIF 补丁就省略 `--uif-config`。未知密钥仍须先研究，不靠默认值宣称成功。
+使用默认参数前先核对索引、文本区与加密布局；可通过 `--short-offsets`、`--text-offset`、`--version`、`--label-size`、`--encoding`、`--index-key`、`--script-key` 指定。没有已有 UIF 映射就省略 `--uif-config`。未知密钥须先研究，不靠默认值宣称成功。
 
-- `gt_input/*.json`：202 个平铺 JSON，可直接导入 GalTransl。按成员真名命名；82 个空成员只有报告记录。
+- `gt_input/*.json`：按成员原名生成平铺 JSON；空成员只记入报告。
 - `gt_output/`：放翻译结果，文件名和数组顺序保持不变；提取不会把测试文本写进这里。
 - `original/`：加密原包、可选 UIF 配置副本；`original/scripts/` 是解密后的完整成员，含标签区和 footer，**不是纯文本文件**。
 - `metadata/`：逐成员 manifest，含字节跨度、姓名槽、源哈希、映射和加密参数。manifest 的 UTF-8 指逻辑交换文字，`storage_encoding` 才是成员编码。
@@ -132,10 +119,10 @@ python -m python.engines.eagls_extract extract "<游戏目录>/script" "<游戏�
 - `rebuilt/smoke-test/script/`：可选的变长测试包，只用于验证；`reports/smoke-translation/` 保存对应测试 JSON。
 - `reports/extraction.json`：数量、全体成员、源哈希、profile 和验证结果。
 
-译文放入 `gt_output/` 后：
+译文按同名文件放回 `gt_output/` 后告诉 agent，由 agent 校验并回写：
 
 ```text
-python -m python.engines.eagls_extract rebuild "<游戏目录>/H_APPLI_extract" "<游戏目录>/H_APPLI_extract/rebuilt/translated-01"
+python -m python.engines.eagls_extract rebuild "<游戏目录>/game_extract" "<游戏目录>/game_extract/rebuilt/translated-01"
 ```
 
 输出目录必须不存在且父目录已存在。回填按原成员真名匹配；未提供译文的成员保持原字节，未知译文文件名拒绝，不猜配。原始包、原文 JSON 与 manifest 必须保留。输出为配套 `script/SCPACK.idx` 和 `script/SCPACK.pak`；这两个文件必须一起使用，不能只换 PAK。
@@ -146,8 +133,7 @@ python -m python.engines.eagls_extract rebuild "<游戏目录>/H_APPLI_extract" 
 - 标签测试验证新 offset 和禁止前缀误匹配。
 - 文本规则测试验证 name 与 message 在同一行的提取。
 - [test_eagls.py](../tests/test_eagls.py) 覆盖短/长索引、零/非零基址、变长重定位、填充保留、坏偏移、重名/路径、跨行姓名、选择槽、映射、篡改 manifest 和工作区回填。
-- H_APPLI 已实测离线全链路；ALIS 仅合成标签/脚本和归档布局测试，未实测整款游戏；不支持新建标签或有空隙的归档。
-- 落盘后的变长测试包另外使用 SExtractor 上游 `get_data/decrypt_slice` 读取并解密 284 个成员，逐一验证标签目标；原游戏文件哈希与原文重封包哈希再次核对一致。
+- ALIS 的验证边界为合成标签、脚本和归档布局；不支持新建标签或有空隙的归档。
 - 没有启动游戏、安装补丁或验证运行时排版。离线格式自洽不能替代实际加载测试；现有字体和 UIF 运行环境是否正常仍属于部署验证。
 - 原工具的已知明文 key 搜索没有移植，参数需要有证据地提供。
 - 不宣称“IDX 解密成功”就等于“剧本往返完成”。

@@ -20,14 +20,13 @@ CP932 ACT/DAT/SPT 工作区通过 [systemc_extract.pack](../python/engines/syste
 - `decode_zlc2_literals` 仍只接受 literal 子集；`decode_zlc2` 支持真实回指，`decode_member` 有界处理嵌套层。
 - `read_fpk_index/unpack_fpk/rebuild_fpk` 支持高位文件数、加密尾索引的 FPK。CP932 ACT/DAT/SPT 和本页下方 UTF-8 TXD/PTR 是两条不同文本路线，不要混用。
 
-## ママ×カノ：UTF-8 TXD/PTR 实测（2026-10-01）
+## UTF-8 TXD/PTR 工作流
 
 ### 识别和输入选择
 
 - `SystemC.ini`、`data.fpk`、`languages/japanese.lang`；FPK 首 u32 的高位为 1，成员为 `ACT_A.txt`、`ACT_A.DAT`、`ACT_A_JA.TXD`、`ACT_A_JA.PTR`、`Axxxx_xx.spt` 等配套结构。
-- 实测 `data.fpk` 为 4,579,050 字节、534 个成员；与 `日文原版/data.fpk` 的 SHA-256 完全相同。文件夹叫“日文原版”本身不是判断证据。
-- `Patch3.fpk` 有 11 个成员，但没有 ACT/TXD/PTR/SPT 剧本表，不合并进文本基准。通过索引检查即可，不必解出大图和声音。
-- 运行语言配置为 `code=ja`，文本严格 UTF-8。不能套用 CP932 解码，也不需要创建字符替换映射。这里不自动改 `.lang` 文件、字体或启动游戏。
+- 先只读索引，确认补丁包是否包含 ACT/TXD/PTR/SPT，再决定文本基准与覆盖关系；不必为此解出图像和声音。
+- 核对运行语言配置和对应文本表。UTF-8 TXD 不套用 CP932，也不需要 JIS 替换；不自动改变语言配置。
 
 ### PTR/TXD 布局与编译引用
 
@@ -35,17 +34,17 @@ CP932 ACT/DAT/SPT 工作区通过 [systemc_extract.pack](../python/engines/syste
 - TXD 没有分行/记录分隔符；只按 PTR 的 UTF-8 **字节**范围读取。每条内部以第一个 ASCII 逗号分开 `name,message`，姓名可以为空；正文中的后续逗号属于正文。
 - 字面量 `\n` 是正文换行，JSON 导出为真实换行，回填反向恢复；不能对整个 TXD 用 CSV 或逗号切分。PTR 必须覆盖整个 TXD，拒绝重复 ID、重叠、空隙、越界和残留字节。
 - ACT 源脚本通过行末 `[text_id]` 标记文本；DAT 是 `u32 count + count × 156`，第 80 字节起有场景/行范围；SPT 是 `u32 count + count × 32`。
-- SPT opcode=1 的八个 i32 是 `opcode, character_id, voice, -1, ACT_first_line, ACT_line_count, 7, text_id`。本方言最后一项为 TXD ID，**不是旧 Tomefure 方言的固定 0**。
+- SPT opcode=1 的八个 i32 是 `opcode, character_id, voice, -1, ACT_first_line, ACT_line_count, 7, text_id`。本方言最后一项为 TXD ID，**不是旧方言的固定 0**。
 - 导出先核对 DAT 场景身份、SPT ID、ACT 行尾 ID、姓名/语音及 TXD 原文；不把 ACT 的命令、备注或整表任意字符串当对白。
-- ACT_B 有两个场景标签前置 ASCII 空格；按 DAT 指向的行识别，并允许行首空格，不能因此漏场景。ACT_A 有三条源文本含行首全角缩进而 TXD 已去除；报告记录这些 ID，导出以实际 TXD 为准，不统一清理其他空格。
-- `ACT_W_JA.PTR` 只有 ID 819，但没有本批 DAT/SPT 对应调用。该条及整对文件保持原样，报告为无可导出记录；不要把它混进翻译队列或补造空 JSON。
+- 场景标签允许行首 ASCII 空格，按 DAT 指向的行识别。ACT 与 TXD 的缩进差异记入报告，导出以实际 TXD 为准，不统一清理其他空格。
+- 无 DAT/SPT 调用的文本条目保持原样并报告为未引用，不补造 JSON。
 
 ### 安全回填边界
 
 - 只改 UTF-8 TXD 的文字，按新字节长度重建 PTR；保留 ID、保留区、顺序、未引用条目和未改文本字节。
 - **ACT、DAT、SPT、charaid.tbl 不改写**。它们作为原始身份/控制流证据保存；运行时文本翻译不等于重新编译 ACT。姓名是 TXD 内真实可写字段，改变显示姓名不改编译语音/人物 ID。
 - 回填重新解析原包和配套来源、核对 JSON 与 manifest，再解析新 TXD/PTR 比对；元数据不能提供任意可信偏移。
-- 保持每字段的换行和控制码顺序/数量。本样本验证过 `$S/$L/$M` 及 `&heart;`、`&aseri;`、`&ikari;`、`&namida;`、`&nakigao;`、`&kirari;`、`&egao;`、`&kaminari;`、`&dokuro;`；不编造未知符号的语义，遇到陌生控制码拒绝。
+- 保持每字段的换行和控制码顺序/数量。当前识别 `$S/$L/$M` 及 `&heart;`、`&aseri;`、`&ikari;`、`&namida;`、`&nakigao;`、`&kirari;`、`&egao;`、`&kaminari;`、`&dokuro;`；不编造未知符号的语义，遇到陌生控制码拒绝。
 - UTF-8 可编码中文，但中文字体覆盖、自动换行、姓名栏宽度和实际加载仍须游戏内验证，当前没有此验证。
 
 ### 可复现命令
@@ -53,17 +52,17 @@ CP932 ACT/DAT/SPT 工作区通过 [systemc_extract.pack](../python/engines/syste
 在技能根目录运行，`<输出目录>` 取游戏内新建的 `<游戏名>_extract`。已有目录不能覆盖。
 
 ```text
-python -m python.engines.systemc_txd_extract extract "<游戏目录>" --output "<输出目录>" --verify-edits --reference "日文原版/data.fpk" --reference Patch3.fpk
+python -m python.engines.systemc_txd_extract extract "<游戏目录>" --output "<输出目录>" --verify-edits
 ```
 
-- `gt_input/`：6 个平铺 JSON，**27,665 条**，其中 17,221 条有姓名、70 条为选择文本；可导入 GalTransl。实际文件名为 `ACT_A_JA.json` 至 `ACT_F_JA.json`。
+- `gt_input/`：按实际文本表名生成平铺 JSON，仅导出有目标文字的表。
 - `gt_output/`：接收同名、同顺序译文。未提供译文的表保留原样；未知 JSON 文件名拒绝。
 - `original/data.fpk` 与 `original/members/`：原包、全部解码成员，均为回填基准；`metadata/`：配套来源和文本 ID/场景绑定。
-- `rebuilt/roundtrip/data.fpk`：全部文本表经过 parser/writer 后重新封包，与原包逐字节一致。
-- `rebuilt/smoke-test/data.fpk`：给所有正文加“验证”的中文变长测试包，约 6.89 MB；实际再解包确认只改了 6 对 TXD/PTR，534 个成员均正确。测试包不能当正式译文补丁安装。
+- `rebuilt/roundtrip/data.fpk`：文本表经过 parser/writer 后重新封包的原文往返结果。
+- `rebuilt/smoke-test/data.fpk`：可选的中文变长测试包，须重新解包并确认只有目标 TXD/PTR 变化，不能当作正式译文补丁。
 - `reports/extraction.json`：源哈希、表状态、未引用 ID、原文缩进差异、参考包比较及测试结果。
 
-译文放好后回填到另一个新目录：
+译文按同名文件放回 `gt_output` 后告诉 agent，由 agent 回填到另一个新目录：
 
 ```text
 python -m python.engines.systemc_txd_extract pack "<输出目录>" --output "<输出目录>/rebuilt/translated-01"
@@ -73,9 +72,8 @@ python -m python.engines.systemc_txd_extract pack "<输出目录>" --output "<�
 
 ### 验证与来源
 
-- 文本表和配套关系为本次真实结构研究的新实现；复用现有 SystemC FPK/ZLC2 模块，没有引入外部运行依赖。
+- 文本表读写复用 SystemC FPK/ZLC2 模块，无外部运行依赖。
 - [test_systemc_txd.py](../tests/test_systemc_txd.py) 覆盖 UTF-8 字节长度、中文姓名、稀疏 ID、坏指针、编译身份、未知控制码、manifest 篡改、未引用条目及工作区打包。
-- 独立按尾索引、ZLC2 与 PTR 布局再次读取落盘测试包，核对全部 27,665 条中文变长正文；只允许 12 个 TXD/PTR 成员变化。原包、日文副本及 Patch3 源哈希均未变。
 
 ## SystemB3 容器线索
 - 来源 `fpk_pack_SystemB3.py` 从 u32 文件数开始写 FPK。

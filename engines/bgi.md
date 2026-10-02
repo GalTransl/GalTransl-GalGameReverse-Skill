@@ -173,7 +173,7 @@ def rebuild(raw, proven_replacements, profile=PROFILE):
 
 ### DSC 预算
 
-**`max_symbols` 不要低于 `max_output_size`。** DSC 每个符号至少产出 1 字节，模块内部也已强制 `symbol_count <= output_size`；符号上限更低时它只会先触发，把本可分类的大成员（图片包里很常见）报成"预算超限、没处理"。三个解码入口的默认值已对齐 64 MiB，要调就一起调。实测反例：某游戏 `sysgrp.arc` 里 11 个图片成员因符号上限低于解码上限而被误报，调平后全部正确判为非目标。
+**`max_symbols` 不要低于 `max_output_size`。** DSC 每个符号至少产出 1 字节，模块内部也已强制 `symbol_count <= output_size`；符号上限更低时它只会先触发，把本可分类的大成员（图片包里很常见）报成"预算超限、没处理"。三个解码入口的默认值已对齐 64 MiB，要调就一起调。
 
 索引、单成员与累计预算同时设置，详见 [公共预算分层](../guides/python-reference-api.md#预算分层)。本例仅演示一个成员，不负责批次累计预算、manifest 校验或安全发布。
 

@@ -14,7 +14,7 @@
 - `.ast`、文本 `.txt` 与 `.asb` 是不同入口，不应共用二进制 parser。`.ast` 不是二进制：它是带 `astver` 头的 Lua 表文本，走 [artemis-ast](artemis-ast.md)。
 - `.pfs` 的 `pf0/pf2/pf6/pf8` 是容器版本线索，须独立核对索引；解包版本与 AST/SCP/ASB 剧本方言分别确认。
 - `.asb` 后缀也被 [AZSystem](azsystem.md) 使用，以完整头和结构区分。
-- **`.iet` 不是 ASB 的同义词**：已实测的发行版里 `.iet` 是 UTF-8 SCP 文本（见 [artemis-scp](artemis-scp.md)）。先读前若干字节，看到 `ASB\0\0` 才走本页。
+- **`.iet` 不是 ASB 的同义词**：`.iet` 也可能是 UTF-8 SCP 文本（见 [artemis-scp](artemis-scp.md)）。先读前若干字节，看到 `ASB\0\0` 才走本页。
 - 引擎身份读 `Copyright.txt`，不要读收件目录名或品牌名。
 - 抽取一条 `print`、一条 `name` 并核对相邻命令，比仅看可读字符串可靠。
 - 节点类型必须是已知 0/1；遇到其他类型即停止。
@@ -36,7 +36,7 @@
 5. 保存 ASB 树、提取字段身份与原始字节，之后只修改批准的属性。
 - 本模块不处理容器 XOR、目录索引、压缩或加载优先级；pf8 载荷 XOR、索引尾部附加表、多卷覆盖由 `pfs.py` 处理。
 - pf8 载荷 XOR key 来自索引的 SHA-1；修改 index 后 key 会变化，不能只复制旧密文而不按新索引重新处理载荷。
-- 名称编码不要固定假设 CP932：`read_index` 默认自动判定，实测的 pf8 发行版用的是 UTF-8。
+- 名称编码不要固定假设 CP932：`read_index` 默认自动判定，pf8 的成员名可以使用 UTF-8。
 
 ## 源码与算法对应
 - 来源：`VNTextPatch-net8`，MIT。
@@ -90,7 +90,7 @@ assert read_asb(changed)[1].line_number == 42
 - agent 默认在新结果目录生成高序号补丁卷，重新读取并核对成员与覆盖链，然后告知用户其对应的原包目录。先用少量中文确认目标发行版实际加载了补丁，再批量制作；部署与游戏启动沿用主流程授权边界。
 
 ## 部署条件
-- 必须确认本作 ASB 编码与命令约定确实匹配该方言。
+- 必须确认目标 ASB 编码与命令约定确实匹配该方言。
 - 选择、历史和 ruby 字段未必与窗口正文使用同一排版限制。
 - 外置目录或补丁归档是否生效需要实测，不在纯 Python 模块中猜测。
 - 所有磁盘写出、路径安全和 manifest 交给父 Skill 公共实现。
@@ -99,7 +99,7 @@ assert read_asb(changed)[1].line_number == 42
 ## 验证与缺口
 - 合成测试覆盖 UTF-8 多字节长度、非零行号、属性顺序与未知命令保留。
 - 空改动 ASB 在本方言下逐字节一致。
-- 容器侧另有测试覆盖尾部附加表、UTF-8/CP932 名称判定、多卷覆盖链与 pf8 恒等重封包；真实语料证据见 [artemis-scp](artemis-scp.md)。
+- 容器侧另有测试覆盖尾部附加表、UTF-8/CP932 名称判定、多卷覆盖链与 pf8 恒等重封包；格式说明见 [artemis-scp](artemis-scp.md)。
 - 覆盖重复键、未知节点、尾随垃圾、NUL、非文本属性回填拒绝。
 - 测试位置：`tests/test_engines_primary.py` 中 `ArtemisTests`。
 - `msg-tool/src/scripts/artemis/asb.rs` 还含更复杂控制流及源码转换。

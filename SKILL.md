@@ -180,7 +180,7 @@ description: 识别 galgame/visual novel 游戏引擎与资源包，参考独立
 | Mware：Squirrel literal 与引用级克隆 | [mware](engines/mware.md) |
 | NEJII / CDT、144字节BIN | [nejii](engines/nejii.md) |
 | NekoSDK：ADVSCRIPT2 显示与日志记录 | [nekosdk](engines/nekosdk.md) |
-| NeXAS：PAC 尾索引、BIN 字符串池与 Aikiss3 往返 | [nexas](engines/nexas.md) |
+| NeXAS：PAC 尾索引与 BIN 字符串池回填 | [nexas](engines/nexas.md) |
 | NonColor / legacy ACV | [noncolor](engines/noncolor.md) |
 | NScripter：容器可回写，文本仍须词法与命令边界审核 | [nscripter](engines/nscripter.md) |
 | NSystem：BIN 预设的地址表和独立消息记录 | [nsystem](engines/nsystem.md) |

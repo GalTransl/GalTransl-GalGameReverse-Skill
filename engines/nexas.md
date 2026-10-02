@@ -1,11 +1,11 @@
-# NeXAS：PAC 尾索引、BIN 字符串池与 Aikiss3 往返
+# NeXAS：PAC 尾索引与 BIN 字符串池回填
 
 ## 入口与范围
 
-见到 Script.pac 时检查前三字节 `PAC`、偏移 4 的成员数、偏移 8 的压缩类型及尾部索引。**第四字节不一定为零**：Aikiss3 原包是 PACu，Update3 是 `PAC\xbf`。仅匹配 `PAC\0` 的检测器可能没有候选，不能据此放弃解包。
+检查 PAC 前三字节 `PAC`、偏移 4 的成员数、偏移 8 的压缩类型及尾部索引。第四字节不一定为零，不能仅匹配 `PAC\0`。
 
 - [PAC 读写](../python/archives/nexas.py)：64 字节名称、Huffman 尾索引方言；成员类型 0/5 原始、2 Huffman、3/4 zlib、6/7 Zstandard。尚不支持前置索引、旧版反码 PAC 或类型 1 LZSS。
-- [BIN 读写](../python/engines/nexas_bin.py)：extras_count、extras、commands_count、8 字节指令对、strings_count、CP932 NUL 字符串、trailer。语义导出限定 aikiss3-extras-v1，未知 opcode、消息参数形状或控制码明确拒绝。
+- [BIN 读写](../python/engines/nexas_bin.py)：extras_count、extras、commands_count、8 字节指令对、strings_count、CP932 NUL 字符串、trailer。语义导出限定现有 `aikiss3-extras-v1` profile（代码标识，按下文指令形状匹配），未知 opcode、消息参数形状或控制码明确拒绝。
 - [批量 CLI](../python/engines/nexas_extract.py)：按显式优先级读取多个包，导出 JSON、manifest、原文往返 PAC，并支持译文重封包。
 - [旧 ASM 编辑器](../python/engines/nexas.py)：继续支持 SExtractor 根目录反汇编器的 ASM，其 assemble_bin() 仍未实现；新 BIN writer 不接受任意 ASM。
 
@@ -15,16 +15,16 @@ PAC 6/7 的 Zstandard 压缩读写需要可选 Python 包 **zstandard**（可用
 
 先只读各 PAC 索引，不要为查剧本解压 Voice/Visual。read_index(stream) 不读取成员内容；选定条目再用 read_member(stream, index, entry)，有单项解压预算。
 
-Aikiss3 的 Config.pac/packlist.dat 列出 Update8 … Update4、Update3、Update2、Update、Config、System、Script 等包。样本实际存在 Script.pac 与 Update3.pac，因此采用 **Script → Update3** 覆盖顺序。配置是加载顺序证据，尚未运行游戏验证；其他游戏需要重新核对，不机械交付 Update9.pac。
+根据 `Config.pac` 中的 `packlist.dat` 等配置和实际文件核对加载顺序，再显式传入归档优先级。不要凭更新包编号猜测未存在的包或部署目标。
 
-BIN 方言与 PAC 压缩类型没有对应关系。Aikiss3 的 BIN 含 extras 字段，适配 SExtractor **根目录** Script_disassembler.py；v2/ 脚本会人为补一个零字，不能直接用于这些 BIN。样本 extras_count 有 0、2、4，不能总是假定前四字节为零或删掉它。
+BIN 方言与 PAC 压缩类型没有对应关系。含 extras 的布局必须按 `extras_count` 读取完整字段，不假定首字为零，也不擅自添加或删除填充字。
 
 ## 导出与回封
 
 从 skill 根目录运行，替换下面的示意路径。输出目录必须不存在，已存在时改用新名字。
 
 ~~~text
-python -m python.engines.nexas_extract extract /path/to/Aikiss3 --output /path/to/Aikiss3/Aikiss3_extract --archives Script.pac Update3.pac
+python -m python.engines.nexas_extract extract /path/to/game --output /path/to/game/game_extract --archives Script.pac Update3.pac
 ~~~
 
 --archives 从低优先级到高优先级，后者覆盖同名成员，必须显式提供。输出目录包含：
@@ -33,16 +33,16 @@ python -m python.engines.nexas_extract extract /path/to/Aikiss3 --output /path/t
 |---|---|
 | gt_input/ | 平铺的原剧本名.json，只输出有文本的脚本 |
 | gt_output/ | GalTransl 译文，文件名和数组顺序不变 |
-| original/archives/ | 两个输入 PAC 的完整副本 |
+| original/archives/ | 所选输入 PAC 的完整副本 |
 | original/scripts/ | 按覆盖顺序选出的原始 BIN |
 | metadata/ | JSON 对应哈希、指令引用、字段和控制码契约 |
 | roundtrip/ | 经过 BIN writer 和 PAC writer 的原文往返包 |
 | reports/ | 索引、来源映射、逐包验证和 packlist 原始证据 |
 
-**把 Aikiss3_extract/gt_input 导入 GalTransl 翻译。** 结果放回 gt_output 后：
+译文按同名文件放回 `gt_output` 后告诉 agent，由 agent 校验并回写：
 
 ~~~text
-python -m python.engines.nexas_extract pack /path/to/Aikiss3/Aikiss3_extract --output /path/to/Aikiss3/Aikiss3_extract/rebuilt
+python -m python.engines.nexas_extract pack /path/to/game/game_extract --output /path/to/game/game_extract/rebuilt
 ~~~
 
 pack 验证原 PAC 哈希，并重新从 PAC 解析原文、定位器和 manifest；按文件名读取译文，缺少译文的成员保持原压缩 payload，未匹配 JSON 列入报告。译文只写回成员实际所属的高优先级包；底包旧版本不会被改成补丁版本。每个生成 PAC 都重读索引、解压被替换成员并比对，其余成员的压缩 payload 逐字节核对。--translations 只用于显式测试目录，正常流程使用 gt_output。
@@ -69,20 +69,13 @@ BIN writer 不重排原字符串池、指令或 EXTRA 表。原文回填重新�
 ## 控制码与编码
 
 - JSON 保留 @v 八位语音号、@t 四位延时、@h 资源标识、@n/@k/@d、@m 两位参数、@i 两位参数；回填校验**完整序列与参数**，禁止增删或重排。
-- @h 参数可为空：06_06.bin 有空参数实例，不能吞掉紧随其后的日文。
+- @h 参数可为空，不能吞掉紧随其后的正文。
 - 不把真实 CR/LF、TAB、NUL 写进字符串，换行用 @n。本 profile 未验证 Ruby 等其他标签，遇到时核查，不猜测跳过。
-- 新文本须严格 CP932 编码且可反向解码为同一 Unicode 文本，不替换、不截断。中文字符集、字体与运行时适配是另一个阶段；已有 GPTCHS EXE 不证明 writer 可以直接改用 GBK。
+- 新文本须严格 CP932 编码且可反向解码为同一 Unicode 文本，不替换、不截断。中文字符集、字体与运行时适配是另一个阶段；已有汉化 EXE 不证明 writer 可以直接改用 GBK。
 - 纯 name/message JSON 必须保持数组顺序，条数相同的重排无法自动证明身份正确。
 
-## Aikiss3 实测（2026-10-01）
+## 验证
 
-- 11 个 PAC 均能读取尾索引，只解压剧本和所需配置证据。
-- Script.pac：175 个 BIN。Update3.pac：237 个成员，其中 174 个 BIN；168 个与底包不同，29 个的导出文本变化。
-- 覆盖后 175 个有效 BIN，172 个 JSON。effecticon.bin、__global.bin、method.bin 三个空脚本不进入翻译队列。
-- 24,150 条记录：普通消息 23,298，复合消息 289，特殊文本 289，追加对白 202，选项 53，提示 19。
-- 349 个源 BIN 经 parser/writer 原文回填，逐字节一致。两个 PAC 重压并重建索引后，349 个 BIN 解包结果一致，Update3 其他 63 个成员保持原压缩字节。压缩器和树构建不同，**不要求 PAC 本身哈希相同**。
-- 全部 172 个可翻译脚本修改代表性记录（合计 304 条，覆盖上述六类）后执行回填、重封、解包比对，全部通过。输入 PAC 的 SHA-256 未变化。
-- 独立使用 SExtractor 根目录反汇编器读取修改后的 01_01_00.bin，确认 4 条改长文本、1 处改名和完整 dat0。保留旧池使上游报告未引用字符串，这是预期现象，不能据此删池。
 - [合成测试](../tests/test_nexas.py) 覆盖压缩、坏数据、共享引用、CP932 原字节、控制码/manifest 拒绝、补丁优先级与不覆盖输出。运行 python -m unittest discover -s tests -p test_nexas.py -v。
 
 未启动游戏验证显示、换行、字体、存档兼容或运行时加载。成功范围是格式与文本往返，不能称为已验证可运行的中文补丁。
@@ -92,5 +85,4 @@ BIN writer 不重排原字符串池、指令或 EXTRA 表。原文回填重新�
 旧 nexas.extract_fields() / replace_fields() 只改带地址标签、TAB 和已知助记符的字符串内部跨度。其姓名分类是上下文启发式，不能代替 BIN 语义。保留单引号、TAB、真实 CR/LF、NUL 的拒绝规则及字面量 \n；ASM、dat0、未匹配 JSON 和转换器须配套。不能改后缀得到 BIN，不能丢失上游 JSON 的 true/false 标记。
 
 - GARbro-Mod [ArcPAC.cs](https://github.com/nanami5270/GARbro-Mod/blob/bc26d991ef5cdc0e1ecb32122ee9a48c3375750c/ArcFormats/Nexas/ArcPAC.cs) 与同提交 ArcFormats/HuffmanCompression.cs：PAC 布局、反码尾索引及压缩类型。morkt MIT 通知见 [MIT-GARbro](../provenance/licenses/MIT-GARbro.txt)。writer 和严格边界检查为本项目实现。
-- SExtractor [Script_disassembler.py](https://github.com/satan53x/SExtractor/blob/8d8d976fd04ae54e7c677705af937273d04a376a/tools/Nexas/Script_disassembler.py)、同目录 Script_assembler_re.py 与 README.md：BIN 布局、引用和控制码线索。原工具引用 masagrator/NXGameScripts 的 Aonatsu Line 工作，按 SExtractor GPLv3 保守采用 GPL-3.0-only，保留归属。
-- 新增调用模式、补丁差异和测试数量来自 Aikiss3 文件分析，不推定适用于所有 NeXAS 或 BIN 方言。旧 ASM 来源链另见 [sextractor-core](../provenance/sextractor-core.json)。
+- BIN 布局和控制码资料来源为 SExtractor 的 NeXAS 工具，含 masagrator/NXGameScripts 来源链，按 GPL-3.0-only 保留归属；见 [许可与来源](../provenance/NOTICE.md)。

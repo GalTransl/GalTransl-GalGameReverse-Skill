@@ -97,5 +97,4 @@ assert patched == data
 ## 验证
 - 合成测试：`tests/test_engines_primary.py` 的 `CatSystemTests` 与 `tests/test_catsystem2.py`。
 - 覆盖压缩/未压缩 CST、追加重定向、动态姓名、控制码、选择排除、PE32/PE32+ 三层资源、加密/明文 INT、无密码内容探测、路径/流输入和更新包覆盖。
-- 《甜蜜女友2》只读实测：38 个 INT，7860 个原始 CST，按 `update01.int` 覆盖后 4462 个有效 CST；2069 个剧本导出 58842 行，解析失败 0。
-- 实测不包含游戏启动、字体覆盖、译文注入或 encrypted INT 重封包验证。
+- CST 回填通过不代表已验证游戏加载、字体覆盖或 encrypted INT 重封包。

@@ -11,9 +11,8 @@
 ## 识别证据
 
 - 文件开头是 `astver = <number>`、`astname = "..."` 或直接 `ast = {`；三者可缺一，但顺序固定。`astver` 目前只认 `2.0`。
-- UTF-8 无 BOM（采样实证）；CRLF。模块默认按 `utf-8-sig`→`cp932` 判定，显式传 `encoding` 时严格单一编码。
+- 编码与换行以原件为准。模块默认按 `utf-8-sig`→`cp932` 判定，显式传 `encoding` 时严格单一编码。
 - 顶层必有 `label = { top = { block = "...", label=N }, ... }`；其余顶层表必须以 `block` 开头。没有 `label.top` 但有顶层 `text` 表 = **旧布局**，本模块明确拒绝（`old_layout`），不猜。
-- 采样实证（供对照，不是支持保证）：一个 5 卷 `pf8` 发行版 / 32391 个成员 / 256 个 `script/*.ast` / 48917 条单元（对白 48658、选项 26、章节标题 233）；22 个 logo/start/scene 脚本零可翻译行。
 
 ## 格式方言
 
@@ -50,7 +49,7 @@ ast = {
 
 - 值是 Lua 子集：带引号字符串、`[[长字符串]]`、整数/浮点（含负数）、`nil`、表。表成员可以是值或 `key = value`；键可以是裸名、`"带引号"`、`[1]`。
 - **`delay = { [1000] = {...} }` 是真实存在的**：只凭"没报错"不能证明解析器正确，一个把 `[` 当普通标量的解析器会把这些表读成垃圾子树却依旧"成功"。本模块把孤立的 `[` 当错误。
-- 对白在 `text.<语言>`；一个元素 = 一个文本框。语言键取**第一个不是 `vo`/`vlNN`/`lvN`/`name` 的成员**；采样实证里只有 `ja`，但不要写死，可用 `language=` 指定。
+- 对白在 `text.<语言>`；一个元素 = 一个文本框。语言键取**第一个不是 `vo`/`vlNN`/`lvN`/`name` 的成员**；不要写死为 `ja`，可用 `language=` 指定。
 - `{"rt2"}`（以及 `{"ret2"}`，msg-tool 把两者都映射为换行）结束一行渲染，因此框内正文 = 字符串片段按换行拼接。**`\n` 与 `rt2` 语义等价**：一份已发行的汉化补丁把 `"A", {"rt2"}, "B", {"rt2"}` 改写为单个字面量 `"A\nB", {"rt2"}`，分隔符总数不变，只是换了一种写法。本模块采用同样的规范化写法，并沿用该框原本用的换行标签。
 - 无字面量的内联命令：`{"ruby", text="..."}`/`{"/ruby"}`（振假名）、`{"exfont" ...}`/`{"exfont"}`、`{"txkey"}`、`{"txruby"}`。未知内联标签直接拒绝；确认它不带字面量时用 `extra_inline_tags={"tag"}` 放行。
 - 转义是 **Lua 全集**：`\n \r \t \v \b \f \a \' \" \\ \ddd \xXX \uXXXX \u{...}`。未知转义默认拒绝（`unknown_escape`），`lenient_escapes=True` 时按字面保留——已发行的汉化补丁里真的存在 `\我` 这类非法转义。
@@ -96,20 +95,18 @@ rebuilt = document.patch(rows)             # 相同 rows 应得到相同字节
 
 ## 部署条件与未验证项
 
-- 多分卷覆盖顺序仍是静态推断（[artemis-scp](artemis-scp.md) 同款问题），未实机确认。
-- 采样实证里基础卷 1.9 GB、`.000`/`.001`/`.002` 各 1.3–1.7 GB，都超过内存 writer 的已验证范围；已验证恒等重封包的只有 `.pfs.010`（326 KB）与一份补丁卷（2.8 MB）。**已发行汉化补丁的做法是另加 `*_chs.pfs.021/.030` 覆盖卷，而不是改动原卷**。
-- 本作引擎原生存在四语言配置（`langnum={ja,en,cn,tw}`、`lang={ja="ja/",...}`、`langadd={ja="",cn="_cn",...}`，`system/msg/lang.lua` 实现主/副/UI 语言），对白按 `text[语言]` 取值。理论上可以新增 `cn` 键而不覆盖 `ja`；**这条路线未验证**，且已发行汉化补丁没有走它（它覆盖 `ja`，并同时替换 UI 语言表 `list_windows_ja.tbl`、换字体、把影片指向 `movie_chs/`、把存档隔离到 `savedata_cn`）。
+- 多分卷与补丁制作见 [PFS 覆盖卷](artemis.md#打包技巧新增-pfs-覆盖卷)，加载结果须单独试注确认。
+- 如需新增语言键，先核对语言配置、文本键及 UI/资源选择逻辑；当前 writer 只修改选定语言，不自动创建语言切换、字体或资源配置。
 - 未做字体/字形、存档、选择支排版与游戏启动验证。
 
 ## 源码与算法对应
 
-- 剧本：[python/engines/artemis_ast.py](../python/engines/artemis_ast.py)。对应 msg-tool `src/scripts/artemis/ast/{parser,types,text,dump}.rs` 与 `src/utils/escape.rs`（GPL-3.0-or-later，commit `f72716cee88554d40c1cdface2812493b14ca653`）；内联标签表另参考 SExtractor `src/engine.ini` `[Engine_Artemis]` 与 `src/reg.yaml` `Artemis_1`（SExtractor，固定提交 `8d8d976fd04ae54e7c677705af937273d04a376a`）。
-- 按实测收紧的地方：语言键不写死为 `ja`；姓名槽全部保留（上游只取一个）；未知内联标签拒绝而不是跳过；孤立 `[` 视为错误；`astver` 只认 `2.0`；写回默认只转义 `\n`。
+- 剧本：[artemis_ast.py](../python/engines/artemis_ast.py)，格式资料来源 msg-tool（GPL-3.0-or-later）；内联标签资料来源 SExtractor（GPL-3.0），通知见 [NOTICE](../provenance/NOTICE.md)。
+- 解析约束：语言键不写死为 `ja`；姓名槽全部保留；未知内联标签拒绝而不是跳过；孤立 `[` 视为错误；`astver` 只认 `2.0`；写回默认只转义 `\n`。
 - 不是该 Rust 模块的全量移植：**旧布局 `.ast` 未实现**，发现即以 `old_layout` 拒绝。
 - 容器：[python/archives/pfs.py](../python/archives/pfs.py)，见 [artemis-scp](artemis-scp.md)。
 
 ## 验证与缺口
 
-- 合成测试：`tests/test_engines_artemis_ast.py`，39 条。覆盖头部三种形态、`rt2`/`ret2`、ruby、`exfont` 保位与回退、多槽与语言键姓名、`select`/`savetitle`、`delay` 的 `[1000] =`、`[[长串]]`/`["引号键"]`/`nil`、Lua 转义与宽松读取、空行风格、以及全部拒绝路径。
-- 真实语料只读运行（采样实证，非支持保证）：256 个 `.ast` 全部解析通过；**空改动往返 256/256 逐字节一致**；扰动往返 42/42；独立交叉校验 `{"rt2"}` 计数 56764 与还原行数 56764 相等。把一份已发行汉化补丁的译文经本模块回填原文后，**233 个可比文件里 216 个与补丁成品逐字节相同**，其余 17 个共 40 行差异，成因已分类：补丁自身风格不一致（有时保留 `ruby`、有时丢弃）、补丁另外改写了非文本的块级命令（场景/影片重定向）、以及译文行数变化导致内联命令无法保位。
-- 缺口：旧布局 `.ast`；`ret2`/`txruby` 来自上游而非本作实证；新增语言键路线未验证；`>1 GB` 卷无流式 writer；尾部附加表的 `-8` 常数只是拟合值；没有启动过游戏。
+- 合成测试：`tests/test_engines_artemis_ast.py`。覆盖头部三种形态、`rt2`/`ret2`、ruby、`exfont` 保位与回退、多槽与语言键姓名、`select`/`savetitle`、`delay` 的 `[1000] =`、`[[长串]]`/`["引号键"]`/`nil`、Lua 转义与宽松读取、空行风格、以及全部拒绝路径。
+- 缺口：旧布局 `.ast`、新增语言键流程、大卷流式写出及尾部附加表用途；字体、存档和游戏加载需单独验证。
