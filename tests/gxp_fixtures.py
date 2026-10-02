@@ -3,26 +3,20 @@
 
 import struct
 
-from python.archives.gxp import HEADER_SIZE, INDEX_PREAMBLE_SIZE, MAGIC
-
-
 def build_gxp(*members: bytes, version: int = 100, marker: int = 0x10203040,
-              index_size: int | None = None) -> bytes:
+              index_size: int = 16, opaque_prefix: bytes = b"") -> bytes:
     """Build a minimal GXP with a fixed-shape header and a raw data region.
 
     The index region is filled with a deterministic placeholder: the reader
     under test does not decode index items, so the fixture only has to satisfy
     the header relations. Members are concatenated into the data region.
     """
-    if index_size is None:
-        # Zero-size index is legal for the header relations but useless; use a
-        # small deterministic block so tests exercise a non-empty region.
-        index_size = 16
     data = b"".join(members)
-    data_offset = HEADER_SIZE + INDEX_PREAMBLE_SIZE + index_size
+    # Independent layout constants: never import the production reader here.
+    data_offset = 0x30 + len(opaque_prefix) + index_size
 
-    header = bytearray(HEADER_SIZE)
-    header[0:4] = MAGIC
+    header = bytearray(0x30)
+    header[0:4] = b"GXP\x00"
     struct.pack_into("<I", header, 0x04, version)
     struct.pack_into("<I", header, 0x08, marker)
     struct.pack_into("<III", header, 0x0C, 1, 0, 1)
@@ -31,6 +25,5 @@ def build_gxp(*members: bytes, version: int = 100, marker: int = 0x10203040,
     struct.pack_into("<Q", header, 0x20, len(data))
     struct.pack_into("<Q", header, 0x28, data_offset)
 
-    preamble = bytes(INDEX_PREAMBLE_SIZE)
     index = bytes((i * 7 + 3) & 0xFF for i in range(index_size))
-    return bytes(header) + preamble + index + data
+    return bytes(header) + opaque_prefix + index + data

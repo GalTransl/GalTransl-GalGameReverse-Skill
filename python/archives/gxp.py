@@ -1,51 +1,23 @@
 # SPDX-License-Identifier: GPL-3.0-only
-"""GxEngine / Astronauts GXP archive index and bounded member extraction.
+"""GXP v100 header inspection and bounded RAW region reads.
 
-Layout verified against real archives of one engine version:
-
-    offset  type      meaning
-    0x00    char[4]   "GXP\\0"
-    0x04    u32       version (100 in the verified version)
-    0x08    u32       marker (0x10203040 in the verified version)
-    0x0C    u32       flag[0]
-    0x10    u32       flag[1]
-    0x14    u32       flag[2]
-    0x18    u32       member count
-    0x1C    u32       index region size in bytes
-    0x20    u64       data region size in bytes
-    0x28    u64       data region offset
-    0x30..            index region (lightly obfuscated; see below)
-
-Two relations hold on every verified archive and are used both as a cheap
-self-check and to reject mis-detected files:
-
-    data_offset == 0x30 + index_size
-    data_offset + data_size == file_size
-
-The region between 0x00 and the index is a fixed-size header; the index region
-starts after it. The index region itself is stored with a light obfuscation that
-is **not** decoded here: this module exposes the confirmed header relations and
-a bounded raw reader, and leaves index-item decoding to a dedicated step once
-the exact scheme is confirmed for a given version. It never guesses field widths
-or decrypts bytes it cannot verify.
-
-The verified archives store the data region **in the clear and uncompressed**:
-sizes in the index equal the raw member sizes, and extracted members are directly
-readable. Compression or encryption must be confirmed per version before use;
-this module does not assume either.
+This is not an index decoder or an archive extractor. Bytes before the data
+base remain opaque; neither a fixed preamble nor plaintext members are assumed.
+The 0x30 header boundary and data base at 0x28 were cross-checked against
+GARbro-Mod ArcFormats/Astronauts/ArcGXP.cs (MIT, Copyright (C) 2016 by morkt).
+Source details and the retained MIT license are in provenance/gxp.json.
+No upstream code or executable is required at runtime.
 """
 
 from dataclasses import dataclass
 import struct
+from typing import BinaryIO
 
 from ..common.binary import FormatError
 
 MAGIC = b"GXP\x00"
 HEADER_SIZE = 0x30
-# The header is followed by a fixed stub before the index region. The verified
-# version uses a 0x48-byte block here; kept as a named constant so a version
-# with a different value is rejected loudly instead of silently misread.
-INDEX_PREAMBLE_SIZE = 0x48
+Source = bytes | BinaryIO
 
 
 @dataclass(frozen=True)
@@ -60,73 +32,123 @@ class GxpHeader:
 
     @property
     def index_offset(self) -> int:
-        return HEADER_SIZE + INDEX_PREAMBLE_SIZE
+        return HEADER_SIZE
 
     @property
     def index_end(self) -> int:
         return self.data_offset
 
 
-def read_header(data: bytes) -> GxpHeader:
-    """Parse and validate the fixed GXP header. Rejects mis-detected files."""
-    if len(data) < HEADER_SIZE:
-        raise FormatError("truncated GXP header")
-    if data[:4] != MAGIC:
-        raise FormatError("not a GXP archive (magic mismatch)")
-    version = struct.unpack_from("<I", data, 0x04)[0]
-    marker = struct.unpack_from("<I", data, 0x08)[0]
-    f0c, f10, f14 = struct.unpack_from("<III", data, 0x0C)
-    member_count = struct.unpack_from("<I", data, 0x18)[0]
-    index_size = struct.unpack_from("<I", data, 0x1C)[0]
-    data_size = struct.unpack_from("<Q", data, 0x20)[0]
-    data_offset = struct.unpack_from("<Q", data, 0x28)[0]
-
-    header = GxpHeader(version, marker, (f0c, f10, f14), member_count,
-                       index_size, data_size, data_offset)
-
-    # Cross-check the two confirmed relations before returning anything.
-    if data_offset != HEADER_SIZE + INDEX_PREAMBLE_SIZE + index_size:
-        raise FormatError("GXP index/data offset relation does not hold")
-    if data_offset + data_size != len(data):
-        raise FormatError("GXP data region does not reach end of file")
-    if header.index_end > len(data):
-        raise FormatError("GXP index region exceeds file")
-    return header
+def _size(source: Source) -> int:
+    if isinstance(source, bytes):
+        return len(source)
+    position = source.tell()
+    try:
+        source.seek(0, 2)
+        return source.tell()
+    finally:
+        source.seek(position)
 
 
-def index_bytes(data: bytes, header: GxpHeader | None = None) -> bytes:
-    """Return the raw (still obfuscated) index region, bounded by the header."""
-    hdr = header or read_header(data)
-    return bytes(data[hdr.index_offset:hdr.index_end])
+def _read(source: Source, offset: int, size: int) -> bytes:
+    if isinstance(source, bytes):
+        result = source[offset:offset + size]
+    else:
+        position = source.tell()
+        try:
+            source.seek(offset)
+            result = source.read(size)
+        finally:
+            source.seek(position)
+    if len(result) != size:
+        raise FormatError("truncated GXP region")
+    return result
 
 
-def read_member(data: bytes, offset: int, size: int, header: GxpHeader | None = None) -> bytes:
-    """Read one member from the data region with explicit bounds checking.
+def _nonnegative(value: int, label: str) -> None:
+    if type(value) is not int or value < 0:
+        raise FormatError(f"GXP {label} must be a nonnegative integer")
 
-    `offset` is relative to the start of the data region; `size` is the raw
-    member size. Both must come from a decoded index entry -- this function
-    never derives them by scanning.
+
+def read_header(source: Source) -> GxpHeader:
+    """Inspect bytes or a seekable binary stream, reading only the 48-byte header.
+
+    Supports version 100 / marker 0x10203040 only. Flags and the field at 0x1C
+    are reported without interpreting encryption or individual index records.
+    The data span must end at EOF. Stream position is preserved.
     """
-    hdr = header or read_header(data)
-    if offset < 0 or size < 0:
-        raise FormatError("negative member offset or size")
-    start = hdr.data_offset + offset
-    end = start + size
-    if start < hdr.data_offset or end > hdr.data_offset + hdr.data_size or end > len(data):
+    file_size = _size(source)
+    if file_size < HEADER_SIZE:
+        raise FormatError("truncated GXP header")
+    raw = _read(source, 0, HEADER_SIZE)
+    if raw[:4] != MAGIC:
+        raise FormatError("not a GXP archive (magic mismatch)")
+    version, marker, f0c, f10, f14, count, index_size, data_size, data_offset = (
+        struct.unpack_from("<7I2Q", raw, 4)
+    )
+    if version != 100 or marker != 0x10203040:
+        raise FormatError("unsupported GXP version/marker")
+    if data_offset < HEADER_SIZE or data_offset > file_size:
+        raise FormatError("GXP data offset outside archive or overlaps header")
+    if data_size != file_size - data_offset:
+        raise FormatError("GXP data region does not reach end of file")
+    return GxpHeader(version, marker, (f0c, f10, f14), count,
+                     index_size, data_size, data_offset)
+
+
+def _checked_header(source: Source, header: GxpHeader | None) -> GxpHeader:
+    actual = read_header(source)
+    if header is not None and header != actual:
+        raise FormatError("GXP supplied header does not match input")
+    return actual
+
+
+def index_bytes(source: Source, header: GxpHeader | None = None, *,
+                max_size: int = 16 << 20) -> bytes:
+    """Read the opaque region [0x30, data_offset), not decoded index entries.
+
+    The 0x1C field is not used to invent a preamble length or skip bytes.
+    An index parser must establish record boundaries before extraction.
+    """
+    _nonnegative(max_size, "index budget")
+    hdr = _checked_header(source, header)
+    size = hdr.index_end - hdr.index_offset
+    if size > max_size:
+        raise FormatError("GXP index region exceeds budget")
+    return _read(source, hdr.index_offset, size)
+
+
+def read_member(source: Source, offset: int, size: int,
+                header: GxpHeader | None = None, *,
+                max_size: int = 64 << 20) -> bytes:
+    """Read a bounded RAW data span; does not decrypt/decompress a member.
+
+    offset is relative to data_offset. The caller must independently establish
+    offset/size from a decoded index entry and enforce cumulative batch budgets.
+    Range validation alone does not establish member identity or plaintext.
+    """
+    _nonnegative(offset, "member offset")
+    _nonnegative(size, "member size")
+    _nonnegative(max_size, "member budget")
+    if size > max_size:
+        raise FormatError("GXP member exceeds budget")
+    hdr = _checked_header(source, header)
+    if offset > hdr.data_size or size > hdr.data_size - offset:
         raise FormatError("member range outside GXP data region")
-    return bytes(data[start:end])
+    return _read(source, hdr.data_offset + offset, size)
 
 
-def describe(data: bytes) -> dict[str, int | str]:
-    """Header summary for reporting; no decoding, no guessing."""
-    hdr = read_header(data)
+def describe(source: Source) -> dict[str, int | str]:
+    """Report header fields, without index decoding or payload reads."""
+    hdr = read_header(source)
     return {
-        "magic": MAGIC.decode("ascii", "replace").rstrip("\x00"),
+        "magic": "GXP",
         "version": hdr.version,
         "marker": f"0x{hdr.marker:08X}",
         "member_count": hdr.member_count,
         "index_size": hdr.index_size,
+        "raw_index_region_size": hdr.index_end - hdr.index_offset,
         "data_size": hdr.data_size,
         "data_offset": hdr.data_offset,
-        "file_size": len(data),
+        "file_size": _size(source),
     }
