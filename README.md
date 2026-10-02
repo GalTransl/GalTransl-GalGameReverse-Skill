@@ -6,7 +6,7 @@
 
 你不必先学会逆向或自己写脚本，可以从一段中文能否在游戏里正常显示开始。
 
-没有什么特别使用方法，直接下载压缩包下来，或对着codex、workbuddy等ai工具说：帮我安装 skill GalTransl/GalTransl-GalGameReverse-Skill ，然后跟ai说：使用这个skill解包[游戏路径]即可，电脑要安装python3.11及以上版本，模型选个deepseek 4.1 flash就行
+没有什么特别使用方法，直接下载压缩包下来丢给ai安装，或对着codex、workbuddy等ai工具说：`帮我安装 skill https://github.com/GalTransl/GalTransl-GalGameReverse-Skill` ，然后跟ai说：`使用这个skill解包[游戏路径]`即可，电脑要安装python3.11及以上版本，模型选个deepseek 4.1 flash就行
 
 ## 它和 GalTransl 有什么关系？
 
