@@ -1,0 +1,2353 @@
+{
+  "schema": "galgame-engine-index/1",
+  "count": 95,
+  "engines": [
+    {
+      "id": "advsys3",
+      "title": "AdvSys3 / arc*.dat",
+      "aliases": [
+        "advsys3"
+      ],
+      "document": "engines/advsys3.md",
+      "python_references": [
+        "python/archives/advsys3.py"
+      ],
+      "public_symbols": {
+        "python/archives/advsys3.py": [
+          "unpack",
+          "pack"
+        ]
+      },
+      "scope": "version/stage-limited references; read the engine page",
+      "evidence": "per-module provenance and synthetic tests; not blanket game verification"
+    },
+    {
+      "id": "agsi",
+      "title": "AGSI / SB2",
+      "aliases": [
+        "agsi"
+      ],
+      "document": "engines/agsi.md",
+      "python_references": [
+        "python/engines/agsi.py"
+      ],
+      "public_symbols": {
+        "python/engines/agsi.py": [
+          "swap_nibbles",
+          "read_cstr",
+          "build_cstr",
+          "inject_cstr",
+          "split_sb2",
+          "inject_sb2"
+        ]
+      },
+      "scope": "version/stage-limited references; read the engine page",
+      "evidence": "per-module provenance and synthetic tests; not blanket game verification"
+    },
+    {
+      "id": "ail",
+      "title": "Ail / SNL",
+      "aliases": [
+        "ail"
+      ],
+      "document": "engines/ail.md",
+      "python_references": [
+        "python/archives/ail.py"
+      ],
+      "public_symbols": {
+        "python/archives/ail.py": [
+          "literal_block",
+          "pack",
+          "stored_entries"
+        ]
+      },
+      "scope": "version/stage-limited references; read the engine page",
+      "evidence": "per-module provenance and synthetic tests; not blanket game verification"
+    },
+    {
+      "id": "anim",
+      "title": "ANIM：滚动密钥 DAT / SCE 局部参考",
+      "aliases": [
+        "anim"
+      ],
+      "document": "engines/anim.md",
+      "python_references": [
+        "python/engines/anim.py"
+      ],
+      "public_symbols": {
+        "python/engines/anim.py": [
+          "switch_key",
+          "crypt",
+          "text_start",
+          "Token",
+          "nul_tokens",
+          "replace_token"
+        ]
+      },
+      "scope": "version/stage-limited references; read the engine page",
+      "evidence": "per-module provenance and synthetic tests; not blanket game verification"
+    },
+    {
+      "id": "arcgameengine",
+      "title": "ArcGameEngine：AGE 字符串池算法",
+      "aliases": [
+        "ArcGameEngine",
+        "AGE"
+      ],
+      "document": "engines/arcgameengine.md",
+      "python_references": [
+        "python/engines/arcgameengine.py"
+      ],
+      "public_symbols": {
+        "python/engines/arcgameengine.py": [
+          "build_string_pool",
+          "read_pool_string"
+        ]
+      },
+      "scope": "version/stage-limited references; read the engine page",
+      "evidence": "per-module provenance and synthetic tests; not blanket game verification"
+    },
+    {
+      "id": "arcx",
+      "title": "ARCX 工具目录 / SCX.ARC 顺序记录",
+      "aliases": [
+        "arcx"
+      ],
+      "document": "engines/arcx.md",
+      "python_references": [
+        "python/archives/arcx.py"
+      ],
+      "public_symbols": {
+        "python/archives/arcx.py": [
+          "lzss",
+          "unpack"
+        ]
+      },
+      "scope": "version/stage-limited references; read the engine page",
+      "evidence": "per-module provenance and synthetic tests; not blanket game verification"
+    },
+    {
+      "id": "artemis-ast",
+      "title": "Artemis Engine：AST 文本剧本（`.ast`）",
+      "aliases": [
+        "Artemis AST",
+        "Artemis astver",
+        "AST text",
+        "PFS AST"
+      ],
+      "document": "engines/artemis-ast.md",
+      "python_references": [
+        "python/archives/pfs.py",
+        "python/engines/artemis_ast.py"
+      ],
+      "public_symbols": {
+        "python/archives/pfs.py": [
+          "PfsError",
+          "Entry",
+          "IndexEntry",
+          "ArchiveIndex",
+          "Member",
+          "VolumeMember",
+          "VolumeSet",
+          "probe_header",
+          "read_index",
+          "decode",
+          "read_member",
+          "extract",
+          "volume_paths",
+          "resolve_volumes",
+          "build",
+          "repack"
+        ],
+        "python/engines/artemis_ast.py": [
+          "AstError",
+          "Token",
+          "tokenize",
+          "unescape_lua",
+          "escape_lua",
+          "Value",
+          "Unit",
+          "Document",
+          "looks_like_ast",
+          "read_ast",
+          "render",
+          "encode_ast",
+          "patch_ast"
+        ]
+      },
+      "scope": "version/stage-limited references; read the engine page",
+      "evidence": "per-module provenance and synthetic tests; not blanket game verification"
+    },
+    {
+      "id": "artemis-scp",
+      "title": "Artemis Engine：SCP 文本剧本（`.txt` / `.iet`）与 pf8 多分卷",
+      "aliases": [
+        "Artemis SCP",
+        "Artemis TXT",
+        "SCP text"
+      ],
+      "document": "engines/artemis-scp.md",
+      "python_references": [
+        "python/archives/pfs.py",
+        "python/engines/artemis_scp.py"
+      ],
+      "public_symbols": {
+        "python/archives/pfs.py": [
+          "PfsError",
+          "Entry",
+          "IndexEntry",
+          "ArchiveIndex",
+          "Member",
+          "VolumeMember",
+          "VolumeSet",
+          "probe_header",
+          "read_index",
+          "decode",
+          "read_member",
+          "extract",
+          "volume_paths",
+          "resolve_volumes",
+          "build",
+          "repack"
+        ],
+        "python/engines/artemis_scp.py": [
+          "ScpError",
+          "TagSchema",
+          "Record",
+          "Script",
+          "line_kind",
+          "looks_like_script",
+          "read_script",
+          "render",
+          "encode_script",
+          "patch_script"
+        ]
+      },
+      "scope": "version/stage-limited references; read the engine page",
+      "evidence": "per-module provenance and synthetic tests; not blanket game verification"
+    },
+    {
+      "id": "artemis",
+      "title": "Artemis：ASB 项目树的保真读写",
+      "aliases": [
+        "Artemis",
+        "Mikage"
+      ],
+      "document": "engines/artemis.md",
+      "python_references": [
+        "python/archives/pfs.py",
+        "python/engines/artemis.py"
+      ],
+      "public_symbols": {
+        "python/archives/pfs.py": [
+          "PfsError",
+          "Entry",
+          "IndexEntry",
+          "ArchiveIndex",
+          "Member",
+          "VolumeMember",
+          "VolumeSet",
+          "probe_header",
+          "read_index",
+          "decode",
+          "read_member",
+          "extract",
+          "volume_paths",
+          "resolve_volumes",
+          "build",
+          "repack"
+        ],
+        "python/engines/artemis.py": [
+          "Command",
+          "Label",
+          "Field",
+          "read_asb",
+          "write_asb",
+          "text_fields",
+          "patch_asb"
+        ]
+      },
+      "scope": "version/stage-limited references; read the engine page",
+      "evidence": "per-module provenance and synthetic tests; not blanket game verification"
+    },
+    {
+      "id": "ast",
+      "title": "AST / ARC1、ARC2",
+      "aliases": [
+        "ast"
+      ],
+      "document": "engines/ast.md",
+      "python_references": [
+        "python/archives/ast.py"
+      ],
+      "public_symbols": {
+        "python/archives/ast.py": [
+          "index"
+        ]
+      },
+      "scope": "version/stage-limited references; read the engine page",
+      "evidence": "per-module provenance and synthetic tests; not blanket game verification"
+    },
+    {
+      "id": "azsystem",
+      "title": "AZSystem：ASB 包装与解密后命令",
+      "aliases": [
+        "azsystem"
+      ],
+      "document": "engines/azsystem.md",
+      "python_references": [
+        "python/engines/azsystem.py"
+      ],
+      "public_symbols": {
+        "python/engines/azsystem.py": [
+          "TextField",
+          "read_text_operand",
+          "extract_fields",
+          "replace_field",
+          "decrypt_v1",
+          "encrypt_v1"
+        ]
+      },
+      "scope": "version/stage-limited references; read the engine page",
+      "evidence": "per-module provenance and synthetic tests; not blanket game verification"
+    },
+    {
+      "id": "bgi",
+      "title": "BGI / Ethornell：有界索引、DSC 编解码与标准 V1 往返",
+      "aliases": [
+        "BGI",
+        "Ethornell",
+        "Buriko"
+      ],
+      "document": "engines/bgi.md",
+      "python_references": [
+        "python/archives/bgi.py",
+        "python/archives/bgi_dsc.py",
+        "python/archives/bgi_writer.py",
+        "python/engines/bgi.py",
+        "python/engines/bgi_v1_opcodes.py"
+      ],
+      "public_symbols": {
+        "python/archives/bgi.py": [
+          "BgiArchiveError",
+          "IndexEntry",
+          "ArchiveIndex",
+          "MemberProbe",
+          "Entry",
+          "inspect",
+          "require_plain",
+          "read_index",
+          "probe_member",
+          "read_member",
+          "decode_member"
+        ],
+        "python/archives/bgi_dsc.py": [
+          "decode",
+          "encode"
+        ],
+        "python/archives/bgi_writer.py": [
+          "row_length",
+          "build_archive",
+          "pack_member"
+        ],
+        "python/engines/bgi.py": [
+          "Reference",
+          "code_offset",
+          "scan_v1_subset",
+          "patch_v1_pool",
+          "BgiV1Error",
+          "Instruction",
+          "Event",
+          "Analysis",
+          "scan_v1",
+          "export_v1",
+          "patch_v1"
+        ],
+        "python/engines/bgi_v1_opcodes.py": []
+      },
+      "scope": "version/stage-limited references; read the engine page",
+      "evidence": "per-module provenance and synthetic tests; not blanket game verification"
+    },
+    {
+      "id": "blackrainbow",
+      "title": "BlackRainbow：分段脚本与文本 XOR",
+      "aliases": [
+        "blackrainbow"
+      ],
+      "document": "engines/blackrainbow.md",
+      "python_references": [
+        "python/engines/blackrainbow.py"
+      ],
+      "public_symbols": {
+        "python/engines/blackrainbow.py": [
+          "xor_text",
+          "Segment",
+          "parse_script",
+          "replace_texts"
+        ]
+      },
+      "scope": "version/stage-limited references; read the engine page",
+      "evidence": "per-module provenance and synthetic tests; not blanket game verification"
+    },
+    {
+      "id": "bluegale",
+      "title": "BlueGale：BDT 与 indexwww.dat 联动",
+      "aliases": [
+        "BlueGale",
+        "BlueGale_bdt"
+      ],
+      "document": "engines/bluegale.md",
+      "python_references": [
+        "python/engines/bluegale.py"
+      ],
+      "public_symbols": {
+        "python/engines/bluegale.py": [
+          "xor_bdt",
+          "build_index",
+          "dialogue_spans",
+          "package_script"
+        ]
+      },
+      "scope": "version/stage-limited references; read the engine page",
+      "evidence": "per-module provenance and synthetic tests; not blanket game verification"
+    },
+    {
+      "id": "catsystem2",
+      "title": "CatSystem2：KIF/INT、CST 对话与安全提取",
+      "aliases": [
+        "CatSystem",
+        "CatSystem2",
+        "CST",
+        "CSTL"
+      ],
+      "document": "engines/catsystem2.md",
+      "python_references": [
+        "python/archives/catsystem2_int.py",
+        "python/engines/catsystem2.py",
+        "python/engines/catsystem2_extract.py"
+      ],
+      "public_symbols": {
+        "python/archives/catsystem2_int.py": [
+          "IntEntry",
+          "IntArchive",
+          "IntProbe",
+          "encode_passphrase",
+          "MersenneTwister",
+          "Blowfish",
+          "probe_int",
+          "read_int",
+          "probe_member",
+          "read_member",
+          "extract_exe_password"
+        ],
+        "python/engines/catsystem2.py": [
+          "Record",
+          "Scene",
+          "DialogueExport",
+          "read_cst",
+          "export_cst",
+          "patch_dialogue",
+          "patch_cst"
+        ],
+        "python/engines/catsystem2_extract.py": [
+          "extract_game",
+          "main"
+        ]
+      },
+      "scope": "version/stage-limited references; read the engine page",
+      "evidence": "per-module provenance and synthetic tests; not blanket game verification"
+    },
+    {
+      "id": "circus",
+      "title": "Circus：按游戏配置解释 MES token",
+      "aliases": [
+        "circus"
+      ],
+      "document": "engines/circus.md",
+      "python_references": [
+        "python/engines/circus.py"
+      ],
+      "public_symbols": {
+        "python/engines/circus.py": [
+          "Profile",
+          "read_header",
+          "read_token",
+          "write_text_token"
+        ]
+      },
+      "scope": "version/stage-limited references; read the engine page",
+      "evidence": "per-module provenance and synthetic tests; not blanket game verification"
+    },
+    {
+      "id": "cscript",
+      "title": "CScript：已解压剧本中的有界记录",
+      "aliases": [
+        "cscript"
+      ],
+      "document": "engines/cscript.md",
+      "python_references": [
+        "python/engines/cscript.py"
+      ],
+      "public_symbols": {
+        "python/engines/cscript.py": [
+          "Field",
+          "Record",
+          "parse_record",
+          "replace_record",
+          "unpack_script",
+          "pack_script"
+        ]
+      },
+      "scope": "version/stage-limited references; read the engine page",
+      "evidence": "per-module provenance and synthetic tests; not blanket game verification"
+    },
+    {
+      "id": "cyberworks",
+      "title": "Cyberworks：a0 的 S/T 长度块",
+      "aliases": [
+        "Cyberworks",
+        "C,system"
+      ],
+      "document": "engines/cyberworks.md",
+      "python_references": [
+        "python/engines/cyberworks.py"
+      ],
+      "public_symbols": {
+        "python/engines/cyberworks.py": [
+          "Block",
+          "read_blocks",
+          "write_blocks",
+          "patch_blocks"
+        ]
+      },
+      "scope": "version/stage-limited references; read the engine page",
+      "evidence": "per-module provenance and synthetic tests; not blanket game verification"
+    },
+    {
+      "id": "digitalworks",
+      "title": "DigitalWorks / BunBun TAK",
+      "aliases": [
+        "digitalworks"
+      ],
+      "document": "engines/digitalworks.md",
+      "python_references": [
+        "python/engines/digitalworks.py"
+      ],
+      "public_symbols": {
+        "python/engines/digitalworks.py": [
+          "encode_text_instruction",
+          "decode_text_instruction"
+        ]
+      },
+      "scope": "version/stage-limited references; read the engine page",
+      "evidence": "per-module provenance and synthetic tests; not blanket game verification"
+    },
+    {
+      "id": "eagls",
+      "title": "EAGLS / ALIS：SCPACK、文本尾加密与标签修复",
+      "aliases": [
+        "eagls"
+      ],
+      "document": "engines/eagls.md",
+      "python_references": [
+        "python/archives/eagls.py",
+        "python/engines/eagls.py",
+        "python/engines/eagls_extract.py",
+        "python/engines/eagls_text.py"
+      ],
+      "public_symbols": {
+        "python/archives/eagls.py": [
+          "MSVCRTRand",
+          "crypt_index",
+          "Entry",
+          "read_index",
+          "pack_archive"
+        ],
+        "python/engines/eagls.py": [
+          "crypt_script",
+          "read_labels",
+          "fix_label_offsets",
+          "dialogue_spans"
+        ],
+        "python/engines/eagls_extract.py": [
+          "json_bytes",
+          "read_bounded",
+          "load_profile",
+          "extract",
+          "rebuild",
+          "main"
+        ],
+        "python/engines/eagls_text.py": [
+          "Profile",
+          "parse_script",
+          "export_script",
+          "rebuild_script"
+        ]
+      },
+      "scope": "version/stage-limited references; read the engine page",
+      "evidence": "per-module provenance and synthetic tests; not blanket game verification"
+    },
+    {
+      "id": "emonengine",
+      "title": "EmonEngine / EME",
+      "aliases": [
+        "emonengine"
+      ],
+      "document": "engines/emonengine.md",
+      "python_references": [
+        "python/archives/emonengine.py"
+      ],
+      "public_symbols": {
+        "python/archives/emonengine.py": [
+          "pack_scripts",
+          "zero_key_index"
+        ]
+      },
+      "scope": "version/stage-limited references; read the engine page",
+      "evidence": "per-module provenance and synthetic tests; not blanket game verification"
+    },
+    {
+      "id": "entis-gls",
+      "title": "Entis GLS：SRCXML 多语言消息与选择属性",
+      "aliases": [
+        "EntisGLS",
+        "Entis GLS",
+        "CSX",
+        "SRCXML"
+      ],
+      "document": "engines/entis-gls.md",
+      "python_references": [
+        "python/engines/entis_gls.py"
+      ],
+      "public_symbols": {
+        "python/engines/entis_gls.py": [
+          "Message",
+          "extract_srcxml",
+          "patch_srcxml"
+        ]
+      },
+      "scope": "version/stage-limited references; read the engine page",
+      "evidence": "per-module provenance and synthetic tests; not blanket game verification"
+    },
+    {
+      "id": "escude",
+      "title": "Escu:de：ESC-ARC2、分离消息文件与 ESCR1_00",
+      "aliases": [
+        "Escu:de",
+        "Escude"
+      ],
+      "document": "engines/escude.md",
+      "python_references": [
+        "python/archives/escude.py",
+        "python/engines/escude.py",
+        "python/engines/escude_extract.py",
+        "python/engines/escude_mdb.py",
+        "python/engines/escude_mess.py"
+      ],
+      "public_symbols": {
+        "python/archives/escude.py": [
+          "Entry",
+          "Index",
+          "read_index",
+          "probe_member",
+          "decode_acp",
+          "read_member"
+        ],
+        "python/engines/escude.py": [
+          "Script",
+          "Message",
+          "read_escr",
+          "decode_engine_string",
+          "extract_escr",
+          "patch_escr"
+        ],
+        "python/engines/escude_extract.py": [
+          "digest",
+          "json_bytes",
+          "require",
+          "extract",
+          "main"
+        ],
+        "python/engines/escude_mdb.py": [
+          "Column",
+          "Table",
+          "read_mdb",
+          "read_names"
+        ],
+        "python/engines/escude_mess.py": [
+          "MessagePool",
+          "Instruction",
+          "Code",
+          "Record",
+          "read_mess",
+          "read_code",
+          "extract_pair",
+          "protected_tokens",
+          "patch_mess"
+        ]
+      },
+      "scope": "version/stage-limited references; read the engine page",
+      "evidence": "per-module provenance and synthetic tests; not blanket game verification"
+    },
+    {
+      "id": "exhibit",
+      "title": "ExHibit：RLD 操作片段、间接姓名与有界 XOR",
+      "aliases": [
+        "ExHibit",
+        "RLD"
+      ],
+      "document": "engines/exhibit.md",
+      "python_references": [
+        "python/engines/exhibit.py"
+      ],
+      "public_symbols": {
+        "python/engines/exhibit.py": [
+          "Op",
+          "Dialogue",
+          "xor_rld",
+          "read_ops",
+          "write_ops",
+          "name_table",
+          "extract_dialogue",
+          "patch_dialogue"
+        ]
+      },
+      "scope": "version/stage-limited references; read the engine page",
+      "evidence": "per-module provenance and synthetic tests; not blanket game verification"
+    },
+    {
+      "id": "favorite",
+      "title": "Favorite：HCB u8 字符串长度与绝对地址更新",
+      "aliases": [
+        "Favorite",
+        "FVP",
+        "HCB"
+      ],
+      "document": "engines/favorite.md",
+      "python_references": [
+        "python/engines/favorite.py"
+      ],
+      "public_symbols": {
+        "python/engines/favorite.py": [
+          "Instruction",
+          "Relocated",
+          "encode_literal",
+          "parse_code",
+          "speaker_candidates",
+          "relocate_code"
+        ]
+      },
+      "scope": "version/stage-limited references; read the engine page",
+      "evidence": "per-module provenance and synthetic tests; not blanket game verification"
+    },
+    {
+      "id": "flyingshine",
+      "title": "FlyingShine / PD2",
+      "aliases": [
+        "flyingshine"
+      ],
+      "document": "engines/flyingshine.md",
+      "python_references": [
+        "python/archives/flyingshine.py",
+        "python/engines/flyingshine.py"
+      ],
+      "public_symbols": {
+        "python/archives/flyingshine.py": [
+          "index",
+          "rebuild"
+        ],
+        "python/engines/flyingshine.py": [
+          "script_decode",
+          "script_encode"
+        ]
+      },
+      "scope": "version/stage-limited references; read the engine page",
+      "evidence": "per-module provenance and synthetic tests; not blanket game verification"
+    },
+    {
+      "id": "frontwing",
+      "title": "FrontWing / FRONTWING_ADV CSB",
+      "aliases": [
+        "frontwing"
+      ],
+      "document": "engines/frontwing.md",
+      "python_references": [
+        "python/engines/frontwing.py"
+      ],
+      "public_symbols": {
+        "python/engines/frontwing.py": [
+          "parse",
+          "extract",
+          "replace_messages"
+        ]
+      },
+      "scope": "version/stage-limited references; read the engine page",
+      "evidence": "per-module provenance and synthetic tests; not blanket game verification"
+    },
+    {
+      "id": "gsd",
+      "title": "GSD：先 decode 的 v2 族 SPT 与 global.dat",
+      "aliases": [
+        "gsd"
+      ],
+      "document": "engines/gsd.md",
+      "python_references": [
+        "python/engines/gsd.py"
+      ],
+      "public_symbols": {
+        "python/engines/gsd.py": [
+          "Cell",
+          "Dialogue",
+          "read_dialogue",
+          "read_global_names",
+          "write_spt"
+        ]
+      },
+      "scope": "version/stage-limited references; read the engine page",
+      "evidence": "per-module provenance and synthetic tests; not blanket game verification"
+    },
+    {
+      "id": "gxengine",
+      "title": "GxEngine：V3 MWB 字符串与 zlib 包装",
+      "aliases": [
+        "GxEngine",
+        "GxEngine_mwb"
+      ],
+      "document": "engines/gxengine.md",
+      "python_references": [
+        "python/engines/gxengine.py"
+      ],
+      "public_symbols": {
+        "python/engines/gxengine.py": [
+          "Field",
+          "unpack_mwb",
+          "scan_fields",
+          "replace_fields"
+        ]
+      },
+      "scope": "version/stage-limited references; read the engine page",
+      "evidence": "per-module provenance and synthetic tests; not blanket game verification"
+    },
+    {
+      "id": "hcsystem",
+      "title": "HCSystem / PACK",
+      "aliases": [
+        "hcsystem"
+      ],
+      "document": "engines/hcsystem.md",
+      "python_references": [
+        "python/archives/hcsystem.py"
+      ],
+      "public_symbols": {
+        "python/archives/hcsystem.py": [
+          "index",
+          "pack_raw"
+        ]
+      },
+      "scope": "version/stage-limited references; read the engine page",
+      "evidence": "per-module provenance and synthetic tests; not blanket game verification"
+    },
+    {
+      "id": "hexenhaus",
+      "title": "Hexenhaus：NORI 的 XOR53 固定槽",
+      "aliases": [
+        "hexenhaus"
+      ],
+      "document": "engines/hexenhaus.md",
+      "python_references": [
+        "python/engines/hexenhaus.py"
+      ],
+      "public_symbols": {
+        "python/engines/hexenhaus.py": [
+          "Slot",
+          "read_slots",
+          "patch_slots",
+          "split_name"
+        ]
+      },
+      "scope": "version/stage-limited references; read the engine page",
+      "evidence": "per-module provenance and synthetic tests; not blanket game verification"
+    },
+    {
+      "id": "hotsoup",
+      "title": "HotSoup / HSP DPMX",
+      "aliases": [
+        "hotsoup"
+      ],
+      "document": "engines/hotsoup.md",
+      "python_references": [
+        "python/archives/hotsoup.py"
+      ],
+      "public_symbols": {
+        "python/archives/hotsoup.py": [
+          "pack",
+          "unpack"
+        ]
+      },
+      "scope": "version/stage-limited references; read the engine page",
+      "evidence": "per-module provenance and synthetic tests; not blanket game verification"
+    },
+    {
+      "id": "ice",
+      "title": "ICE / 索引字表文本流",
+      "aliases": [
+        "ice"
+      ],
+      "document": "engines/ice.md",
+      "python_references": [
+        "python/engines/ice.py"
+      ],
+      "public_symbols": {
+        "python/engines/ice.py": [
+          "encode_index",
+          "tokenize",
+          "encode_tokens"
+        ]
+      },
+      "scope": "version/stage-limited references; read the engine page",
+      "evidence": "per-module provenance and synthetic tests; not blanket game verification"
+    },
+    {
+      "id": "ikura",
+      "title": "IKURA / MPX、ISF",
+      "aliases": [
+        "ikura"
+      ],
+      "document": "engines/ikura.md",
+      "python_references": [
+        "python/archives/ikura.py"
+      ],
+      "public_symbols": {
+        "python/archives/ikura.py": [
+          "unpack_mpx",
+          "rebuild_mpx"
+        ]
+      },
+      "scope": "version/stage-limited references; read the engine page",
+      "evidence": "per-module provenance and synthetic tests; not blanket game verification"
+    },
+    {
+      "id": "ivory",
+      "title": "Ivory / fAGS OCB",
+      "aliases": [
+        "ivory"
+      ],
+      "document": "engines/ivory.md",
+      "python_references": [
+        "python/engines/ivory.py"
+      ],
+      "public_symbols": {
+        "python/engines/ivory.py": [
+          "crypt",
+          "sections"
+        ]
+      },
+      "scope": "version/stage-limited references; read the engine page",
+      "evidence": "per-module provenance and synthetic tests; not blanket game verification"
+    },
+    {
+      "id": "kaguya",
+      "title": "Kaguya：message.dat ver4.0 与 LINK6 容器往返",
+      "aliases": [
+        "KaGuYa",
+        "Kaguya",
+        "TBLSTR",
+        "SCR-MESSAGE"
+      ],
+      "document": "engines/kaguya.md",
+      "python_references": [
+        "python/archives/kaguya_link.py",
+        "python/engines/kaguya.py",
+        "python/engines/kaguya_extract.py"
+      ],
+      "public_symbols": {
+        "python/archives/kaguya_link.py": [
+          "Entry",
+          "Index",
+          "read_index",
+          "read_member",
+          "rebuild"
+        ],
+        "python/engines/kaguya.py": [
+          "Message",
+          "Group",
+          "Document",
+          "read_message_dat",
+          "write_message_dat"
+        ],
+        "python/engines/kaguya_extract.py": [
+          "export",
+          "inject",
+          "extract",
+          "pack",
+          "main"
+        ]
+      },
+      "scope": "version/stage-limited references; read the engine page",
+      "evidence": "per-module provenance and synthetic tests; not blanket game verification"
+    },
+    {
+      "id": "kirikiri",
+      "title": "Kirikiri / KAG：有限 KS 文本往返",
+      "aliases": [
+        "KiriKiri",
+        "KAG",
+        "吉里吉里",
+        "TJS2"
+      ],
+      "document": "engines/kirikiri.md",
+      "python_references": [
+        "python/archives/xp3.py",
+        "python/engines/kirikiri.py"
+      ],
+      "public_symbols": {
+        "python/archives/xp3.py": [
+          "Entry",
+          "extract",
+          "build"
+        ],
+        "python/engines/kirikiri.py": [
+          "Span",
+          "kag_spans",
+          "patch_kag"
+        ]
+      },
+      "scope": "version/stage-limited references; read the engine page",
+      "evidence": "per-module provenance and synthetic tests; not blanket game verification"
+    },
+    {
+      "id": "leaf",
+      "title": "Leaf / KCAP、SDT",
+      "aliases": [
+        "leaf"
+      ],
+      "document": "engines/leaf.md",
+      "python_references": [
+        "python/archives/leaf.py"
+      ],
+      "public_symbols": {
+        "python/archives/leaf.py": [
+          "index",
+          "pack_raw"
+        ]
+      },
+      "scope": "version/stage-limited references; read the engine page",
+      "evidence": "per-module provenance and synthetic tests; not blanket game verification"
+    },
+    {
+      "id": "livemaker",
+      "title": "Livemaker：外部导出的 Original text CSV 方言",
+      "aliases": [
+        "LiveMaker",
+        "CSV_Livemaker"
+      ],
+      "document": "engines/livemaker.md",
+      "python_references": [
+        "python/engines/livemaker.py"
+      ],
+      "public_symbols": {
+        "python/engines/livemaker.py": [
+          "extract_csv",
+          "rewrite_csv"
+        ]
+      },
+      "scope": "version/stage-limited references; read the engine page",
+      "evidence": "per-module provenance and synthetic tests; not blanket game verification"
+    },
+    {
+      "id": "majiro",
+      "title": "Majiro：MJO 异或与文本 / Ruby 指令片段",
+      "aliases": [
+        "majiro"
+      ],
+      "document": "engines/majiro.md",
+      "python_references": [
+        "python/archives/majiro.py",
+        "python/engines/majiro.py"
+      ],
+      "public_symbols": {
+        "python/archives/majiro.py": [
+          "Entry",
+          "extract",
+          "build_v1"
+        ],
+        "python/engines/majiro.py": [
+          "xor_code",
+          "normalize_mjo",
+          "assemble_text",
+          "disassemble_text"
+        ]
+      },
+      "scope": "version/stage-limited references; read the engine page",
+      "evidence": "per-module provenance and synthetic tests; not blanket game verification"
+    },
+    {
+      "id": "malie",
+      "title": "Malie / 2008 UTF16 与 data5 EXEC",
+      "aliases": [
+        "malie"
+      ],
+      "document": "engines/malie.md",
+      "python_references": [
+        "python/engines/malie.py"
+      ],
+      "public_symbols": {
+        "python/engines/malie.py": [
+          "instruction_edges",
+          "parse",
+          "rebuild_messages",
+          "selftest"
+        ]
+      },
+      "scope": "version/stage-limited references; read the engine page",
+      "evidence": "per-module provenance and synthetic tests; not blanket game verification"
+    },
+    {
+      "id": "masys",
+      "title": "Masys / MEG 表达式字符串",
+      "aliases": [
+        "masys"
+      ],
+      "document": "engines/masys.md",
+      "python_references": [
+        "python/engines/masys.py"
+      ],
+      "public_symbols": {
+        "python/engines/masys.py": [
+          "crypt_expression"
+        ]
+      },
+      "scope": "version/stage-limited references; read the engine page",
+      "evidence": "per-module provenance and synthetic tests; not blanket game verification"
+    },
+    {
+      "id": "med",
+      "title": "MED：头部定位的 NUL 文本表",
+      "aliases": [
+        "med"
+      ],
+      "document": "engines/med.md",
+      "python_references": [
+        "python/engines/med.py"
+      ],
+      "public_symbols": {
+        "python/engines/med.py": [
+          "Table",
+          "parse_table",
+          "replace_strings",
+          "classify_text"
+        ]
+      },
+      "scope": "version/stage-limited references; read the engine page",
+      "evidence": "per-module provenance and synthetic tests; not blanket game verification"
+    },
+    {
+      "id": "melonpan",
+      "title": "Melonpan / WCW TTD",
+      "aliases": [
+        "melonpan"
+      ],
+      "document": "engines/melonpan.md",
+      "python_references": [
+        "python/archives/melonpan.py",
+        "python/engines/melonpan.py"
+      ],
+      "public_symbols": {
+        "python/archives/melonpan.py": [
+          "index"
+        ],
+        "python/engines/melonpan.py": [
+          "script_xor"
+        ]
+      },
+      "scope": "version/stage-limited references; read the engine page",
+      "evidence": "per-module provenance and synthetic tests; not blanket game verification"
+    },
+    {
+      "id": "mirai",
+      "title": "Mirai / ACV1 script.dat",
+      "aliases": [
+        "mirai"
+      ],
+      "document": "engines/mirai.md",
+      "python_references": [
+        "python/archives/mirai.py"
+      ],
+      "public_symbols": {
+        "python/archives/mirai.py": [
+          "title_key",
+          "xor_dwords",
+          "inflate",
+          "parse",
+          "unpack",
+          "rebuild"
+        ]
+      },
+      "scope": "version/stage-limited references; read the engine page",
+      "evidence": "per-module provenance and synthetic tests; not blanket game verification"
+    },
+    {
+      "id": "mnoviolet",
+      "title": "M no Violet / DAT、CScript",
+      "aliases": [
+        "mnoviolet"
+      ],
+      "document": "engines/mnoviolet.md",
+      "python_references": [
+        "python/archives/mnoviolet.py",
+        "python/engines/mnoviolet.py"
+      ],
+      "public_symbols": {
+        "python/archives/mnoviolet.py": [
+          "index"
+        ],
+        "python/engines/mnoviolet.py": [
+          "script_header"
+        ]
+      },
+      "scope": "version/stage-limited references; read the engine page",
+      "evidence": "per-module provenance and synthetic tests; not blanket game verification"
+    },
+    {
+      "id": "moonhir",
+      "title": "MoonHir：FPK → FBX → 第一文本区块",
+      "aliases": [
+        "moonhir"
+      ],
+      "document": "engines/moonhir.md",
+      "python_references": [
+        "python/engines/moonhir.py"
+      ],
+      "public_symbols": {
+        "python/engines/moonhir.py": [
+          "decode_payload",
+          "unpack_fbx",
+          "pack_fbx_literal",
+          "text_block",
+          "replace_text_block"
+        ]
+      },
+      "scope": "version/stage-limited references; read the engine page",
+      "evidence": "per-module provenance and synthetic tests; not blanket game verification"
+    },
+    {
+      "id": "musica",
+      "title": "Musica：SC 消息、选择与文本转义",
+      "aliases": [
+        "musica"
+      ],
+      "document": "engines/musica.md",
+      "python_references": [
+        "python/engines/musica.py"
+      ],
+      "public_symbols": {
+        "python/engines/musica.py": [
+          "Field",
+          "decode_text",
+          "musica_fields",
+          "patch_musica"
+        ]
+      },
+      "scope": "version/stage-limited references; read the engine page",
+      "evidence": "per-module provenance and synthetic tests; not blanket game verification"
+    },
+    {
+      "id": "mware",
+      "title": "Mware：Squirrel literal 与引用级克隆",
+      "aliases": [
+        "mware"
+      ],
+      "document": "engines/mware.md",
+      "python_references": [
+        "python/engines/mware.py"
+      ],
+      "public_symbols": {
+        "python/engines/mware.py": [
+          "read_literal",
+          "write_literal",
+          "clone_translated_references"
+        ]
+      },
+      "scope": "version/stage-limited references; read the engine page",
+      "evidence": "per-module provenance and synthetic tests; not blanket game verification"
+    },
+    {
+      "id": "nejii",
+      "title": "NEJII / CDT、144字节BIN",
+      "aliases": [
+        "nejii"
+      ],
+      "document": "engines/nejii.md",
+      "python_references": [
+        "python/archives/nejii.py",
+        "python/engines/nejii.py"
+      ],
+      "public_symbols": {
+        "python/archives/nejii.py": [
+          "pack_raw",
+          "index"
+        ],
+        "python/engines/nejii.py": [
+          "extract_records",
+          "replace_record"
+        ]
+      },
+      "scope": "version/stage-limited references; read the engine page",
+      "evidence": "per-module provenance and synthetic tests; not blanket game verification"
+    },
+    {
+      "id": "nekosdk",
+      "title": "NekoSDK：ADVSCRIPT2 显示与日志记录",
+      "aliases": [
+        "nekosdk"
+      ],
+      "document": "engines/nekosdk.md",
+      "python_references": [
+        "python/engines/nekosdk.py"
+      ],
+      "public_symbols": {
+        "python/engines/nekosdk.py": [
+          "Field",
+          "extract_fields",
+          "replace_fields"
+        ]
+      },
+      "scope": "version/stage-limited references; read the engine page",
+      "evidence": "per-module provenance and synthetic tests; not blanket game verification"
+    },
+    {
+      "id": "nexas",
+      "title": "NeXAS：PAC 尾索引、BIN 字符串池与 Aikiss3 往返",
+      "aliases": [
+        "NeXAS",
+        "GIGA",
+        "Nexas_asm"
+      ],
+      "document": "engines/nexas.md",
+      "python_references": [
+        "python/archives/nexas.py",
+        "python/engines/nexas.py",
+        "python/engines/nexas_bin.py",
+        "python/engines/nexas_extract.py"
+      ],
+      "public_symbols": {
+        "python/archives/nexas.py": [
+          "huffman_decode",
+          "huffman_encode",
+          "Entry",
+          "Index",
+          "read_index",
+          "read_member",
+          "rebuild"
+        ],
+        "python/engines/nexas.py": [
+          "Field",
+          "extract_fields",
+          "replace_fields",
+          "assemble_bin"
+        ],
+        "python/engines/nexas_bin.py": [
+          "Command",
+          "Script",
+          "parse",
+          "controls",
+          "records",
+          "export",
+          "inject"
+        ],
+        "python/engines/nexas_extract.py": [
+          "verify_archive",
+          "extract",
+          "pack",
+          "main"
+        ]
+      },
+      "scope": "version/stage-limited references; read the engine page",
+      "evidence": "per-module provenance and synthetic tests; not blanket game verification"
+    },
+    {
+      "id": "noncolor",
+      "title": "NonColor / legacy ACV",
+      "aliases": [
+        "noncolor"
+      ],
+      "document": "engines/noncolor.md",
+      "python_references": [
+        "python/archives/noncolor.py"
+      ],
+      "public_symbols": {
+        "python/archives/noncolor.py": [
+          "parse",
+          "unpack",
+          "rebuild"
+        ]
+      },
+      "scope": "version/stage-limited references; read the engine page",
+      "evidence": "per-module provenance and synthetic tests; not blanket game verification"
+    },
+    {
+      "id": "nscripter",
+      "title": "NScripter：容器可回写，文本仍须词法与命令边界审核",
+      "aliases": [
+        "NScripter",
+        "ONScripter",
+        "SAR",
+        "NSA"
+      ],
+      "document": "engines/nscripter.md",
+      "python_references": [
+        "python/archives/nscripter.py"
+      ],
+      "public_symbols": {
+        "python/archives/nscripter.py": [
+          "Entry",
+          "xor_nscript",
+          "decode_nbz",
+          "extract_sar",
+          "extract_nsa",
+          "build_sar",
+          "build_nsa"
+        ]
+      },
+      "scope": "version/stage-limited references; read the engine page",
+      "evidence": "per-module provenance and synthetic tests; not blanket game verification"
+    },
+    {
+      "id": "nsystem",
+      "title": "NSystem：BIN 预设的地址表和独立消息记录",
+      "aliases": [
+        "nsystem"
+      ],
+      "document": "engines/nsystem.md",
+      "python_references": [
+        "python/engines/nsystem.py"
+      ],
+      "public_symbols": {
+        "python/engines/nsystem.py": [
+          "address_table",
+          "parse_message_record",
+          "rewrite_message_record",
+          "name_identifier"
+        ]
+      },
+      "scope": "version/stage-limited references; read the engine page",
+      "evidence": "per-module provenance and synthetic tests; not blanket game verification"
+    },
+    {
+      "id": "overflow",
+      "title": "Overflow：TextRes / Log XML 方言",
+      "aliases": [
+        "overflow"
+      ],
+      "document": "engines/overflow.md",
+      "python_references": [
+        "python/engines/overflow.py"
+      ],
+      "public_symbols": {
+        "python/engines/overflow.py": [
+          "extract_xml",
+          "rewrite_xml"
+        ]
+      },
+      "scope": "version/stage-limited references; read the engine page",
+      "evidence": "per-module provenance and synthetic tests; not blanket game verification"
+    },
+    {
+      "id": "patisserie",
+      "title": "Patisserie：OZ / OFST 归档",
+      "aliases": [
+        "patisserie"
+      ],
+      "document": "engines/patisserie.md",
+      "python_references": [
+        "python/archives/patisserie.py"
+      ],
+      "public_symbols": {
+        "python/archives/patisserie.py": [
+          "pack_oz",
+          "unpack_oz"
+        ]
+      },
+      "scope": "version/stage-limited references; read the engine page",
+      "evidence": "per-module provenance and synthetic tests; not blanket game verification"
+    },
+    {
+      "id": "propeller",
+      "title": "Propeller：MSC 长度文本与样式 toggle",
+      "aliases": [
+        "propeller"
+      ],
+      "document": "engines/propeller.md",
+      "python_references": [
+        "python/engines/propeller.py"
+      ],
+      "public_symbols": {
+        "python/engines/propeller.py": [
+          "write_text_field",
+          "read_text_field",
+          "split_names"
+        ]
+      },
+      "scope": "version/stage-limited references; read the engine page",
+      "evidence": "per-module provenance and synthetic tests; not blanket game verification"
+    },
+    {
+      "id": "puremail",
+      "title": "PureMail：OBJ V1 / V2 索引文本池",
+      "aliases": [
+        "puremail"
+      ],
+      "document": "engines/puremail.md",
+      "python_references": [
+        "python/engines/puremail.py"
+      ],
+      "public_symbols": {
+        "python/engines/puremail.py": [
+          "parse_obj",
+          "extract_obj",
+          "rewrite_obj"
+        ]
+      },
+      "scope": "version/stage-limited references; read the engine page",
+      "evidence": "per-module provenance and synthetic tests; not blanket game verification"
+    },
+    {
+      "id": "qlie",
+      "title": "QLIE：PACK 3.0 解包、ImoScripter 对白与模板重封包",
+      "aliases": [
+        "qlie"
+      ],
+      "document": "engines/qlie.md",
+      "python_references": [
+        "python/archives/qlie.py",
+        "python/archives/qlie_keys.py",
+        "python/archives/qlie_writer.py",
+        "python/engines/qlie.py",
+        "python/engines/qlie_extract.py",
+        "python/engines/qlie_imos.py",
+        "python/engines/qlie_repack.py"
+      ],
+      "public_symbols": {
+        "python/archives/qlie.py": [
+          "hash_v3",
+          "crypt_name",
+          "Entry",
+          "Index",
+          "read_index",
+          "decrypt",
+          "encrypt",
+          "decompress",
+          "read_member"
+        ],
+        "python/archives/qlie_keys.py": [
+          "pe_tform1",
+          "icon_key_from_dfm",
+          "game_key_from_pe"
+        ],
+        "python/archives/qlie_writer.py": [
+          "hash13_tail",
+          "rebuild"
+        ],
+        "python/engines/qlie.py": [
+          "Field",
+          "qlie_fields",
+          "patch_qlie"
+        ],
+        "python/engines/qlie_extract.py": [
+          "extract",
+          "main"
+        ],
+        "python/engines/qlie_imos.py": [
+          "Span",
+          "Record",
+          "scan",
+          "rows",
+          "patch"
+        ],
+        "python/engines/qlie_repack.py": [
+          "repack",
+          "main"
+        ]
+      },
+      "scope": "version/stage-limited references; read the engine page",
+      "evidence": "per-module provenance and synthetic tests; not blanket game verification"
+    },
+    {
+      "id": "ransel",
+      "title": "Ransel：BCD / BCL 配对归档",
+      "aliases": [
+        "ransel"
+      ],
+      "document": "engines/ransel.md",
+      "python_references": [
+        "python/archives/ransel.py"
+      ],
+      "public_symbols": {
+        "python/archives/ransel.py": [
+          "pack_bcd",
+          "unpack_bcd"
+        ]
+      },
+      "scope": "version/stage-limited references; read the engine page",
+      "evidence": "per-module provenance and synthetic tests; not blanket game verification"
+    },
+    {
+      "id": "reallive",
+      "title": "RealLive：文本 token 与换行指令片段",
+      "aliases": [
+        "reallive"
+      ],
+      "document": "engines/reallive.md",
+      "python_references": [
+        "python/engines/reallive.py"
+      ],
+      "public_symbols": {
+        "python/engines/reallive.py": [
+          "quote_text",
+          "unquote_text",
+          "assemble_message"
+        ]
+      },
+      "scope": "version/stage-limited references; read the engine page",
+      "evidence": "per-module provenance and synthetic tests; not blanket game verification"
+    },
+    {
+      "id": "renpy",
+      "title": "Ren'Py：有限 .rpy 词法与原位字符串回填",
+      "aliases": [
+        "Ren'Py",
+        "RenPy",
+        "RPA",
+        "RPY"
+      ],
+      "document": "engines/renpy.md",
+      "python_references": [
+        "python/archives/rpa.py",
+        "python/engines/renpy.py"
+      ],
+      "public_symbols": {
+        "python/archives/rpa.py": [
+          "Entry",
+          "extract"
+        ],
+        "python/engines/renpy.py": [
+          "Target",
+          "extract",
+          "patch"
+        ]
+      },
+      "scope": "version/stage-limited references; read the engine page",
+      "evidence": "per-module provenance and synthetic tests; not blanket game verification"
+    },
+    {
+      "id": "rpgmaker",
+      "title": "RPG Maker：MV JSON 与 VX Marshal 转换中间态",
+      "aliases": [
+        "RPG Maker",
+        "RPGMV",
+        "RPGVX",
+        "RPG VX Ace"
+      ],
+      "document": "engines/rpgmaker.md",
+      "python_references": [
+        "python/engines/rpgmaker.py"
+      ],
+      "public_symbols": {
+        "python/engines/rpgmaker.py": [
+          "Field",
+          "extract_fields",
+          "apply_translations",
+          "JsonBoundary",
+          "expand_json_strings",
+          "restore_json_strings",
+          "load_ruby_marshal",
+          "dump_ruby_marshal"
+        ]
+      },
+      "scope": "version/stage-limited references; read the engine page",
+      "evidence": "per-module provenance and synthetic tests; not blanket game verification"
+    },
+    {
+      "id": "sakanagl",
+      "title": "SakanaGL：SX 密码与已解码索引",
+      "aliases": [
+        "sakanagl"
+      ],
+      "document": "engines/sakanagl.md",
+      "python_references": [
+        "python/archives/sakanagl.py"
+      ],
+      "public_symbols": {
+        "python/archives/sakanagl.py": [
+          "crypt_data",
+          "member_keys",
+          "parse_decoded_index"
+        ]
+      },
+      "scope": "version/stage-limited references; read the engine page",
+      "evidence": "per-module provenance and synthetic tests; not blanket game verification"
+    },
+    {
+      "id": "sceneplayer",
+      "title": "ScenePlayer：PMX 剧本归档",
+      "aliases": [
+        "sceneplayer"
+      ],
+      "document": "engines/sceneplayer.md",
+      "python_references": [
+        "python/archives/sceneplayer.py"
+      ],
+      "public_symbols": {
+        "python/archives/sceneplayer.py": [
+          "pack_pmx",
+          "unpack_pmx"
+        ]
+      },
+      "scope": "version/stage-limited references; read the engine page",
+      "evidence": "per-module provenance and synthetic tests; not blanket game verification"
+    },
+    {
+      "id": "scrplayer",
+      "title": "ScrPlayer：XOR 字符串表与命令指针",
+      "aliases": [
+        "scrplayer"
+      ],
+      "document": "engines/scrplayer.md",
+      "python_references": [
+        "python/engines/scrplayer.py"
+      ],
+      "public_symbols": {
+        "python/engines/scrplayer.py": [
+          "Reference",
+          "Script",
+          "parse_script",
+          "replace_strings"
+        ]
+      },
+      "scope": "version/stage-limited references; read the engine page",
+      "evidence": "per-module provenance and synthetic tests; not blanket game verification"
+    },
+    {
+      "id": "sfa",
+      "title": "SFA：FGA Huffman 成员与 AOS 文本线索",
+      "aliases": [
+        "sfa"
+      ],
+      "document": "engines/sfa.md",
+      "python_references": [
+        "python/archives/sfa.py",
+        "python/engines/sfa.py"
+      ],
+      "public_symbols": {
+        "python/archives/sfa.py": [
+          "compress_member",
+          "decompress_member"
+        ],
+        "python/engines/sfa.py": [
+          "extract_aos_lines"
+        ]
+      },
+      "scope": "version/stage-limited references; read the engine page",
+      "evidence": "per-module provenance and synthetic tests; not blanket game verification"
+    },
+    {
+      "id": "shsystem",
+      "title": "ShSystem：只导出特定 scriptcall 0x33",
+      "aliases": [
+        "SHSystem",
+        "ShSystem"
+      ],
+      "document": "engines/shsystem.md",
+      "python_references": [
+        "python/engines/shsystem.py"
+      ],
+      "public_symbols": {
+        "python/engines/shsystem.py": [
+          "read_header",
+          "read_scriptcall"
+        ]
+      },
+      "scope": "version/stage-limited references; read the engine page",
+      "evidence": "per-module provenance and synthetic tests; not blanket game verification"
+    },
+    {
+      "id": "siglus",
+      "title": "Siglus：Scene.pck 解包不等于 `.ss` 文本往返",
+      "aliases": [
+        "Siglus",
+        "SiglusEngine",
+        "Scene.pck"
+      ],
+      "document": "engines/siglus.md",
+      "python_references": [
+        "python/archives/siglus.py"
+      ],
+      "public_symbols": {
+        "python/archives/siglus.py": [
+          "Entry",
+          "lz_decompress",
+          "extract"
+        ]
+      },
+      "scope": "version/stage-limited references; read the engine page",
+      "evidence": "per-module provenance and synthetic tests; not blanket game verification"
+    },
+    {
+      "id": "silky",
+      "title": "Silky / Silkys：MAP 全索引与 UTF-16 指针修复",
+      "aliases": [
+        "Silky's",
+        "Silky's Plus",
+        "AI6WIN",
+        "Silky_map"
+      ],
+      "document": "engines/silky.md",
+      "python_references": [
+        "python/engines/silky.py"
+      ],
+      "public_symbols": {
+        "python/engines/silky.py": [
+          "Entry",
+          "read_map",
+          "patch_map"
+        ]
+      },
+      "scope": "version/stage-limited references; read the engine page",
+      "evidence": "per-module provenance and synthetic tests; not blanket game verification"
+    },
+    {
+      "id": "slgsystem",
+      "title": "SLGSystem：SZS100__ 容器与两种密码模式",
+      "aliases": [
+        "slgsystem"
+      ],
+      "document": "engines/slgsystem.md",
+      "python_references": [
+        "python/archives/slgsystem.py"
+      ],
+      "public_symbols": {
+        "python/archives/slgsystem.py": [
+          "crypt_member",
+          "pack_szs",
+          "unpack_szs"
+        ]
+      },
+      "scope": "version/stage-limited references; read the engine page",
+      "evidence": "per-module provenance and synthetic tests; not blanket game verification"
+    },
+    {
+      "id": "softpal",
+      "title": "Softpal：PAC 解包与 Sv20 / TEXT.DAT / POINT.DAT",
+      "aliases": [
+        "softpal"
+      ],
+      "document": "engines/softpal.md",
+      "python_references": [
+        "python/archives/softpal.py",
+        "python/engines/softpal.py"
+      ],
+      "public_symbols": {
+        "python/archives/softpal.py": [
+          "IndexEntry",
+          "ArchiveIndex",
+          "read_index",
+          "read_member",
+          "decode_member"
+        ],
+        "python/engines/softpal.py": [
+          "TextRecord",
+          "point_labels",
+          "read_text_records",
+          "append_text_records"
+        ]
+      },
+      "scope": "version/stage-limited references; read the engine page",
+      "evidence": "per-module provenance and synthetic tests; not blanket game verification"
+    },
+    {
+      "id": "studiomiris",
+      "title": "StudioMiris：SKMSd 消息资源表",
+      "aliases": [
+        "studiomiris"
+      ],
+      "document": "engines/studiomiris.md",
+      "python_references": [
+        "python/engines/studiomiris.py"
+      ],
+      "public_symbols": {
+        "python/engines/studiomiris.py": [
+          "parse_skm",
+          "extract_skm",
+          "rewrite_skm"
+        ]
+      },
+      "scope": "version/stage-limited references; read the engine page",
+      "evidence": "per-module provenance and synthetic tests; not blanket game verification"
+    },
+    {
+      "id": "studiopolaris",
+      "title": "StudioPolaris：已解密 SCD_ 字节码",
+      "aliases": [
+        "studiopolaris"
+      ],
+      "document": "engines/studiopolaris.md",
+      "python_references": [
+        "python/engines/studiopolaris.py"
+      ],
+      "public_symbols": {
+        "python/engines/studiopolaris.py": [
+          "parse_scd",
+          "extract_scd",
+          "rewrite_scd"
+        ]
+      },
+      "scope": "version/stage-limited references; read the engine page",
+      "evidence": "per-module provenance and synthetic tests; not blanket game verification"
+    },
+    {
+      "id": "succubus",
+      "title": "Succubus：RIFF / VFA1 事件式归档",
+      "aliases": [
+        "succubus"
+      ],
+      "document": "engines/succubus.md",
+      "python_references": [
+        "python/archives/succubus.py"
+      ],
+      "public_symbols": {
+        "python/archives/succubus.py": [
+          "parse_vfa",
+          "build_vfa"
+        ]
+      },
+      "scope": "version/stage-limited references; read the engine page",
+      "evidence": "per-module provenance and synthetic tests; not blanket game verification"
+    },
+    {
+      "id": "system-epsilon",
+      "title": "SYSTEM-ε：BIN 文本段与候选跳转模式",
+      "aliases": [
+        "SYSTEM-ε",
+        "System Epsilon"
+      ],
+      "document": "engines/system-epsilon.md",
+      "python_references": [
+        "python/engines/system_epsilon.py"
+      ],
+      "public_symbols": {
+        "python/engines/system_epsilon.py": [
+          "parse_segment",
+          "rewrite_segment",
+          "pointer_candidates"
+        ]
+      },
+      "scope": "version/stage-limited references; read the engine page",
+      "evidence": "per-module provenance and synthetic tests; not blanket game verification"
+    },
+    {
+      "id": "systemc",
+      "title": "SystemC / SystemB3：ZLC2 literal 成员",
+      "aliases": [
+        "systemc"
+      ],
+      "document": "engines/systemc.md",
+      "python_references": [
+        "python/archives/systemc.py",
+        "python/engines/systemc.py"
+      ],
+      "public_symbols": {
+        "python/archives/systemc.py": [
+          "encode_zlc2_literals",
+          "decode_zlc2_literals"
+        ],
+        "python/engines/systemc.py": [
+          "systemc_name_header"
+        ]
+      },
+      "scope": "version/stage-limited references; read the engine page",
+      "evidence": "per-module provenance and synthetic tests; not blanket game verification"
+    },
+    {
+      "id": "systemnnn",
+      "title": "SystemNNN：开发版定长槽与发布版 word 地址",
+      "aliases": [
+        "SystemNNN",
+        "NNN",
+        "SPT"
+      ],
+      "document": "engines/systemnnn.md",
+      "python_references": [
+        "python/engines/systemnnn.py"
+      ],
+      "public_symbols": {
+        "python/engines/systemnnn.py": [
+          "Slot",
+          "read_nnn_slots",
+          "patch_nnn",
+          "word_to_offset",
+          "offset_to_word",
+          "read_spt_items",
+          "encode_spt_text"
+        ]
+      },
+      "scope": "version/stage-limited references; read the engine page",
+      "evidence": "per-module provenance and synthetic tests; not blanket game verification"
+    },
+    {
+      "id": "tanaka",
+      "title": "Tanaka：SCB1 模板重封与 BIN 文本记录",
+      "aliases": [
+        "tanaka"
+      ],
+      "document": "engines/tanaka.md",
+      "python_references": [
+        "python/archives/tanaka.py",
+        "python/engines/tanaka.py"
+      ],
+      "public_symbols": {
+        "python/archives/tanaka.py": [
+          "parse_scb1",
+          "repack_scb1"
+        ],
+        "python/engines/tanaka.py": [
+          "parse_text_record",
+          "rewrite_text_record"
+        ]
+      },
+      "scope": "version/stage-limited references; read the engine page",
+      "evidence": "per-module provenance and synthetic tests; not blanket game verification"
+    },
+    {
+      "id": "tmrhiro",
+      "title": "TmrHiro：text 流的 i16 长度往返",
+      "aliases": [
+        "tmrhiro"
+      ],
+      "document": "engines/tmrhiro.md",
+      "python_references": [
+        "python/engines/tmrhiro.py"
+      ],
+      "public_symbols": {
+        "python/engines/tmrhiro.py": [
+          "read_text",
+          "write_text",
+          "patch_text"
+        ]
+      },
+      "scope": "version/stage-limited references; read the engine page",
+      "evidence": "per-module provenance and synthetic tests; not blanket game verification"
+    },
+    {
+      "id": "triangle",
+      "title": "Triangle：MOP / EXD / KLH 的独立文本块",
+      "aliases": [
+        "triangle"
+      ],
+      "document": "engines/triangle.md",
+      "python_references": [
+        "python/engines/triangle.py"
+      ],
+      "public_symbols": {
+        "python/engines/triangle.py": [
+          "parse_block",
+          "extract_block",
+          "rewrite_block"
+        ]
+      },
+      "scope": "version/stage-limited references; read the engine page",
+      "evidence": "per-module provenance and synthetic tests; not blanket game verification"
+    },
+    {
+      "id": "ugos",
+      "title": "U-GOS：.o 指针引用的字符串块",
+      "aliases": [
+        "ugos"
+      ],
+      "document": "engines/ugos.md",
+      "python_references": [
+        "python/engines/ugos.py"
+      ],
+      "public_symbols": {
+        "python/engines/ugos.py": [
+          "parse_references",
+          "extract_o",
+          "rewrite_o"
+        ]
+      },
+      "scope": "version/stage-limited references; read the engine page",
+      "evidence": "per-module provenance and synthetic tests; not blanket game verification"
+    },
+    {
+      "id": "umesoft",
+      "title": "U-MeSoft：PK 尾索引与 SCR/TBL literal 封装",
+      "aliases": [
+        "umesoft"
+      ],
+      "document": "engines/umesoft.md",
+      "python_references": [
+        "python/archives/umesoft.py",
+        "python/engines/umesoft.py"
+      ],
+      "public_symbols": {
+        "python/archives/umesoft.py": [
+          "encode_member",
+          "decode_literal_member",
+          "parse_pk",
+          "repack_pk"
+        ],
+        "python/engines/umesoft.py": [
+          "extract_script_lines"
+        ]
+      },
+      "scope": "version/stage-limited references; read the engine page",
+      "evidence": "per-module provenance and synthetic tests; not blanket game verification"
+    },
+    {
+      "id": "unison",
+      "title": "Unison / Softpal Lazy：VAL 分离式字符串池",
+      "aliases": [
+        "unison"
+      ],
+      "document": "engines/unison.md",
+      "python_references": [
+        "python/engines/unison.py"
+      ],
+      "public_symbols": {
+        "python/engines/unison.py": [
+          "parse_val",
+          "extract_val",
+          "rewrite_val"
+        ]
+      },
+      "scope": "version/stage-limited references; read the engine page",
+      "evidence": "per-module provenance and synthetic tests; not blanket game verification"
+    },
+    {
+      "id": "unity",
+      "title": "Unity：仅 UTAGE mono DAT 的对齐字符串",
+      "aliases": [
+        "UTAGE",
+        "Unity UTAGE mono DAT"
+      ],
+      "document": "engines/unity.md",
+      "python_references": [
+        "python/engines/unity.py"
+      ],
+      "public_symbols": {
+        "python/engines/unity.py": [
+          "AlignedString",
+          "decode_aligned_string",
+          "encode_aligned_string",
+          "replace_aligned_string"
+        ]
+      },
+      "scope": "version/stage-limited references; read the engine page",
+      "evidence": "per-module provenance and synthetic tests; not blanket game verification"
+    },
+    {
+      "id": "violent",
+      "title": "Violent BIN 规则：只读 JIS 候选证据",
+      "aliases": [
+        "violent"
+      ],
+      "document": "engines/violent.md",
+      "python_references": [
+        "python/engines/violent.py"
+      ],
+      "public_symbols": {
+        "python/engines/violent.py": [
+          "is_allowed_sjis",
+          "scan_candidates"
+        ]
+      },
+      "scope": "version/stage-limited references; read the engine page",
+      "evidence": "per-module provenance and synthetic tests; not blanket game verification"
+    },
+    {
+      "id": "whale",
+      "title": "Whale：文本行结构、SELECT 与 [n]",
+      "aliases": [
+        "whale"
+      ],
+      "document": "engines/whale.md",
+      "python_references": [
+        "python/engines/whale.py"
+      ],
+      "public_symbols": {
+        "python/engines/whale.py": [
+          "Target",
+          "extract",
+          "patch"
+        ]
+      },
+      "scope": "version/stage-limited references; read the engine page",
+      "evidence": "per-module provenance and synthetic tests; not blanket game verification"
+    },
+    {
+      "id": "willplus",
+      "title": "WillPlus / AdvHD：ARC/AR2 解包与 WS2 v1 代码子集",
+      "aliases": [
+        "WillPlus",
+        "AdvHD",
+        "Pulltop"
+      ],
+      "document": "engines/willplus.md",
+      "python_references": [
+        "python/archives/willplus.py",
+        "python/engines/willplus.py"
+      ],
+      "public_symbols": {
+        "python/archives/willplus.py": [
+          "IndexEntry",
+          "ArchiveIndex",
+          "read_index",
+          "read_member",
+          "decode_member"
+        ],
+        "python/engines/willplus.py": [
+          "Field",
+          "Layout",
+          "parse_ws2_v1_subset",
+          "patch_ws2_v1_subset"
+        ]
+      },
+      "scope": "version/stage-limited references; read the engine page",
+      "evidence": "per-module provenance and synthetic tests; not blanket game verification"
+    },
+    {
+      "id": "winters",
+      "title": "Winters：IFP 无遮罩子集与 ISD 尺寸条件",
+      "aliases": [
+        "winters"
+      ],
+      "document": "engines/winters.md",
+      "python_references": [
+        "python/archives/winters.py",
+        "python/engines/winters.py"
+      ],
+      "public_symbols": {
+        "python/archives/winters.py": [
+          "pack_ifp",
+          "unpack_ifp"
+        ],
+        "python/engines/winters.py": [
+          "pad_isd_to_original"
+        ]
+      },
+      "scope": "version/stage-limited references; read the engine page",
+      "evidence": "per-module provenance and synthetic tests; not blanket game verification"
+    },
+    {
+      "id": "xuse",
+      "title": "Xuse：GD + DLL 数据索引与脚本 XOR",
+      "aliases": [
+        "xuse"
+      ],
+      "document": "engines/xuse.md",
+      "python_references": [
+        "python/archives/xuse.py",
+        "python/engines/xuse.py"
+      ],
+      "public_symbols": {
+        "python/archives/xuse.py": [
+          "parse_gd",
+          "repack_gd"
+        ],
+        "python/engines/xuse.py": [
+          "crypt_script"
+        ]
+      },
+      "scope": "version/stage-limited references; read the engine page",
+      "evidence": "per-module provenance and synthetic tests; not blanket game verification"
+    },
+    {
+      "id": "yaneurao",
+      "title": "Yaneurao：Itufuru 长度字符串指令",
+      "aliases": [
+        "Yaneurao",
+        "Itufuru"
+      ],
+      "document": "engines/yaneurao.md",
+      "python_references": [
+        "python/engines/yaneurao.py"
+      ],
+      "public_symbols": {
+        "python/engines/yaneurao.py": [
+          "read_record",
+          "write_record"
+        ]
+      },
+      "scope": "version/stage-limited references; read the engine page",
+      "evidence": "per-module provenance and synthetic tests; not blanket game verification"
+    },
+    {
+      "id": "yatagarasu",
+      "title": "Yatagarasu：PKG v1 密钥索引归档",
+      "aliases": [
+        "yatagarasu"
+      ],
+      "document": "engines/yatagarasu.md",
+      "python_references": [
+        "python/archives/yatagarasu.py"
+      ],
+      "public_symbols": {
+        "python/archives/yatagarasu.py": [
+          "pack_pkg",
+          "unpack_pkg"
+        ]
+      },
+      "scope": "version/stage-limited references; read the engine page",
+      "evidence": "per-module provenance and synthetic tests; not blanket game verification"
+    },
+    {
+      "id": "yuka",
+      "title": "Yuka：YKS002 类型化文本池",
+      "aliases": [
+        "YukaSystem",
+        "YKC",
+        "YKS"
+      ],
+      "document": "engines/yuka.md",
+      "python_references": [
+        "python/engines/yuka.py"
+      ],
+      "public_symbols": {
+        "python/engines/yuka.py": [
+          "parse_yks",
+          "extract_yks",
+          "rewrite_yks"
+        ]
+      },
+      "scope": "version/stage-limited references; read the engine page",
+      "evidence": "per-module provenance and synthetic tests; not blanket game verification"
+    },
+    {
+      "id": "yuris",
+      "title": "YU-RIS：YPF 解包、YBN 分区 XOR 与 ysc.ybn",
+      "aliases": [
+        "yuris"
+      ],
+      "document": "engines/yuris.md",
+      "python_references": [
+        "python/archives/yuris.py",
+        "python/engines/yuris.py"
+      ],
+      "public_symbols": {
+        "python/archives/yuris.py": [
+          "IndexEntry",
+          "ArchiveIndex",
+          "read_index",
+          "read_member",
+          "decode_member"
+        ],
+        "python/engines/yuris.py": [
+          "toggle_ybn_sections",
+          "convert_control_bytes",
+          "read_command_list"
+        ]
+      },
+      "scope": "version/stage-limited references; read the engine page",
+      "evidence": "per-module provenance and synthetic tests; not blanket game verification"
+    }
+  ]
+}

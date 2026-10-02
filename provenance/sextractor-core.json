@@ -1,0 +1,937 @@
+{
+  "schema_version": 1,
+  "group": "sextractor-core",
+  "authored_scope": "15 engine knowledge pages plus independent in-memory Python references; no business/config changes and no CLI integration",
+  "repositories": {
+    "sextractor": {
+      "url": "https://github.com/satan53x/SExtractor",
+      "reference_repository": "SExtractor",
+      "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+      "license_file": "LICENSE",
+      "license_evidence": "Repository LICENSE is the GNU General Public License, Version 3. No per-file grant of a later-version option was established in this review.",
+      "adaptation_license": "GPL-3.0-only",
+      "attribution": "SExtractor / satan53x and contributors; retained third-party origin notes below are not relicensed by this record."
+    },
+    "garbro_mod": {
+      "reference_repository": "GARbro-Mod",
+      "url": "https://github.com/nanami5270/GARbro-Mod",
+      "commit": "bc26d991ef5cdc0e1ecb32122ee9a48c3375750c",
+      "license_evidence": "The referenced ArcFormats files contain MIT-style permission/copyright headers (morkt). Used only as container-layout documentation clues; no C# implementation copied into these Python leaves."
+    }
+  },
+  "distribution_note": "Keep GPLv3 full license text with the skill distribution and preserve this source/attribution record. External executables, RubyMarshal, Nexas conversion tools and other linked projects are not bundled or executed by these leaves; their own licenses must be checked separately before redistribution.",
+  "engines": [
+    {
+      "id": "anim",
+      "module": "python/engines/anim.py",
+      "document": "engines/anim.md",
+      "license": "GPL-3.0-only",
+      "api": [
+        "switch_key",
+        "crypt",
+        "text_start",
+        "nul_tokens",
+        "replace_token"
+      ],
+      "sources": [
+        {
+          "repository": "sextractor",
+          "path": "src/extract_ANIM.py",
+          "symbols": [
+            "switch_key",
+            "byte_add",
+            "decrypt",
+            "encrypt",
+            "readFileDataImp",
+            "parseImp"
+          ]
+        },
+        {
+          "repository": "sextractor",
+          "path": "src/engine.ini",
+          "symbols": [
+            "Engine_ANIM"
+          ]
+        }
+      ],
+      "third_party_origin": "Source rolling-key section says 'from game_translation'; no independent upstream license was established.",
+      "implemented": [
+        "16-byte sequential rolling-key update",
+        "plaintext-dependent encryption/decryption",
+        "DAT/SCE text boundary",
+        "NUL token offsets",
+        "equal-byte-length token patch"
+      ],
+      "missing": [
+        "outer container",
+        "full script instructions",
+        "variable-length relocation",
+        "automatic name-variable rewriting"
+      ]
+    },
+    {
+      "id": "azsystem",
+      "module": "python/engines/azsystem.py",
+      "document": "engines/azsystem.md",
+      "license": "GPL-3.0-only",
+      "api": [
+        "read_text_operand",
+        "extract_fields",
+        "replace_field",
+        "decrypt_v1",
+        "encrypt_v1"
+      ],
+      "sources": [
+        {
+          "repository": "sextractor",
+          "path": "src/extract_AZSystem.py",
+          "symbols": [
+            "Config.init",
+            "readText",
+            "parseImp",
+            "readFileDataImp",
+            "replaceEndImp"
+          ]
+        },
+        {
+          "repository": "sextractor",
+          "path": "src/engine.ini",
+          "symbols": [
+            "Engine_AZSystem"
+          ]
+        },
+        {
+          "repository": "sextractor",
+          "path": "tools/AZSystem/asb_decrypt.py",
+          "symbols": [
+            "decryptFile",
+            "decryptData",
+            "InitKey"
+          ]
+        },
+        {
+          "repository": "sextractor",
+          "path": "tools/AZSystem/asb_encrypt.py",
+          "symbols": [
+            "encryptFile",
+            "encryptData"
+          ]
+        },
+        {
+          "repository": "sextractor",
+          "path": "tools/AZSystem/README.md",
+          "symbols": [
+            "asb_decrypt & asb_encrypt"
+          ]
+        }
+      ],
+      "implemented": [
+        "explicit opcode profiles 0/1/2",
+        "bounded one-byte text/control operands",
+        "v1 ASB word-subtraction plus bounded zlib decoder and reverse wrapper",
+        "equal-length field patch"
+      ],
+      "missing": [
+        "container",
+        "wrapper v2/v3 (v3 shares ASB 1A magic)",
+        "full command/jump relocation"
+      ],
+      "version_note": "Wrapper version and opcode profile are independent axes. Header magic alone cannot select wrapper v1 vs v3."
+    },
+    {
+      "id": "blackrainbow",
+      "module": "python/engines/blackrainbow.py",
+      "document": "engines/blackrainbow.md",
+      "license": "GPL-3.0-only",
+      "api": [
+        "xor_text",
+        "parse_script",
+        "replace_texts"
+      ],
+      "sources": [
+        {
+          "repository": "sextractor",
+          "path": "src/extract_BlackRainbow.py",
+          "symbols": [
+            "XorKey",
+            "readFileDataImp",
+            "replaceEndImp"
+          ]
+        },
+        {
+          "repository": "sextractor",
+          "path": "src/engine.ini",
+          "symbols": [
+            "Engine_BlackRainbow"
+          ]
+        },
+        {
+          "repository": "sextractor",
+          "path": "tools/BlackRainbow/dat_pack.py",
+          "symbols": [
+            "BytesDatSig",
+            "pack"
+          ]
+        },
+        {
+          "repository": "sextractor",
+          "path": "tools/BlackRainbow/pak_pack.py",
+          "symbols": [
+            "pack"
+          ]
+        }
+      ],
+      "implemented": [
+        "0x4c header and bounded segment parser",
+        "dialogue-only repeating XOR",
+        "choice/save-title lengths",
+        "opaque role/prefix preservation",
+        "local segment writer and total-size repair"
+      ],
+      "missing": [
+        "DAT/PAK container writer",
+        "unknown-version external offsets",
+        "automatic role-bytes to displayed-name interpretation"
+      ]
+    },
+    {
+      "id": "bluegale",
+      "module": "python/engines/bluegale.py",
+      "document": "engines/bluegale.md",
+      "license": "GPL-3.0-only",
+      "api": [
+        "xor_bdt",
+        "build_index",
+        "dialogue_spans",
+        "package_script"
+      ],
+      "sources": [
+        {
+          "repository": "sextractor",
+          "path": "src/extract_BlueGale_bdt.py",
+          "symbols": [
+            "decrypt",
+            "replaceEndImp",
+            "MaxIndex"
+          ]
+        },
+        {
+          "repository": "sextractor",
+          "path": "src/engine.ini",
+          "symbols": [
+            "Engine_BlueGale_bdt"
+          ]
+        },
+        {
+          "repository": "garbro_mod",
+          "path": "ArcFormats/BlueGale/ArcSNN.cs",
+          "symbols": [
+            "SnnOpener.TryOpen"
+          ],
+          "usage": "documentation-only container clue",
+          "file_license": "MIT"
+        }
+      ],
+      "implemented": [
+        "XOR FF BDT transform",
+        "CRLF byte-aware label offsets",
+        "4000-slot 8sII indexwww.dat generation",
+        "known quote/name/QP spans",
+        "paired in-memory script/index output"
+      ],
+      "missing": [
+        "SNN/Inx archive writer",
+        "full BDT grammar",
+        "multi-BDT shared-index policy"
+      ]
+    },
+    {
+      "id": "cscript",
+      "module": "python/engines/cscript.py",
+      "document": "engines/cscript.md",
+      "license": "GPL-3.0-only",
+      "api": [
+        "parse_record",
+        "replace_record",
+        "unpack_script",
+        "pack_script"
+      ],
+      "sources": [
+        {
+          "repository": "sextractor",
+          "path": "src/extract_CScript.py",
+          "symbols": [
+            "dealText",
+            "dealText0",
+            "dealSel",
+            "dealSel0",
+            "config",
+            "checkJump",
+            "readFileDataImp",
+            "uncompress",
+            "compress"
+          ]
+        },
+        {
+          "repository": "sextractor",
+          "path": "src/engine.ini",
+          "symbols": [
+            "Engine_CScript"
+          ]
+        },
+        {
+          "repository": "sextractor",
+          "path": "tools/CScript/dat_pack.py",
+          "symbols": [
+            "NameLen",
+            "pack"
+          ]
+        },
+        {
+          "repository": "sextractor",
+          "path": "tools/CScript/README.md",
+          "symbols": [
+            "scr_decompress"
+          ]
+        }
+      ],
+      "implemented": [
+        "explicit decompressed-payload candidate parsing for profiles 1/10/11",
+        "version-specific name/message/choice preambles",
+        "equal-length local field patch"
+      ],
+      "missing": [
+        "wrapper reader/writer",
+        "LZSS dialect",
+        "container",
+        "full scanning/disassembly",
+        "branch/normal/conditional jump relocation"
+      ],
+      "caution": "Upstream profile 10/11 jump tables explicitly contain TODOs. No native .pyd imported or another engine's LZSS substituted."
+    },
+    {
+      "id": "eagls",
+      "module": "python/engines/eagls.py",
+      "archive_module": "python/archives/eagls.py",
+      "module_api": {
+        "python/engines/eagls.py": [
+          "crypt_script",
+          "read_labels",
+          "fix_label_offsets",
+          "dialogue_spans"
+        ],
+        "python/archives/eagls.py": [
+          "MSVCRTRand",
+          "crypt_index",
+          "pack_archive"
+        ]
+      },
+      "scope_note": "Historical source/test scope covers both split outputs; module_api records current API ownership. Algorithms and license notices are preserved.",
+      "document": "engines/eagls.md",
+      "license": "GPL-3.0-only",
+      "api": [
+        "MSVCRTRand",
+        "crypt_index",
+        "crypt_script",
+        "read_labels",
+        "fix_label_offsets",
+        "dialogue_spans",
+        "pack_archive"
+      ],
+      "sources": [
+        {
+          "repository": "sextractor",
+          "path": "src/extract_EAGLS.py",
+          "symbols": [
+            "parseImp",
+            "replaceOnceImp"
+          ]
+        },
+        {
+          "repository": "sextractor",
+          "path": "src/engine.ini",
+          "symbols": [
+            "Engine_EAGLS"
+          ]
+        },
+        {
+          "repository": "sextractor",
+          "path": "tools/EAGLS/EAGLS_script_tool/scpacker.py",
+          "symbols": [
+            "MSVCRTRand",
+            "decrypt_idx",
+            "decrypt_slice",
+            "get_labels_and_textoffset",
+            "get_labels_alis",
+            "fix_offsets",
+            "encrypt"
+          ]
+        },
+        {
+          "repository": "sextractor",
+          "path": "tools/EAGLS/README.md",
+          "symbols": [
+            "EAGLS_script_tool",
+            "HSHINTAI_decrypt"
+          ]
+        }
+      ],
+      "third_party_origin": "README attributes EAGLS_script_tool to Cosetto; old HSHINTAI_decrypt points to jszhtian/EAGLS. Only repository GPLv3 baseline was verified, not separate upstream grants.",
+      "implemented": [
+        "MSVCRT random sequence",
+        "IDX seed-preserving XOR",
+        "v1 cyclic and v2 alternate-byte signed-seed script transforms",
+        "36/136-byte label tables",
+        "strict existing-label offset rebuild",
+        "known text grammar"
+      ],
+      "missing": [
+        "full SCPACK.idx/pak read/write",
+        "key discovery",
+        "new-label creation",
+        "deployment"
+      ]
+    },
+    {
+      "id": "gsd",
+      "module": "python/engines/gsd.py",
+      "document": "engines/gsd.md",
+      "license": "GPL-3.0-only",
+      "api": [
+        "read_dialogue",
+        "Dialogue.text_runs",
+        "read_global_names",
+        "write_spt"
+      ],
+      "sources": [
+        {
+          "repository": "sextractor",
+          "path": "src/extract_GSD.py",
+          "symbols": [
+            "GSDManager.clear",
+            "GSDManager.readGlobal",
+            "GSDManager.getText",
+            "GSDManager.getSelect",
+            "GSDManager.writeSpt",
+            "parseImp"
+          ]
+        },
+        {
+          "repository": "sextractor",
+          "path": "src/engine.ini",
+          "symbols": [
+            "Engine_GSD"
+          ]
+        },
+        {
+          "repository": "sextractor",
+          "path": "tools/GSD/README.md",
+          "symbols": [
+            "GSDTools"
+          ]
+        },
+        {
+          "repository": "sextractor",
+          "path": "tools/GSD/decode.bat",
+          "symbols": [
+            "SPT_Decoder.exe invocation"
+          ]
+        },
+        {
+          "repository": "sextractor",
+          "path": "tools/GSD/pack.bat",
+          "symbols": [
+            "GSP_Editor.exe invocation"
+          ]
+        }
+      ],
+      "implemented": [
+        "already-decoded GSD v2-family profile 1/2 dialogue cells",
+        "typed opaque control-cell retention",
+        "name ID and explicit-section global.dat names"
+      ],
+      "missing": [
+        "GSP archive",
+        "SPT decode/encode",
+        "GSD v3",
+        "source profile 3",
+        "selection extraction",
+        "SPT/global writer"
+      ],
+      "version_note": "Source says Engine GSD v2 and engine.ini requires GSDTools decode, with GSD v3 delegated to GSDTools. ExVar.version=1/2/3 is not a proof of engine-generation support."
+    },
+    {
+      "id": "gxengine",
+      "module": "python/engines/gxengine.py",
+      "document": "engines/gxengine.md",
+      "license": "GPL-3.0-only",
+      "api": [
+        "unpack_mwb",
+        "scan_fields",
+        "replace_fields"
+      ],
+      "sources": [
+        {
+          "repository": "sextractor",
+          "path": "src/extract_GxEngine_mwb.py",
+          "symbols": [
+            "initExtra",
+            "readFileDataImp",
+            "replaceEndImp"
+          ]
+        },
+        {
+          "repository": "sextractor",
+          "path": "src/engine.ini",
+          "symbols": [
+            "Engine_GxEngine_mwb"
+          ]
+        },
+        {
+          "repository": "sextractor",
+          "path": "tools/Astronauts/README.md",
+          "symbols": [
+            "GxpPacker+MwbExtractor",
+            "AVGEngineV2_Tool"
+          ]
+        }
+      ],
+      "third_party_origin": "README says GxpPacker/MwbExtractor from F95zone and separately links akiWagashi/AVGEngineV2_Tool; no binaries redistributed or executed.",
+      "implemented": [
+        "V3 MWB LE wrapper sizes and bounded zlib",
+        "05/08 1A tagged BE string lengths",
+        "UTF-8 default strict decode",
+        "local text/size rebuild with opaque regions preserved"
+      ],
+      "missing": [
+        "GXP container",
+        "V2 script conversion",
+        "unknown-version global offsets",
+        "complete control-string semantic filtering"
+      ]
+    },
+    {
+      "id": "med",
+      "module": "python/engines/med.py",
+      "document": "engines/med.md",
+      "license": "GPL-3.0-only",
+      "api": [
+        "parse_table",
+        "replace_strings",
+        "classify_text"
+      ],
+      "sources": [
+        {
+          "repository": "sextractor",
+          "path": "src/extract_MED.py",
+          "symbols": [
+            "readFileDataImp",
+            "replaceEndImp"
+          ]
+        },
+        {
+          "repository": "sextractor",
+          "path": "src/engine.ini",
+          "symbols": [
+            "Engine_MED"
+          ]
+        }
+      ],
+      "implemented": [
+        "LE32[4]+2*LE16[10]+16 boundary",
+        "size-minus-16 validation",
+        "NUL table/empty slot preservation",
+        "equal-size patch and name hint"
+      ],
+      "missing": [
+        "outer container",
+        "opaque prefix interpretation",
+        "variable-length pointer relocation",
+        "full dialogue grouping"
+      ]
+    },
+    {
+      "id": "moonhir",
+      "module": "python/engines/moonhir.py",
+      "document": "engines/moonhir.md",
+      "license": "GPL-3.0-only",
+      "api": [
+        "decode_payload",
+        "unpack_fbx",
+        "pack_fbx_literal",
+        "text_block",
+        "replace_text_block"
+      ],
+      "sources": [
+        {
+          "repository": "sextractor",
+          "path": "src/extract_MoonHir.py",
+          "symbols": [
+            "readFileDataImp"
+          ]
+        },
+        {
+          "repository": "sextractor",
+          "path": "src/engine.ini",
+          "symbols": [
+            "Engine_MoonHir"
+          ]
+        },
+        {
+          "repository": "sextractor",
+          "path": "tools/MoonHir/moonhir_fbx.py",
+          "symbols": [
+            "pack_fbx",
+            "unpack_fbx",
+            "test_pack"
+          ]
+        },
+        {
+          "repository": "sextractor",
+          "path": "tools/MoonHir/README.md",
+          "symbols": [
+            "GARbro unpacked FBX and loose-file packaging notes"
+          ]
+        },
+        {
+          "repository": "garbro_mod",
+          "path": "ArcFormats/Moonhir/ArcFPK.cs",
+          "symbols": [
+            "FpkOpener.TryOpen",
+            "FpkOpener.OpenEntry"
+          ],
+          "usage": "documentation-only container clue",
+          "file_license": "MIT"
+        }
+      ],
+      "implemented": [
+        "bounded FBX two-bit control decoder",
+        "overlapping backrefs",
+        "literal-only wrapper writer including singleton tails",
+        "first script block boundary",
+        "per-string equal-size block patch"
+      ],
+      "missing": [
+        "FPK archive/encryption",
+        "reserved extended token mode 2",
+        "unknown FBX headers",
+        "inter/intra-block relocation",
+        "optimal compression"
+      ]
+    },
+    {
+      "id": "nekosdk",
+      "module": "python/engines/nekosdk.py",
+      "document": "engines/nekosdk.md",
+      "license": "GPL-3.0-only",
+      "api": [
+        "extract_fields",
+        "replace_fields"
+      ],
+      "sources": [
+        {
+          "repository": "sextractor",
+          "path": "src/extract_NekoSDK.py",
+          "symbols": [
+            "readFileDataImp",
+            "parseImp",
+            "replaceOnceImp"
+          ]
+        },
+        {
+          "repository": "sextractor",
+          "path": "src/engine.ini",
+          "symbols": [
+            "Engine_NekoSDK",
+            "explicit unextracted-choices warning"
+          ]
+        },
+        {
+          "repository": "garbro_mod",
+          "path": "ArcFormats/NekoSDK/ArcPAK.cs",
+          "symbols": [
+            "PakOpener.TryOpen",
+            "PakOpener.OpenEntry"
+          ],
+          "usage": "documentation-only container clue",
+          "file_license": "MIT"
+        }
+      ],
+      "implemented": [
+        "NEKOSDK_ADVSCRIPT2 magic",
+        "CP932 display/log command candidates",
+        "NUL-inclusive u32 name/message lengths",
+        "known-field reverse-order patch"
+      ],
+      "missing": [
+        "choices",
+        "NEKOPACK read/write",
+        "unknown command/version relocation",
+        "full script semantics"
+      ]
+    },
+    {
+      "id": "nexas",
+      "module": "python/engines/nexas.py",
+      "document": "engines/nexas.md",
+      "license": "GPL-3.0-only",
+      "api": [
+        "extract_fields",
+        "replace_fields",
+        "assemble_bin"
+      ],
+      "sources": [
+        {
+          "repository": "sextractor",
+          "path": "src/extract_Nexas_asm.py",
+          "symbols": [
+            "initExtra",
+            "parseImp"
+          ]
+        },
+        {
+          "repository": "sextractor",
+          "path": "src/engine.ini",
+          "symbols": [
+            "Engine_Nexas_asm"
+          ]
+        },
+        {
+          "repository": "sextractor",
+          "path": "tools/Nexas/Script_disassembler.py",
+          "symbols": [
+            "ProcessDump",
+            "readString",
+            "BIN read and ASM/dat0/JSON output main loop"
+          ]
+        },
+        {
+          "repository": "sextractor",
+          "path": "tools/Nexas/README.md",
+          "symbols": [
+            "pack",
+            "assemble",
+            "Notices",
+            "References"
+          ]
+        }
+      ],
+      "third_party_origin": "README links akiWagashi/GIGA_NeXAS and masagrator/NXGameScripts/Aonatsu Line. BIN conversion must use the matching tool/version; sidecars are not optional metadata.",
+      "implemented": [
+        "known Nexas ASM string operand parsing",
+        "bounded PUSH/name/LOAD_STRING context",
+        "raw escape/line-ending preservation",
+        "safe quoted-field replacement"
+      ],
+      "missing": [
+        "BIN disassembler/assembler",
+        "dat0/JSON conversion",
+        "PAC container",
+        "other assembler dialects and width-based line wrapping"
+      ],
+      "required_sidecars": [
+        "original .dat0",
+        "unmatched-string .json if generated, preserving boolean values",
+        "original disassembler/assembler version and BIN source"
+      ]
+    },
+    {
+      "id": "rpgmaker",
+      "module": "python/engines/rpgmaker.py",
+      "document": "engines/rpgmaker.md",
+      "license": "GPL-3.0-only",
+      "api": [
+        "extract_fields",
+        "apply_translations",
+        "expand_json_strings",
+        "restore_json_strings",
+        "load_ruby_marshal",
+        "dump_ruby_marshal"
+      ],
+      "sources": [
+        {
+          "repository": "sextractor",
+          "path": "src/extract_RPGMV.py",
+          "symbols": [
+            "RPGParserMV.parseNode",
+            "RPGParserMV.init",
+            "EVENT_COMMAND_CODES",
+            "getNode",
+            "loads",
+            "dumps"
+          ]
+        },
+        {
+          "repository": "sextractor",
+          "path": "src/extract_RPGVX.py",
+          "symbols": [
+            "parseImp"
+          ]
+        },
+        {
+          "repository": "sextractor",
+          "path": "src/engine.ini",
+          "symbols": [
+            "Engine_RPGMV",
+            "Engine_RPGVX"
+          ]
+        },
+        {
+          "repository": "sextractor",
+          "path": "src/reg.yaml",
+          "symbols": [
+            "RPGMV_RPGVX_System",
+            "RPGVX_RPGMV_NotMap"
+          ]
+        },
+        {
+          "repository": "sextractor",
+          "path": "tools/RPGMakerVX/rvdata_to_json.py",
+          "symbols": [
+            "handle",
+            "SkipFile",
+            "Config.KeepBytesClassName"
+          ]
+        },
+        {
+          "repository": "sextractor",
+          "path": "tools/RPGMakerVX/rubymarshal/classes.py",
+          "symbols": [
+            "to_dict",
+            "from_dict",
+            "RubyObject",
+            "RubyString",
+            "UserDef",
+            "UsrMarshal",
+            "Symbol"
+          ]
+        },
+        {
+          "repository": "sextractor",
+          "path": "tools/RPGMakerVX/README.md",
+          "symbols": [
+            "supported extensions and RubyMarshal reference"
+          ]
+        }
+      ],
+      "third_party_origin": "VX converter references d9pouces/RubyMarshal; classes.py names Matthieu Gallet. No RubyMarshal implementation is copied or bundled; binary codec is deliberately refused.",
+      "implemented": [
+        "typed JSON paths and MV/VX key prefixes",
+        "safe event slots preserving numeric code/indent/choice arrays",
+        "selected database fields",
+        "Ruby type/bytes metadata retention",
+        "explicit embedded-JSON string-boundary expansion/restoration"
+      ],
+      "missing": [
+        "Ruby Marshal reader/writer/object links",
+        "RGSS encrypted archive",
+        "all plugins and private classes",
+        "script-code translation",
+        "full MZ semantics"
+      ],
+      "intentional_divergence": "Do not recursively stringify every nested dict/list as upstream dumps does. Default event selection excludes resource filenames, comments and code-bearing commands even when upstream broad table marks them extractable."
+    },
+    {
+      "id": "scrplayer",
+      "module": "python/engines/scrplayer.py",
+      "document": "engines/scrplayer.md",
+      "license": "GPL-3.0-only",
+      "api": [
+        "parse_script",
+        "replace_strings"
+      ],
+      "sources": [
+        {
+          "repository": "sextractor",
+          "path": "src/extract_ScrPlayer.py",
+          "symbols": [
+            "StrCodeConfig",
+            "Script.read",
+            "Script.write",
+            "Command.read",
+            "Command.write",
+            "generateAddrList",
+            "init"
+          ]
+        },
+        {
+          "repository": "sextractor",
+          "path": "src/engine.ini",
+          "symbols": [
+            "Engine_ScrPlayer"
+          ]
+        },
+        {
+          "repository": "garbro_mod",
+          "path": "ArcFormats/ScrPlayer/ArcPAK.cs",
+          "symbols": [
+            "PakOpener.TryOpen",
+            "PakOpener.ReadIndex",
+            "PakOpener.DecryptIndex"
+          ],
+          "usage": "documentation-only container clue",
+          "file_license": "MIT"
+        }
+      ],
+      "implemented": [
+        "explicit profiles 1..6",
+        "bounded command/string section parsing",
+        "XOR 7F string table",
+        "translate/relocate-only/numeric operand distinction",
+        "all-known reference rebasing including voice pointers"
+      ],
+      "missing": [
+        "PAK/pac2 container",
+        "unknown opcode semantics",
+        "union profile 0",
+        "variable-length writer when unknown commands or nonempty unreferenced strings exist",
+        "lossy fixOrig normalization"
+      ]
+    },
+    {
+      "id": "unity",
+      "module": "python/engines/unity.py",
+      "document": "engines/unity.md",
+      "license": "GPL-3.0-only",
+      "api": [
+        "decode_aligned_string",
+        "encode_aligned_string",
+        "replace_aligned_string"
+      ],
+      "sources": [
+        {
+          "repository": "sextractor",
+          "path": "src/extract_Unity_dat.py",
+          "symbols": [
+            "initExtra",
+            "readFileDataImp",
+            "replaceEndImp"
+          ]
+        },
+        {
+          "repository": "sextractor",
+          "path": "src/engine.ini",
+          "symbols": [
+            "Engine_Unity_dat",
+            "explicit UTAGE framework note"
+          ]
+        }
+      ],
+      "implemented": [
+        "UTAGE mono DAT local explicit-offset string record",
+        "LE UTF-8 byte length and four-byte padding",
+        "isolated record encoder",
+        "whole-DAT patch only when aligned footprint stays equal"
+      ],
+      "missing": [
+        "Unity engine-wide support",
+        "UnityFS/AssetBundle/serialized-object writer",
+        "UTAGE full table schema",
+        "outer offset/size relocation",
+        "automatic field discovery",
+        "IL2CPP/Mono runtime changes"
+      ],
+      "intentional_divergence": "Explicit length_offset replaces upstream printable-byte regex and next-length one/two-byte absorption heuristic. No ignore-decode-errors fallback."
+    }
+  ]
+}

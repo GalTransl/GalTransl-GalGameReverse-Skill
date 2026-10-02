@@ -1,0 +1,3 @@
+# Python bytecode caches; these are build artifacts, never tracked.
+__pycache__/
+*.py[cod]

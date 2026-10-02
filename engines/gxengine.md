@@ -1,0 +1,93 @@
+# GxEngine：V3 MWB 字符串与 zlib 包装
+
+## 适用版本
+- 对应源码注释 `Engine: GxEngine V3 mwb`。
+- 剧本成员后缀为 `.mwb`，不能直接外推为所有 GxEngine 版本。
+- 附带 `Astronauts` 工具目录另有 AVGEngineV2 工具，二者不是同一实现。
+- `engine.ini` 给出的单游戏样本仅是来源测试说明，不是通用支持证明。
+- 本参考不含任何按游戏标题分支的特殊处理。
+- MWB 头固定保留 `0x1C` 字节；来源没有通用 magic 检查。
+- 因而目录来源、长度和标记结构必须联合判定。
+- 文件头可见的名字或后缀不能替代这些校验。
+
+## 外层目录与容器
+- `tools/Astronauts/README.md` 记录 `GxpPacker + MwbExtractor`。
+- 该 README 说明其来源为 F95zone，并另列 AVGEngineV2 项目链接。
+- 提供的 EXE/DLL 并非本 leaf 的运行依赖，也没有在 import 时加载。
+- 若 MWB 位于 GXP 等容器，应先使用已确认匹配版本的容器工具。
+- 保留成员相对路径、容器版本及是否已被工具解压的信息。
+- 本页不实现 GXP 加密/索引或外部工具的 GUI/CLI 封装。
+- “提取了 MWB 文本”与“已重新封包可运行”是两个不同结论。
+
+## MWB 包装
+- [unpack_mwb](../python/engines/gxengine.py#L20) 返回完整解压 payload。
+- `LE32[0x14]` 是未压缩大小，`LE32[0x18]` 是存储大小。
+- 实际正文从 `0x1C` 开始。
+- 两大小不同则执行 zlib 解压；相等时按原始未压缩正文处理。
+- 存储大小必须精确等于文件尾正文长度。
+- 默认最大输出 64 MiB，可由调用方显式降低或提高预算。
+- 解压必须达到 EOF、没有额外尾流、没有超量输出，并精确匹配声明长度。
+- 任何不满足的文件直接报错，不沿用源“提示后继续”的宽松行为。
+
+## 混合端序文本记录
+- [scan_fields](../python/engines/gxengine.py#L37) 扫描已知六字节标记。
+- 预设 pattern 为 `[08/05] 1A 00 00 [00..02] xx`。
+- 末四字节其实是**大端**文本 byte_length。
+- 因而该 pattern 限制已核实字段长度为 `0..0x2FF`。
+- 标记 `08` 与 `05` 不应简单归并成同一语义。
+- 源预设提醒 `05` 是控制字符串，可与 `08` 分开提取以免误译。
+- Field.kind 保存首字节，让调用方在翻译前显式分类。
+- Field.length_offset 指大端长度位置，start/end 指原始正文跨度。
+- 扫描完成后所有未命中前缀、间隙和结尾仍留在 payload 中。
+- 匹配标记但长度越界时拒绝，而不是把它解释为“没有台词”。
+- 编码默认 UTF-8，与源初始化一致；也允许显式指定经过验证的编码。
+- 无法解码的候选会报错，不像上游继续跳过造成静默漏提。
+
+## name/message 与控制保护
+- 源预设 `名字「正文` 的 name 长度限制为 1 至 10 个字符。
+- ASCII-only 字段、开头大写命令或 `@`、包含下划线的字符串可能被跳过。
+- 这些是特定提取规则，不意味着所有非 ASCII 字段都适合翻译。
+- 本 leaf 返回完整字段，不用猜名结果覆盖结构内变量。
+- 建议先按 kind 筛选，再将已确认文本交给 name/message 规则。
+- UTF-8 字符数和字节数必须区分，长度字段永远写字节数。
+- 控制标签、换行和资源标识的完整性由上层语义策略保护。
+
+## 本地回填
+- [replace_fields](../python/engines/gxengine.py#L57) 接受字段序号到 str 的映射。
+- 它从原文件重新解包和解析，避免对已移位 offset 二次使用。
+- 从后往前替换文本与其四字节大端长度，保留所有其他 bytes。
+- 译文编码后超过 `0x2FF` 时拒绝，不生成本 reader 无法再读的标记。
+- 重组 payload 后重算 MWB 的两个小端大小。
+- 默认用 zlib 压缩，也可明确选择不压缩。
+- 若压缩后恰好与原始 payload 同长，使用原始 payload 避免大小判定歧义。
+- 这里重建的是源代码覆盖的本地字符串布局，不是整个 GxEngine 指令集。
+- 若目标版本另有全局跳转/索引，须先补充验证，不能套此 writer。
+- 外层容器索引和文件部署由公共层/专用工具另做。
+
+## 调用示意
+```python
+from python.engines import gxengine
+payload = gxengine.unpack_mwb(member_bytes)
+fields = gxengine.scan_fields(payload)
+# 先确认 fields[0].kind 属于需要翻译的文本类型。
+result_bytes = gxengine.replace_fields(member_bytes, {0: "译文"})
+```
+- source member 必须处于原包装状态，不能把 payload 直接当 member_bytes。
+- 不依赖 `ExVar`、PyQt5、原 tools 或相对工作目录。
+
+## 验证与阶段缺口
+- 合成测试验证大端字段长度与小端包装长度的组合。
+- 变长 UTF-8 测试确认前后不透明字节及 zlib 往返。
+- 测试覆盖越界标记和超出解压预算的拒绝。
+- 尚未运行实际游戏或 GxpPacker，也未验证其他 MWB 世代。
+- 未实现 GXP 解封包、V2 剧本转换、字库扩展和完整控制字段识别。
+- 文本解析成功不能替代 UI、分支、存档等部署回归。
+
+## 来源与许可
+- SExtractor 固定提交 `8d8d976fd04ae54e7c677705af937273d04a376a`。
+- 原路径：`src/extract_GxEngine_mwb.py`、`src/engine.ini`。
+- 原符号：`initExtra`、`readFileDataImp`、`replaceEndImp`。
+- 工具链说明核实于 `tools/Astronauts/README.md`，未执行附带二进制。
+- [固定源码](https://github.com/satan53x/SExtractor/blob/8d8d976fd04ae54e7c677705af937273d04a376a/src/extract_GxEngine_mwb.py)。
+- Python 改编依原 GPLv3，保守标为 GPL-3.0-only；附带外部工具许可不能自动继承。
+- 机器可读记录见 [provenance](../provenance/sextractor-core.json)。

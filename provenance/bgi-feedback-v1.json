@@ -1,0 +1,292 @@
+{
+  "schema_version": 1,
+  "engine": "bgi",
+  "profile": "bgi-headered-v1/literal-events-v1/core-inline-u16-stack-v1/counts-or-minimal4-zero-padding",
+  "vntextpatch_profile": "bgi-headered-v1/vntextpatch-events-v1/core-inline-u16-stack-v1/counts-or-minimal4-zero-padding",
+  "module_license": "GPL-3.0-or-later",
+  "opcode_table_license": "MIT",
+  "sources_are_runtime_dependencies": false,
+  "sources": {
+    "vntextpatch": {
+      "repository": "VNTextPatch-net8",
+      "commit": "d9c0fab7b72fdcf87d674ef12a84d3829c9188be",
+      "license": "MIT",
+      "copyright": "Copyright (c) 2021 arcusmaximus",
+      "files": [
+        {
+          "path": "VNTextPatch.Shared/Scripts/Ethornell/EthornellV1Disassembler.cs",
+          "sha256": "8c7e4b4bb87066ac19264cebf27ce5308e25835d19c9c3394859984195ad73c9",
+          "symbols": [
+            "Magic",
+            "OperandTemplates",
+            "Disassemble",
+            "HandleUserFunctionCall",
+            "HandleMessage",
+            "HandleChoiceScreen",
+            "OutputInternalStrings"
+          ]
+        },
+        {
+          "path": "VNTextPatch.Shared/Scripts/Ethornell/EthornellDisassembler.cs",
+          "sha256": "684e6337ee4b11300db86ef8702ddd52621106b1dded14335a93b3793f9b479d",
+          "symbols": [
+            "ReadOperands",
+            "ReadCodeAddress",
+            "OnCodeAddressEncountered"
+          ]
+        },
+        {
+          "path": "VNTextPatch.Shared/Scripts/Ethornell/EthornellScript.cs",
+          "sha256": "c59ecedac002c6d7e539950c62e558b93d501873842c2de575393289b8f93f22",
+          "symbols": [
+            "Load",
+            "SerializeStrings",
+            "WritePatched"
+          ]
+        }
+      ]
+    },
+    "msg_tool": {
+      "repository": "https://github.com/lifegpc/msg-tool",
+      "commit": "f72716cee88554d40c1cdface2812493b14ca653",
+      "license": "GPL-3.0-or-later",
+      "copyright_attribution": "msg-tool contributors; upstream BGI source files do not state a separate copyright year",
+      "files": [
+        {
+          "path": "src/scripts/bgi/parser.rs",
+          "sha256": "8f51c32aaac62ceea4b58f499bbe3cb8afd088c9cd2361f128b88cf99705ef2d",
+          "symbols": [
+            "V1_INSTS",
+            "V1Parser",
+            "handle_message",
+            "handle_choice_screen",
+            "handle_user_function_call",
+            "disassemble"
+          ]
+        },
+        {
+          "path": "src/scripts/bgi/script.rs",
+          "sha256": "aed440a46ccb461fdf4e6707abb87058564ec3f3ed9a9e088bdb547531289fd3",
+          "symbols": [
+            "BGIScript::new",
+            "extract_messages",
+            "import_messages"
+          ]
+        }
+      ]
+    }
+  },
+  "opcode_table": {
+    "module": "python/engines/bgi_v1_opcodes.py",
+    "source_lines": "EthornellV1.00 table plus explicit V1 stack-call extensions",
+    "explicit_entries": 568,
+    "vntextpatch_entries": 561,
+    "nonempty_entries": 13,
+    "added_entries": [
+      {
+        "opcode": "0x0461",
+        "template": "",
+        "basis": "Frozen explicit-profile compatibility entry; not a list to expand per title."
+      },
+      {
+        "opcode": "0x0462",
+        "template": "",
+        "basis": "Frozen explicit-profile compatibility entry; not a list to expand per title."
+      },
+      {
+        "opcode": "0x0463",
+        "template": "",
+        "basis": "Frozen explicit-profile compatibility entry; not a list to expand per title."
+      },
+      {
+        "opcode": "0x0464",
+        "template": "",
+        "basis": "Frozen explicit-profile compatibility entry; not a list to expand per title."
+      },
+      {
+        "opcode": "0x0177",
+        "template": "",
+        "basis": "Frozen explicit-profile compatibility entry; not a list to expand per title."
+      },
+      {
+        "opcode": "0x0468",
+        "template": "",
+        "basis": "Frozen explicit-profile compatibility entry; not a list to expand per title."
+      },
+      {
+        "opcode": "0x04B0",
+        "template": "",
+        "basis": "Frozen explicit-profile compatibility entry; not a list to expand per title."
+      }
+    ],
+    "known_absent": [
+      "0x0342",
+      "0x045F",
+      "0x0460",
+      "0x0465"
+    ],
+    "unknown_policy": "Legacy profiles reject absent entries. Default profile uses the bounded core/stack convention described in instruction_layout.",
+    "width_is_not_semantics": true,
+    "role": "Frozen legacy explicit table; new analysis uses the core/stack layout rule."
+  },
+  "header": {
+    "magic_bytes": 28,
+    "header_size_includes_own_u32": true,
+    "code_base": "28 + headerSize",
+    "code_length_field": false,
+    "tables": [
+      "u32 referencedScriptCount; NUL names",
+      "u32 labelCount; (NUL name, u32 code-relative address)"
+    ],
+    "padding": "Only verified all-zero bytes after the count tables are accepted and preserved.",
+    "minimal_header_rule": "headerSize == 4 is explicitly treated as a no-table header; all other headers require both counts."
+  },
+  "boundary_evidence": [
+    "Sequential decode using the versioned instruction layout from the parsed code base",
+    "All header-label and 0001 code addresses aligned and validated as instruction starts",
+    "001B/F4 terminal beyond the maximum entry/forward target",
+    "Every referenced string is strictly decoded, NUL-terminated, bounded and after the selected code end",
+    "Referenced pool minimum is an upper bound, not the code end",
+    "A second feasible terminal before the referenced pool bound is rejected as boundary_unknown",
+    "Code-like incomplete continuations and zero-high-word unknown opcodes in the boundary gap are conservatively blocked, never guessed as operands or hidden behind an early terminal",
+    "Append output is rescanned using the same public automatic scanner; no caller-supplied or cached code_length shortcut"
+  ],
+  "event_semantics": {
+    "profiles": {
+      "strict": {
+        "profile_string": "bgi-headered-v1/literal-events-v1/core-inline-u16-stack-v1/counts-or-minimal4-zero-padding",
+        "rule": "Only provably literal, adjacent name/body arguments are exported. Any unmodeled value/arithmetic/load/call marks the pending window unprovable and blocks the member."
+      },
+      "vntextpatch": {
+        "profile_string": "bgi-headered-v1/vntextpatch-events-v1/core-inline-u16-stack-v1/counts-or-minimal4-zero-padding",
+        "rule": "Reproduces upstream EthornellV1Disassembler grouping: 0003 pushes, 0140/0143 take the top operand as body and the next as speaker, 001C discards the callee and turns the remaining stack into options for _SelectEx/_SelectExtend, 007E/007F/00FE and terminals flush. No value or taint tracking.",
+        "evidence_grade": "heuristic; strictly weaker than the strict profile",
+        "isolation": "Recorded in manifest engine.variant; inject and repack read it back and re-validate with the same profile, so heuristic rows cannot be written as proven rows."
+      },
+      "shared_structural_checks": "Both profiles share header/boundary/target/pool validation and both still reject the old dialect opcodes.",
+      "deliberate_deviation": "Old message/ruby/flush semantics remain blocked here. msg-tool explicitly handles 0145 as reverse-order message, 014E as ruby and 01B5 as flush; these are not upstream no-ops."
+    },
+    "message_opcodes": [
+      "0x0140",
+      "0x0143"
+    ],
+    "choice_opcode": "0x0160",
+    "choice_functions": [
+      "_SelectEx",
+      "_SelectExtend"
+    ],
+    "internal_flushes": [
+      "0x007E",
+      "0x007F",
+      "0x00FE"
+    ],
+    "pairing": "Name and message come from the same event, never persistent speaker state.",
+    "empty_name": "Internal; omitted name, absent policy, null name_operand",
+    "empty_message": "Internal; not exported, associated hidden name is not writable",
+    "duplicates": "Preserved as separate ordered events and per-operand locators",
+    "dynamic_values": "No VM evaluation; variable/load/arithmetic/unmodeled effects taint the pending reference window. Single-literal messages with possible dynamic names are blocked, never called narration. Two fresh adjacent name/body literals, without intervening incoming code targets, prove their own roles despite earlier numeric work.",
+    "ordinary_functions": "A directly supplied non-choice literal callee and its arguments remain Internal even with unresolved numeric arguments. Its unknown return value is not treated as a static speaker.",
+    "diagnostic_layer": "scan_v1 returns validated structure with JSON-serializable semantic_diagnostics and no partial events on semantic failure. export_v1 and patch_v1 propagate the first diagnostic code/offset/opcode. Structural errors and unknown opcodes still fail scan_v1 immediately.",
+    "old_dialects_blocked": [
+      "0x0145 reverse-order message",
+      "0x014E ruby",
+      "0x01B5 old flush"
+    ]
+  },
+  "writer": {
+    "strategy": "Append every changed NUL string, including short translations, and patch only its validated u32 code-relative operand.",
+    "identity": "Unchanged text keeps original bytes and addresses, while still traversing writer validation and rescanning.",
+    "preserves": [
+      "header and zero padding",
+      "instruction layout and code targets",
+      "Internal references",
+      "old string pool",
+      "shared and suffix aliases",
+      "opaque gaps and trailing bytes"
+    ],
+    "rejects": [
+      "unknown/internal/unexported operands",
+      "unencodable or embedded-NUL translations",
+      "u32 overflow",
+      "output budget overflow",
+      "new boundary ambiguity",
+      "reference/event topology changes",
+      "empty replacement changing nonempty name/message role"
+    ],
+    "no_game_specific_markup_rule": true,
+    "profile": "Taken from the member manifest and used for both the input analysis and the output reparse."
+  },
+  "dsc_encoder": {
+    "module": "python/archives/bgi_dsc.py",
+    "function": "encode(data, seed=DEFAULT_SEED, max_output_size, max_symbols, verify=True)",
+    "basis": "Written and checked against this package's own strict decoder; not a line-by-line transcription of msg-tool DscEncoder::pack.",
+    "shared_fact": "The 512 code-length keystream is produced by one shared helper (_key_bytes) used by both reader and writer, so the two cannot drift.",
+    "code": "Greedy LZSS over symbols 0-255 literal and 256+n match of length n+2, then canonical Huffman. Falls back to 512 uniform depth-9 codes when the Huffman depth would exceed 24.",
+    "distance": "The 12-bit field stores distance-2, so distance 1 is unrepresentable and the matcher skips candidates closer than 2 bytes.",
+    "determinism": "Deterministic for a given seed and input; DEFAULT_SEED is fixed so rebuilt members are reproducible.",
+    "self_check": "verify=True decodes the produced member with the package decoder and compares before returning.",
+    "edge_cases": [
+      "empty input",
+      "single byte",
+      "single distinct symbol (depth-1 leaf)",
+      "incompressible data",
+      "maximum 257-byte matches",
+      "maximum 4097 distance"
+    ]
+  },
+  "archive_writer": {
+    "module": "python/archives/bgi_writer.py",
+    "functions": [
+      "build_archive(members, version, name_encoding, max_members, max_total_size, verify=True)",
+      "pack_member(data, compress, allow_plain)",
+      "row_length(version)"
+    ],
+    "layout": "signature, u32 count, fixed-stride rows (name, u32 offset relative to index end, u32 size, opaque extra), then stored members in caller order. Version 1 uses stride 0x20/name 0x10; version 2 uses stride 0x80/name 0x60.",
+    "row_extra": "v2 rows carry 24 opaque bytes after the size field. Preserve them through IndexEntry.extra; only default to zero for new archives.",
+    "self_check": "verify=True re-indexes and re-reads every member through archives/bgi.py before returning.",
+    "refusals": [
+      "empty archive",
+      "unknown version",
+      "non-str/bytes members",
+      "duplicate names",
+      "names that do not fit the fixed field or the name encoding",
+      "wrong-length extra region",
+      "member count or stored byte budget"
+    ],
+    "not_provided": "No BSE or image encoder; such members must be passed through as their original stored bytes."
+  },
+  "legacy_api": {
+    "preserved": [
+      "scan_v1_subset(data, code_length, encoding='cp932')",
+      "patch_v1_pool(data, code_length, replacements, encoding='cp932')"
+    ],
+    "limitations_unchanged": "Limited seven-opcode subset, caller-proven code length, fully covered nonoverlapping pool rebuild. Not an alias to the new APIs."
+  },
+  "limitations": [
+    "Headered Ver1 only; no V0 or automatic headerless fallback",
+    "Static event grouping, not complete BGI VM evaluation; the vntextpatch profile may assign a text role to a stored or computed value",
+    "Width-only knowledge does not authorize translating arguments of arbitrary calls",
+    "Unproven speaker roles and competing boundaries fail closed in the strict profile",
+    "Pool-like opaque bytes are preserved; they are not repacked or interpreted as additional game assets",
+    "The leaf writer strictly encodes CP932 by default. Chinese outside CP932 requires the common JIS substitution layer and a compatible hook/font, or a separately verified encoding patch.",
+    "No BSE or image encoder; repack copies such members verbatim",
+    "No GUI, external runtime imports, game execution or paid API calls",
+    "Loose-script loading is operator-reported (see load_rules), not reproduced by running the game in this package; the exact loose name and the override/caching rules are still unconfirmed",
+    "No game startup, font or save-file validation"
+  ],
+  "legacy_profiles": [
+    "bgi-headered-v1/literal-events-v1/vntextpatch-d9c0fab7b72fdcf87d674ef12a84d3829c9188be-explicit568/counts-or-minimal4-zero-padding",
+    "bgi-headered-v1/vntextpatch-events-v1/vntextpatch-d9c0fab7b72fdcf87d674ef12a84d3829c9188be-explicit568/counts-or-minimal4-zero-padding",
+    "bgi-headered-v1/literal-events-v1/vntextpatch-d9c0fab7b72fdcf87d674ef12a84d3829c9188be-explicit565/counts-or-minimal4-zero-padding",
+    "bgi-headered-v1/vntextpatch-events-v1/vntextpatch-d9c0fab7b72fdcf87d674ef12a84d3829c9188be-explicit565/counts-or-minimal4-zero-padding"
+  ],
+  "instruction_layout": {
+    "default": "core-inline-u16-stack-v1",
+    "inline_operands": "13 core layouts: the same nonempty set as the legacy table (msg-tool V1_INSTS has 12 plus specialized 0003).",
+    "core": "Below 0080, accept only the bundled core layouts; reject unlisted core opcodes.",
+    "stack": "0080..FFFF: one u32 instruction word, arguments supplied through the VM stack. No per-call registration.",
+    "bounded_deviation": "msg-tool skips every remaining u32; this profile rejects nonzero high words and unknown core opcodes and retains header/target/pool and ambiguity validation.",
+    "diagnostics": "boundary.opcode_layout and stack_extension_opcodes identify the convention and IDs absent from the frozen explicit table.",
+    "semantics": "Instruction width does not establish return values, stack effects or translatable text roles."
+  }
+}

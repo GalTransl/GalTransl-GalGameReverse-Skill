@@ -1,0 +1,44 @@
+{
+  "feature": "CP932 JIS fixed character substitution",
+  "upstream": "https://github.com/satan53x/SExtractor",
+  "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+  "license": "GPL-3.0; see licenses/GPL-3.0.txt and repository LICENSE",
+  "attribution": "satan53x / SExtractor contributors; helper_text.py credits the original substitution dictionary to GalTransl_DumpInjector",
+  "sources": [
+    "src/helper_text.py: generateSubsDic, generateSubsJis, generateSubsConfig",
+    "src/var_extract.py: JisEncodeName = cp932",
+    "src/subs_cn_jp.json",
+    "src/uif_config.json",
+    "tools/Font/README.md",
+    "tools/Font/font_CN_JP.py"
+  ],
+  "copied_resource": {
+    "path": "python/common/jis_cn_jp.json",
+    "source": "src/subs_cn_jp.json",
+    "sha256": "c7d435172c76e6773bba3e2c593c9fd435fefceef22fa2082e41fa8d574b0ba0",
+    "entries": 2999,
+    "modified": false,
+    "direction": "intended Chinese to CP932 proxy character"
+  },
+  "implementation": "python/common/jis_substitution.py",
+  "changes": [
+    "Explicit package-scoped encoder; no GUI, global state or upstream runtime imports",
+    "Fail on missing mapping, CP932 alias normalization, literal proxy collisions or capacity overflow; no space fallback or truncation",
+    "Reserve source display characters across files and emit deterministic used-only UIF reverse mapping",
+    "Report full-preset-font collisions separately from used-only hook configuration",
+    "Keep real Chinese translation JSON and original manifest unchanged; codec-aware validation plus engine semantic reparse",
+    "Publish mapping, UIF template and deployment instructions atomically with rebuilt resources"
+  ],
+  "automatic_adapters": [
+    "SystemC ACT/DAT/SPT CP932 workspace pack"
+  ],
+  "bundled_hook": {
+    "path": "assets/uif/winmm.dll",
+    "source": "SExtractor tools/UIF/winmm.dll at 8d8d976fd04ae54e7c677705af937273d04a376a",
+    "architecture": "x86",
+    "size": 351232,
+    "sha256": "b83f896edd06662078eadd5ea7970ab5bfd320cd8ec319e72b1455473c897e41",
+    "license_status": "No standalone UIF license found; see assets/uif/README.md; not relicensed under SExtractor GPL",
+    "modified": false
+  }
+}

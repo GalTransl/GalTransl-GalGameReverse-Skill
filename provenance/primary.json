@@ -1,0 +1,937 @@
+{
+  "schema_version": 1,
+  "collection": "galgame-script-roundtrip/primary",
+  "schema_description": {
+    "sources": "仓库标识到锁定提交、许可及只读核验状态；所有 path 都相对各仓库根目录。",
+    "engines": "id/document/module 标识条目；source_refs 是实际查阅的文件与符号；algorithms 说明可调用函数及输入输出。",
+    "limitations": "每个条目明确不支持的方言、调用者必须补齐的证明及部署缺口。",
+    "source_license_ids": "来源许可，不把 GPL 来源算法重新声明为 MIT；分发需保留原许可和修改说明。"
+  },
+  "runtime": {
+    "minimum_python": "3.10",
+    "dependencies": "Python standard library only",
+    "imports_perform_io": false,
+    "requires_reference_repositories_at_runtime": false,
+    "depends_on_galtransl": false,
+    "changes_sys_path_in_leaf_modules": false,
+    "disk_writer": "none; public parent layer owns safe output and deployment manifests"
+  },
+  "sources": {
+    "vntextpatch": {
+      "repository": "VNTextPatch-net8",
+      "commit": "d9c0fab7b72fdcf87d674ef12a84d3829c9188be",
+      "license": "MIT",
+      "license_path": "LICENSE",
+      "copyright": "Copyright (c) 2021 arcusmaximus",
+      "license_notice": "MIT License\n\nCopyright (c) 2021 arcusmaximus\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE.\n"
+    },
+    "msg_tool": {
+      "repository": "msg-tool",
+      "commit": "f72716cee88554d40c1cdface2812493b14ca653",
+      "license": "GPL-3.0-or-later",
+      "license_path": "LICENSE",
+      "redistribution_note": "本集合包含按此源码改写的 Python 算法；父 Skill 分发时须随附 GPL 许可原文、来源及修改说明，不能统一改标 MIT。"
+    },
+    "sextractor": {
+      "repository": "SExtractor",
+      "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+      "license": "GPL-3.0",
+      "license_path": "LICENSE",
+      "use": "dialect comparison only; no runtime import or manager/global reuse"
+    },
+    "garbro": {
+      "repository": "GARbro-Mod",
+      "commit": "bc26d991ef5cdc0e1ecb32122ee9a48c3375750c",
+      "license": "MIT (per-file notices for referenced ArcFormats implementations)",
+      "use": "ArcFormats/Artemis/ArcPFS.cs is adapted into python/archives/pfs.py (MIT, Copyright (C) 2016-2017 by morkt; see licenses/MIT-GARbro.txt). YPF, Will ARC/AR2 and Softpal PAC adaptations are recorded in common-archives-v1.json; remaining routes listed below are recognition evidence."
+    }
+  },
+  "shared_source_references": [
+    {
+      "source": "vntextpatch",
+      "path": "VNTextPatch.Shared/Util/BinaryPatcher.cs",
+      "symbols": [
+        "ReplaceBytes",
+        "MapOffset",
+        "PatchAddress"
+      ],
+      "use": "range replacement and old/new offset mapping; changed interiors must not be treated as valid target mappings"
+    }
+  ],
+  "engines": [
+    {
+      "id": "kirikiri",
+      "document": "engines/kirikiri.md",
+      "module": "python/engines/kirikiri.py",
+      "source_license_ids": [
+        "MIT"
+      ],
+      "source_refs": [
+        {
+          "source": "vntextpatch",
+          "path": "VNTextPatch.Shared/Scripts/Kirikiri/KirikiriKsScript.cs",
+          "symbols": [
+            "GetRanges",
+            "GetLineRanges",
+            "GetNameRanges",
+            "GetLabelRanges",
+            "GetMessageRanges"
+          ]
+        },
+        {
+          "source": "vntextpatch",
+          "path": "VNTextPatch.Shared/Scripts/FolderScriptCollection.cs",
+          "symbols": [
+            "FolderScriptCollection"
+          ],
+          "finding": "KirikiriScnScript registration is commented out"
+        },
+        {
+          "source": "msg_tool",
+          "path": "src/scripts/kirikiri/scn.rs",
+          "symbols": [],
+          "use": "existence evidence only, not ported"
+        }
+      ],
+      "algorithms": [
+        {
+          "functions": [
+            "kag_spans",
+            "patch_kag"
+          ],
+          "input": "decoded KAG str and original span-index -> translated str",
+          "output": "typed original spans or syntax-preserving str",
+          "specifics": "script/macro blocks, #name, label titles and ns/nse role state"
+        }
+      ],
+      "archive_modules": [
+        "python/archives/xp3.py"
+      ],
+      "name_policy": "separate name spans; $-prefixed names retained as read-only name_variable",
+      "limitations": [
+        "finite r/l/p/cm/ns/nse inline tags only",
+        "no SCN/TJS/SOC writer or ruby/attribute grammar",
+        "no encoding/BOM/archive/deployment decisions"
+      ]
+    },
+    {
+      "id": "artemis",
+      "document": "engines/artemis.md",
+      "module": "python/engines/artemis.py",
+      "source_license_ids": [
+        "MIT"
+      ],
+      "source_refs": [
+        {
+          "source": "vntextpatch",
+          "path": "VNTextPatch.Shared/Scripts/Artemis/ArtemisAsbScript.cs",
+          "symbols": [
+            "ReadFile",
+            "ReadItem",
+            "ReadString",
+            "WriteItem",
+            "WriteString",
+            "GetTextReferences"
+          ]
+        },
+        {
+          "source": "msg_tool",
+          "path": "src/scripts/artemis/asb.rs",
+          "symbols": [
+            "ArtemisAsbBuilder::extensions",
+            "CustomReadFn"
+          ],
+          "use": "ASB/IET recognition comparison, not algorithm dependency"
+        }
+      ],
+      "algorithms": [
+        {
+          "functions": [
+            "read_asb",
+            "write_asb",
+            "text_fields",
+            "patch_asb"
+          ],
+          "input": "ASB bytes or typed ordered Command/Label tree; (item,attribute) -> str",
+          "output": "tree, typed field references, or rebuilt ASB bytes",
+          "specifics": "0/1 item types, UTF-8 length excluding NUL, line numbers, ordered attributes"
+        }
+      ],
+      "archive_modules": [
+        "python/archives/pfs.py"
+      ],
+      "name_policy": "name.0 distinct from print.data, ruby.text, choice and history; no lossy grouping",
+      "limitations": [
+        "no AST/TXT/Lua parser or complete IET control-flow editor",
+        "no print/ruby range merging",
+        "field-level text edits, not arbitrary command mutation or deployment validation"
+      ]
+    },
+    {
+      "id": "artemis-scp",
+      "document": "engines/artemis-scp.md",
+      "module": "python/engines/artemis_scp.py",
+      "source_license_ids": [
+        "MIT",
+        "GPL-3.0-or-later"
+      ],
+      "source_refs": [
+        {
+          "source": "msg_tool",
+          "path": "src/scripts/artemis/txt.rs",
+          "symbols": [
+            "ArtemisTxtBuilder",
+            "ArtemisTxtScript::collect_messages",
+            "is_dialogue_line",
+            "parse_hash_speaker"
+          ],
+          "use": "general Artemis TXT line/speaker comparison; the '#'-prefixed speaker rule is deliberately not reused"
+        },
+        {
+          "source": "msg_tool",
+          "path": "src/scripts/artemis/panmimisoft/txt.rs",
+          "symbols": [
+            "Parser::parse",
+            "TagParser::parse",
+            "TagNode::is_blocked_name",
+            "TagNode::get_attr",
+            "LineTag"
+          ],
+          "use": "comment/label/line-tag/command grammar and tag.ini blacklist comparison"
+        },
+        {
+          "source": "msg_tool",
+          "path": "src/scripts/artemis/archive/pfs.rs",
+          "symbols": [
+            "ArtemisArc::new",
+            "PfsEntryHeader"
+          ],
+          "use": "pf8 record layout and SHA-1 XOR confirmation"
+        },
+        {
+          "source": "garbro",
+          "path": "ArcFormats/Artemis/ArcPFS.cs",
+          "symbols": [
+            "PfsOpener.OpenPf",
+            "PfsOpener.OpenPf2",
+            "PfsOpener.OpenPf0",
+            "PfsOpener.OpenEntry"
+          ],
+          "use": "container record layout, name field and pf8 key range; shared with python/archives/pfs.py"
+        }
+      ],
+      "algorithms": [
+        {
+          "functions": [
+            "line_kind",
+            "read_script",
+            "render",
+            "encode_script",
+            "patch_script"
+          ],
+          "input": "SCP text bytes plus optional tag.ini schema and speaker policy, or translation rows",
+          "output": "typed ordered records with locators or rebuilt original-encoded bytes",
+          "specifics": "blank-line message groups, structural quotes, three-tier speaker evidence, protected inline directives, BOM/CRLF preservation, re-parse verification; Script.patch reuses the parsing policy"
+        },
+        {
+          "functions": [
+            "TagSchema.parse"
+          ],
+          "input": "tag.ini bytes",
+          "output": "declared tag set and attribute order",
+          "specifics": "section names exclude commands such as [var name=...] from speaker detection"
+        }
+      ],
+      "archive_modules": [
+        "python/archives/pfs.py"
+      ],
+      "name_policy": "writable only for the command's own name attribute; a voice-attribute tag yields a context name from the tag; a bare unknown character tag keeps its slot, reports name_policy absent and clears the stale speaker instead of inheriting the previous character",
+      "limitations": [
+        "SCP text only; ASB/.ast stay in engines/artemis.md",
+        "volume load order and the trailing index table semantics are static inference, not runtime-verified",
+        "no streaming writer, so volumes above the in-memory budget cannot be repacked",
+        "no font/encoding or game-startup validation"
+      ]
+    },
+    {
+      "id": "bgi",
+      "document": "engines/bgi.md",
+      "module": "python/engines/bgi.py",
+      "source_license_ids": [
+        "MIT"
+      ],
+      "source_refs": [
+        {
+          "source": "vntextpatch",
+          "path": "VNTextPatch.Shared/Scripts/Ethornell/EthornellV1Disassembler.cs",
+          "symbols": [
+            "ReadPushStringAddressOperand",
+            "HandleMessage",
+            "HandleChoiceScreen",
+            "CodeOffset"
+          ]
+        },
+        {
+          "source": "vntextpatch",
+          "path": "VNTextPatch.Shared/Scripts/Ethornell/EthornellScript.cs",
+          "symbols": [
+            "SerializeStrings",
+            "WritePatched"
+          ]
+        }
+      ],
+      "algorithms": [
+        {
+          "functions": [
+            "code_offset",
+            "scan_v1_subset",
+            "patch_v1_pool"
+          ],
+          "input": "Ver1 bytes, externally proven code_length, operand-offset -> str",
+          "output": "code base, all typed string references, or rebuilt deduplicated pool bytes",
+          "specifics": "BurikoCompiledScriptVer1.00 signature without extension requirement; code-relative string pointers"
+        }
+      ],
+      "archive_modules": [
+        "python/archives/bgi.py"
+      ],
+      "name_policy": "string-stack name/message/choice classification; empty/internal strings retained and not writable",
+      "limitations": [
+        "only 0000/0003/0140/0143/0160/001B/00F4",
+        "caller proves complete code region; no arbitrary VM calls/branches/v0",
+        "reject unreferenced pool tails, gaps and interior string references",
+        "not a general BGI writer"
+      ]
+    },
+    {
+      "id": "catsystem2",
+      "document": "engines/catsystem2.md",
+      "module": "python/engines/catsystem2.py",
+      "source_license_ids": [
+        "MIT",
+        "GPL-3.0-or-later"
+      ],
+      "source_refs": [
+        {
+          "source": "vntextpatch",
+          "path": "VNTextPatch.Shared/Scripts/CatSystemScript.cs",
+          "symbols": [
+            "Decompress",
+            "Load",
+            "GetCstStrings"
+          ]
+        },
+        {
+          "source": "msg_tool",
+          "path": "src/scripts/cat_system/cst.rs",
+          "symbols": [
+            "CustomFn::write_patched_string",
+            "CstScript::import_messages"
+          ]
+        }
+      ],
+      "algorithms": [
+        {
+          "functions": [
+            "read_cst",
+            "patch_cst"
+          ],
+          "input": "CatScene bytes, original record-index -> engine-native str",
+          "output": "bounded inflated Scene/all typed records or appended-and-repointed CST",
+          "specifics": "zlib wrapper, relative index/pool bases, 01/type/cstring records, inner/outer lengths"
+        }
+      ],
+      "name_policy": "retain all 0x21/0x20 records and empties; do not merge away consecutive names/continuations",
+      "limitations": [
+        "writer only permits 0x20 and 0x21",
+        "no 0x30 choice-command or continuation semantics",
+        "screen metadata preserved but not interpreted",
+        "no CSTL/INT keys or full deployment support"
+      ]
+    },
+    {
+      "id": "willplus",
+      "document": "engines/willplus.md",
+      "module": "python/engines/willplus.py",
+      "archive_modules": [
+        "python/archives/willplus.py"
+      ],
+      "archive_provenance": "provenance/common-archives-v1.json",
+      "source_license_ids": [
+        "MIT"
+      ],
+      "source_refs": [
+        {
+          "source": "vntextpatch",
+          "path": "VNTextPatch.Shared/Scripts/AdvHd/AdvHdDisassemblerV1.cs",
+          "symbols": [
+            "OperandTemplates"
+          ]
+        },
+        {
+          "source": "vntextpatch",
+          "path": "VNTextPatch.Shared/Scripts/AdvHd/AdvHdDisassemblerBase.cs",
+          "symbols": [
+            "HandleMessage",
+            "HandleCharacterName",
+            "HandleChoiceScreen"
+          ]
+        },
+        {
+          "source": "vntextpatch",
+          "path": "VNTextPatch.Shared/Scripts/AdvHd/AdvHdScript.cs",
+          "symbols": [
+            "RemoveControlCodes",
+            "AddControlCodes"
+          ]
+        },
+        {
+          "source": "sextractor",
+          "path": "src/extract_WillPlus.py",
+          "symbols": [
+            "parseImp"
+          ],
+          "use": "comparison only; pattern matching is not treated as VM completeness"
+        }
+      ],
+      "algorithms": [
+        {
+          "functions": [
+            "parse_ws2_v1_subset",
+            "patch_ws2_v1_subset"
+          ],
+          "input": "proven whole zero-based v1 code region, field ordinal -> display str",
+          "output": "fields/jump operands/boundaries or relocated code bytes",
+          "specifics": "14 i32/internal/message, 15 name, 0F choices with embedded 02/06 jumps; source control restoration"
+        }
+      ],
+      "name_policy": "all names retained; $-prefixed variables read-only; internal voice/string arguments excluded",
+      "limitations": [
+        "only 00/02/05/06/0F/13/14/15/17",
+        "no WS2 v2/v3 or guessed eight-byte footer",
+        "known prefix/suffix controls only",
+        "not a complete WS2 file writer"
+      ]
+    },
+    {
+      "id": "majiro",
+      "document": "engines/majiro.md",
+      "module": "python/engines/majiro.py",
+      "source_license_ids": [
+        "MIT"
+      ],
+      "source_refs": [
+        {
+          "source": "vntextpatch",
+          "path": "VNTextPatch.Shared/Scripts/Majiro/MajiroScript.cs",
+          "symbols": [
+            "ReadHeader",
+            "GetEncryptionTable",
+            "GetEncryptionValue",
+            "AssembleText",
+            "PatchAddresses"
+          ]
+        },
+        {
+          "source": "vntextpatch",
+          "path": "VNTextPatch.Shared/Scripts/Majiro/MajiroAssembler.cs",
+          "symbols": [
+            "WriteOperands"
+          ]
+        },
+        {
+          "source": "vntextpatch",
+          "path": "VNTextPatch.Shared/Scripts/Majiro/MajiroOpcodes.cs",
+          "symbols": [
+            "OperandTemplates"
+          ]
+        },
+        {
+          "source": "vntextpatch",
+          "path": "VNTextPatch.Shared/Scripts/Majiro/MajiroSyscalls.cs",
+          "symbols": [
+            "Ruby"
+          ]
+        }
+      ],
+      "algorithms": [
+        {
+          "functions": [
+            "xor_code",
+            "normalize_mjo"
+          ],
+          "input": "code bytes or structurally valid MJO V/X file",
+          "output": "XOR bytes or file with normalized signature/code",
+          "specifics": "CRC polynomial EDB88320 table as 1024 LE bytes; XOR code only"
+        },
+        {
+          "functions": [
+            "assemble_text",
+            "disassemble_text"
+          ],
+          "input": "text with [base/reading] and newlines or canonical fragment",
+          "output": "Majiro text/proc/ldstr/Ruby/ctrl bytecode fragment or str",
+          "specifics": "u16 length includes NUL; Ruby hash 3198FD01"
+        }
+      ],
+      "archive_modules": [
+        "python/archives/majiro.py"
+      ],
+      "name_policy": "retain supplied combined display text; do not infer/drop multiple speakers",
+      "limitations": [
+        "fragments are not patchable whole MJO output",
+        "entry/function/relative branches and codeSize need separate complete relocation",
+        "no arbitrary call/select/ldstr semantics or tunnel encoding"
+      ]
+    },
+    {
+      "id": "silky",
+      "document": "engines/silky.md",
+      "module": "python/engines/silky.py",
+      "source_license_ids": [
+        "MIT"
+      ],
+      "source_refs": [
+        {
+          "source": "vntextpatch",
+          "path": "VNTextPatch.Shared/Scripts/Silkys/SilkysMapScript.cs",
+          "symbols": [
+            "Load",
+            "GetStrings",
+            "WritePatched"
+          ]
+        },
+        {
+          "source": "sextractor",
+          "path": "src/extract_Silky_map.py",
+          "symbols": [
+            "Manager.read",
+            "Manager.write",
+            "Section.read"
+          ],
+          "use": "distinguish four-section dialect; not ported"
+        }
+      ],
+      "algorithms": [
+        {
+          "functions": [
+            "read_map",
+            "patch_map"
+          ],
+          "input": "explicit count/index/absoluteOffset MAP bytes, original table row -> str",
+          "output": "all Entry rows or bytes with every pointer repaired",
+          "specifics": "aligned UTF-16LE terminators, non-contiguous original index, empties, out-of-order table, alias consistency"
+        }
+      ],
+      "name_policy": "MAP contains no proven local name type; external names remain context only",
+      "limitations": [
+        "not SExtractor four-section MAP or MES VM",
+        "unknown gap/trailer bytes retained but not scanned for hidden pointers",
+        "interior/suffix pointers rejected; explicit dialect selection required"
+      ]
+    },
+    {
+      "id": "softpal",
+      "document": "engines/softpal.md",
+      "module": "python/engines/softpal.py",
+      "archive_modules": [
+        "python/archives/softpal.py"
+      ],
+      "archive_provenance": "provenance/common-archives-v1.json",
+      "source_license_ids": [
+        "MIT"
+      ],
+      "source_refs": [
+        {
+          "source": "vntextpatch",
+          "path": "VNTextPatch.Shared/Scripts/Softpal/SoftpalScript.cs",
+          "symbols": [
+            "GetStrings",
+            "WritePatched",
+            "ReadPointDat"
+          ]
+        },
+        {
+          "source": "vntextpatch",
+          "path": "VNTextPatch.Shared/Scripts/Softpal/SoftpalDisassembler.cs",
+          "symbols": [
+            "CodeOffset",
+            "FindUserMessageFunctions"
+          ],
+          "use": "base and external operand-discovery requirement"
+        }
+      ],
+      "algorithms": [
+        {
+          "functions": [
+            "point_labels",
+            "read_text_records",
+            "append_text_records"
+          ],
+          "input": "Sv20, TEXT.DAT, POINT.DAT bytes, proven operand-role list and operand -> str",
+          "output": "reversed labels, typed text records, or (new code,new text,unchanged point)",
+          "specifics": "POINT base 0C, text address+4, append metadata+cstring, patch literal SRC operands only"
+        }
+      ],
+      "name_policy": "name/message/choice/context_name retained; context or $-variable names cannot be written",
+      "limitations": [
+        "operands must come from independent complete disassembly",
+        "encrypted TEXT rejected instead of merely changing flag",
+        "no full VM/user-call analysis",
+        "SRC and TEXT require coordinated deployment"
+      ]
+    },
+    {
+      "id": "yuris",
+      "document": "engines/yuris.md",
+      "module": "python/engines/yuris.py",
+      "archive_modules": [
+        "python/archives/yuris.py"
+      ],
+      "archive_provenance": "provenance/common-archives-v1.json",
+      "source_license_ids": [
+        "MIT"
+      ],
+      "source_refs": [
+        {
+          "source": "vntextpatch",
+          "path": "VNTextPatch.Shared/Scripts/Yuris/YurisScenarioScript.cs",
+          "symbols": [
+            "ToggleScriptEncryption",
+            "YurisControlCodesToStandard",
+            "StandardControlCodesToYuris",
+            "LoadCommandListForScript"
+          ]
+        },
+        {
+          "source": "vntextpatch",
+          "path": "VNTextPatch.Shared/Scripts/Yuris/YurisCommandList.cs",
+          "symbols": [
+            "ReadCommand"
+          ]
+        },
+        {
+          "source": "vntextpatch",
+          "path": "VNTextPatch.Shared/Util/BinaryUtil.cs",
+          "symbols": [
+            "Xor"
+          ]
+        }
+      ],
+      "algorithms": [
+        {
+          "functions": [
+            "toggle_ybn_sections"
+          ],
+          "input": "YSTB bytes and independently known u32 key",
+          "output": "bytes with four sections XORed separately",
+          "specifics": "restart key phase at every section; validate instruction count and total lengths"
+        },
+        {
+          "functions": [
+            "convert_control_bytes",
+            "read_command_list"
+          ],
+          "input": "CP932-like text bytes or YSCM ysc.ybn bytes",
+          "output": "converted control bytes or ordered commands/attributes with metadata",
+          "specifics": "EF F0/F2/F3/F5 and SJIS trail protection; game-local command IDs"
+        }
+      ],
+      "name_policy": "no fake name/message extraction; caller must retain all attribute identities and name contexts",
+      "limitations": [
+        "no key guessing, YSCF writer, expression VM or full YBN attribute relocation",
+        "unknown EF codes rejected",
+        "ysc.ybn must match scenario version",
+        "no YPF writer"
+      ]
+    },
+    {
+      "id": "musica",
+      "document": "engines/musica.md",
+      "module": "python/engines/musica.py",
+      "source_license_ids": [
+        "MIT"
+      ],
+      "source_refs": [
+        {
+          "source": "vntextpatch",
+          "path": "VNTextPatch.Shared/Scripts/MusicaScript.cs",
+          "symbols": [
+            "GetMessageRanges",
+            "GetSelectRanges",
+            "GetTextForRead",
+            "GetTextForWrite"
+          ]
+        },
+        {
+          "source": "msg_tool",
+          "path": "src/scripts/musica/sc.rs",
+          "symbols": [
+            "MusicaScript::extract_messages"
+          ],
+          "use": "comparison: .message only, last-two-argument logic differs"
+        }
+      ],
+      "algorithms": [
+        {
+          "functions": [
+            "decode_text",
+            "musica_fields",
+            "patch_musica"
+          ],
+          "input": "decoded SC str, field ordinal -> str",
+          "output": "decoded text, preserved field ranges, or new SC str",
+          "specifics": ".message third arg name/fourth onward body; .select caption before colon; @prefix and empty args retained"
+        }
+      ],
+      "name_policy": "preserve full-width name spaces and $ variables; choices remain separate",
+      "limitations": [
+        "finite command grammar, no PAZ/PAK crypto or writer",
+        "no automatic name-space stripping/wrapping",
+        "unknown escapes and colon injection rejected"
+      ]
+    },
+    {
+      "id": "qlie",
+      "document": "engines/qlie.md",
+      "module": "python/engines/qlie.py",
+      "source_license_ids": [
+        "MIT"
+      ],
+      "source_refs": [
+        {
+          "source": "vntextpatch",
+          "path": "VNTextPatch.Shared/Scripts/QlieScript.cs",
+          "symbols": [
+            "GetRanges",
+            "GetCommandArgumentRanges",
+            "GetTextForRead",
+            "GetTextForWrite"
+          ]
+        }
+      ],
+      "algorithms": [
+        {
+          "functions": [
+            "qlie_fields",
+            "patch_qlie"
+          ],
+          "input": "decoded S script str, field ordinal -> display str",
+          "output": "typed ranges or delimiter-preserving str",
+          "specifics": "bracket names, id/name/body, ^select including empty arguments, [n] conversion"
+        }
+      ],
+      "name_policy": "all names and empty choices retained; $ names read-only; no global speaker collapse",
+      "limitations": [
+        "no PACK keys/writer or universal QLIE tag grammar",
+        "no encoding auto-detection or SJIS tunnel",
+        "non-newline control tags must remain unchanged"
+      ]
+    },
+    {
+      "id": "entis-gls",
+      "document": "engines/entis-gls.md",
+      "module": "python/engines/entis_gls.py",
+      "source_license_ids": [
+        "GPL-3.0-or-later"
+      ],
+      "source_refs": [
+        {
+          "source": "msg_tool",
+          "path": "src/scripts/entis_gls/srcxml.rs",
+          "symbols": [
+            "SrcXmlScript::extract_messages",
+            "SrcXmlScript::import_messages"
+          ]
+        }
+      ],
+      "algorithms": [
+        {
+          "functions": [
+            "extract_srcxml",
+            "patch_srcxml"
+          ],
+          "input": "XML str, optional language, record index -> name/message fields",
+          "output": "typed records or semantic XML str",
+          "specifics": "xscript/code/msg and select/menu; explicit localized attributes and writable-name evidence"
+        }
+      ],
+      "name_policy": "existing msg name attribute writable; absent names and menu context cannot be invented",
+      "limitations": [
+        "semantic XML normalization, not byte preservation on edits",
+        "no namespace dialect, CSX v1/v2 compiler or NOA writer",
+        "caller owns file encoding and XML declaration",
+        "32 MiB input character limit"
+      ]
+    },
+    {
+      "id": "escude",
+      "document": "engines/escude.md",
+      "module": "python/engines/escude.py",
+      "source_license_ids": [
+        "GPL-3.0-or-later"
+      ],
+      "source_refs": [
+        {
+          "source": "msg_tool",
+          "path": "src/scripts/escude/script.rs",
+          "symbols": [
+            "EscudeBinScript::new",
+            "EscudeBinScript::import_messages",
+            "StrReplacer::new",
+            "StrReplacer::replace"
+          ]
+        }
+      ],
+      "algorithms": [
+        {
+          "functions": [
+            "read_escr",
+            "decode_engine_string",
+            "extract_escr",
+            "patch_escr"
+          ],
+          "input": "canonical ESCR1_00 bytes, optional multi-name contexts, index -> str",
+          "output": "opaque VM/raw strings, decoded messages, or rebuilt indexed pool bytes",
+          "specifics": "special !/?/A0..DE mapping respects multibyte trails; offsets relative to pool; <r> newline"
+        }
+      ],
+      "name_policy": "external names tuple is retained and always context-only; no fake writable enum name",
+      "limitations": [
+        "no VM/enum/CustomOps or game-specific code",
+        "no LZW/archive crypto",
+        "only canonical pool; all string count/index identities stay fixed",
+        "reverse compact kana encoding not implemented"
+      ]
+    },
+    {
+      "id": "exhibit",
+      "document": "engines/exhibit.md",
+      "module": "python/engines/exhibit.py",
+      "source_license_ids": [
+        "GPL-3.0-or-later"
+      ],
+      "source_refs": [
+        {
+          "source": "msg_tool",
+          "path": "src/scripts/ex_hibit/rld.rs",
+          "symbols": [
+            "OpExt::pack",
+            "OpExt::unpack",
+            "RldScript::xor",
+            "RldScript::name_table",
+            "RldScript::extract_messages",
+            "RldScript::import_messages"
+          ]
+        }
+      ],
+      "algorithms": [
+        {
+          "functions": [
+            "xor_rld",
+            "read_ops",
+            "write_ops"
+          ],
+          "input": "RLD with known keys or exact decrypted op region",
+          "output": "bounded XOR bytes or known op structures/fragments",
+          "specifics": "0x10..floor(min(size,FFCF)/4)*4; 256-key cycling; low-nibble string count"
+        },
+        {
+          "functions": [
+            "name_table",
+            "extract_dialogue",
+            "patch_dialogue"
+          ],
+          "input": "defChara op48 / dialogue op28 structures, optional name map, op-index changes",
+          "output": "ID/name map, context-preserving dialogue, or patched structures",
+          "specifics": "* + first integer indirect names; $noname$ sentinel; definitions field0/field3"
+        }
+      ],
+      "name_policy": "resolved indirect names and IDs retained but not writable; direct names permitted; $ sentinels/variables protected",
+      "limitations": [
+        "op21/191 recognized as opaque structures, not supported choice translations",
+        "unknown opcode refused",
+        "no whole RLD header/tail writer, key discovery or offset relocation",
+        "write_ops emits only a fragment"
+      ]
+    },
+    {
+      "id": "favorite",
+      "document": "engines/favorite.md",
+      "module": "python/engines/favorite.py",
+      "source_license_ids": [
+        "GPL-3.0-or-later"
+      ],
+      "source_refs": [
+        {
+          "source": "msg_tool",
+          "path": "src/scripts/favorite/disasm.rs",
+          "symbols": [
+            "OPS",
+            "Data::read_func",
+            "find_speak_functions",
+            "collect_speaker_names"
+          ]
+        },
+        {
+          "source": "msg_tool",
+          "path": "src/scripts/favorite/hcb.rs",
+          "symbols": [
+            "HcbScript::import_messages"
+          ]
+        }
+      ],
+      "algorithms": [
+        {
+          "functions": [
+            "encode_literal",
+            "parse_code",
+            "relocate_code"
+          ],
+          "input": "proven HCB code region, absolute base, literal-instruction address -> str",
+          "output": "0E literal bytes, instructions, or new code and boundary map",
+          "specifics": "u8 byte length includes NUL; repair all recognized 02/06/07 absolute targets"
+        },
+        {
+          "functions": [
+            "speaker_candidates"
+          ],
+          "input": "proven subset code",
+          "output": "initstack function address -> every candidate name",
+          "specifics": "initstack(3|5,0) heuristic without last-name-only loss"
+        }
+      ],
+      "name_policy": "retain all candidate names including question marks as read-only heuristic context",
+      "limitations": [
+        "not full HCB writer; caller must update script_len and main pointer using returned map",
+        "no syscall/ThreadStart pointer discovery",
+        "over 254 encoded text bytes rejected, no cloned-call splitting",
+        "no full VM, tail/import-table or runtime validation"
+      ]
+    }
+  ],
+  "container_evidence": [
+    {
+      "source": "garbro",
+      "paths": [
+        "ArcFormats/Silky/ArcARC.cs",
+        "ArcFormats/Silky/ArcMFG.cs",
+        "ArcFormats/Softpal/ArcVAFS.cs",
+        "ArcFormats/Musica/ArcPAZ.cs",
+        "ArcFormats/Musica/ArcPAK.cs",
+        "ArcFormats/Qlie/ArcQLIE.cs",
+        "ArcFormats/Entis/ArcNOA.cs",
+        "ArcFormats/Escude/ArcBIN.cs",
+        "ArcFormats/ExHibit/ArcGRP.cs",
+        "ArcFormats/Favorite/ArcBIN.cs",
+        "ArcFormats/Favorite/ArcFVP.cs"
+      ],
+      "symbols": [
+        "Tag",
+        "Description",
+        "Signature",
+        "Extensions"
+      ]
+    }
+  ]
+}

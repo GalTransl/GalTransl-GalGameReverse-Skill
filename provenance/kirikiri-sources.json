@@ -1,0 +1,91 @@
+{
+  "scope": "Kirikiri algorithm attribution only; no game validation records",
+  "references": [
+    {
+      "repository": "GARbro-Mod",
+      "commit": "bc26d991ef5cdc0e1ecb32122ee9a48c3375750c",
+      "license": "MIT",
+      "files": [
+        "ArcFormats/KiriKiri/ArcXP3.cs",
+        "ArcFormats/Emote/ArcPSB.cs"
+      ]
+    },
+    {
+      "repository": "msg-tool",
+      "commit": "f72716cee88554d40c1cdface2812493b14ca653",
+      "license": "GPL-3.0-or-later",
+      "files": [
+        "src/scripts/kirikiri/scn.rs"
+      ]
+    },
+    {
+      "repository": "msg-tool",
+      "commit": "f72716cee88554d40c1cdface2812493b14ca653",
+      "license": "GPL-3.0-or-later",
+      "files": [
+        "src/scripts/kirikiri/scn.rs"
+      ],
+      "use": "Localized text tuple and choice layout; visible length and ruby cache normalization independently checked against game originals"
+    },
+    {
+      "repository": "GARbro-Mod",
+      "commit": "bc26d991ef5cdc0e1ecb32122ee9a48c3375750c",
+      "license": "MIT",
+      "files": [
+        "ArcFormats/KiriKiri/ArcXP3.cs",
+        "ArcFormats/Emote/ArcPSB.cs"
+      ],
+      "use": "Existing XP3 and PSB implementation references"
+    },
+    {
+      "repository": "GARbro-Mod",
+      "commit": "bc26d991ef5cdc0e1ecb32122ee9a48c3375750c",
+      "license": "MIT",
+      "copyright": "Copyright (C) 2014-2018 by morkt",
+      "files": [
+        "ArcFormats/KiriKiri/KiriKiriCx.cs",
+        "ArcFormats/KiriKiri/YuzCrypt.cs",
+        "ArcFormats/KiriKiri/ArcXP3.cs",
+        "ArcFormats/Emote/ArcPSB.cs"
+      ],
+      "use": "Cx algorithm, XP3 metadata and PSB layout; bounded Python expression/tree implementation"
+    },
+    {
+      "repository": "msg-tool",
+      "commit": "f72716cee88554d40c1cdface2812493b14ca653",
+      "license": "GPL-3.0-or-later",
+      "files": [
+        "src/scripts/kirikiri/scn.rs",
+        "msg_tool_xp3data/crypt.json",
+        "msg_tool_xp3data/cx_cb/senren_banka.bin"
+      ],
+      "use": "Scene text/selection semantics and Senren cipher profile",
+      "bundled_control_block": "python/archives/kirikiri_senren_cb.bin",
+      "control_block_bytes": 4096,
+      "control_block_sha256": "da033ef8f93fe5de1ada9de795a36646604b44834837617741c3112c0d5ab004"
+    },
+    {
+      "repository": "msg-tool",
+      "commit": "f72716cee88554d40c1cdface2812493b14ca653",
+      "license": "GPL-3.0-or-later",
+      "use": "Hxv4 key derivation, static PE/BRES inspection, hash algorithms"
+    },
+    {
+      "repository": "GARbro-Mod",
+      "commit": "bc26d991ef5cdc0e1ecb32122ee9a48c3375750c",
+      "license": "MIT",
+      "use": "Hx index layout and object encoding"
+    },
+    {
+      "repository": "hxv4_unhash_tools",
+      "commit": "a96d9839ee455cf0e10d821b01693681eef0e377",
+      "use": "Workflow reference only; no DLL loaded or implementation copied"
+    },
+    {
+      "repository": "KrkrExtractForCxdecV2Extra",
+      "commit": "388e75f96bdc066786b12e3df0432429a26bf186",
+      "license": "AGPL-3.0",
+      "use": "CxdecKeyStatic read-only comparison; no native game code executed or code copied"
+    }
+  ]
+}

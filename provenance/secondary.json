@@ -1,0 +1,631 @@
+{
+  "schema_version": 1,
+  "scope": "fourteen secondary galgame engine algorithm units and knowledge pages",
+  "runtime": {
+    "dependencies": "Python standard library only",
+    "import_time_io": false,
+    "external_processes": false,
+    "shared_layer_dependency": false,
+    "input_output": "bytes/str and explicit structures in; structures/bytes/str out",
+    "filesystem_policy": "caller owns sidecar identity checks, encoding preflight and safe output installation"
+  },
+  "source_repositories": {
+    "msg-tool": {
+      "commit": "f72716cee88554d40c1cdface2812493b14ca653",
+      "license": "GPL-3.0-or-later"
+    },
+    "VNTextPatch-net8": {
+      "commit": "d9c0fab7b72fdcf87d674ef12a84d3829c9188be",
+      "license": "MIT"
+    },
+    "SExtractor": {
+      "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+      "license": "GPL-3.0"
+    }
+  },
+  "engines": [
+    {
+      "id": "circus",
+      "knowledge": "engines/circus.md",
+      "module": "python/engines/circus.py",
+      "source_usage": "algorithm adaptation",
+      "sources": [
+        {
+          "repository": "msg-tool",
+          "path": "src/scripts/circus/script.rs",
+          "symbols": [
+            "CircusMesScript::new",
+            "CircusMesScript::extract_messages",
+            "CircusMesScript::import_messages"
+          ]
+        },
+        {
+          "repository": "msg-tool",
+          "path": "src/scripts/circus/info.rs",
+          "symbols": [
+            "ScriptInfo",
+            "Section::its",
+            "SCRIPT_INFO"
+          ]
+        }
+      ],
+      "interfaces": [
+        "Profile",
+        "read_header",
+        "read_token",
+        "write_text_token"
+      ],
+      "implemented": [
+        "explicit per-game opcode/key profile",
+        "count-derived header offsets",
+        "single-token boundary parsing",
+        "additive byte decrypt/encrypt and NUL-collision rejection"
+      ],
+      "not_implemented": [
+        "all game profiles",
+        "whole MES writer",
+        "block/jump relocation",
+        "archive packing"
+      ],
+      "test_class": "CircusTests"
+    },
+    {
+      "id": "hexenhaus",
+      "knowledge": "engines/hexenhaus.md",
+      "module": "python/engines/hexenhaus.py",
+      "source_usage": "algorithm adaptation with stricter overflow rejection",
+      "sources": [
+        {
+          "repository": "msg-tool",
+          "path": "src/scripts/hexen_haus/bin.rs",
+          "symbols": [
+            "BinScript::new",
+            "BinScript::extract_messages",
+            "BinScript::import_messages"
+          ]
+        }
+      ],
+      "interfaces": [
+        "Slot",
+        "read_slots",
+        "patch_slots",
+        "split_name"
+      ],
+      "implemented": [
+        "NORI recognition",
+        "whole-file XOR 0x53",
+        "_beginrp two-byte slot heuristic",
+        "fixed-byte-capacity patch with space padding"
+      ],
+      "intentional_differences": [
+        "never truncate overlength translation",
+        "no automatic previous-slot name stealing",
+        "reject translation separator collisions"
+      ],
+      "not_implemented": [
+        "complete VM grammar",
+        "cross-slot expansion",
+        "archive writer"
+      ],
+      "cautions": [
+        "upstream heuristic can miss short strings and alter discovered lengths after padding; preserve original slot identity"
+      ],
+      "test_class": "HexenhausTests"
+    },
+    {
+      "id": "yaneurao",
+      "knowledge": "engines/yaneurao.md",
+      "module": "python/engines/yaneurao.py",
+      "source_usage": "algorithm adaptation",
+      "sources": [
+        {
+          "repository": "msg-tool",
+          "path": "src/scripts/yaneurao/itufuru/script.rs",
+          "symbols": [
+            "ItufuruScript::new",
+            "ItufuruScript::extract_messages",
+            "ItufuruScript::import_messages"
+          ]
+        }
+      ],
+      "interfaces": [
+        "read_record",
+        "write_record"
+      ],
+      "implemented": [
+        "Itufuru u16 opcode/u16 NUL-inclusive length record",
+        "opcode 0x02 mandatory LF",
+        "0x1e choices",
+        "resource opcode classification without translation"
+      ],
+      "not_implemented": [
+        "whole-script instruction boundary discovery",
+        "jump relocation",
+        "container packing"
+      ],
+      "test_class": "YaneuraoTests"
+    },
+    {
+      "id": "arcgameengine",
+      "knowledge": "engines/arcgameengine.md",
+      "module": "python/engines/arcgameengine.py",
+      "source_usage": "algorithm adaptation",
+      "sources": [
+        {
+          "repository": "VNTextPatch-net8",
+          "path": "VNTextPatch.Shared/Scripts/ArcGameEngine/AgeStringPoolBuilder.cs",
+          "symbols": [
+            "AgeStringPoolBuilder.Add"
+          ]
+        }
+      ],
+      "interfaces": [
+        "build_string_pool",
+        "read_pool_string"
+      ],
+      "implemented": [
+        "string deduplication",
+        "NUL termination and four-byte alignment",
+        "XOR 0xff including padding",
+        "pool-relative word addresses"
+      ],
+      "not_implemented": [
+        "AGE instruction decoder",
+        "text/reference classification",
+        "pool relocation",
+        "tunnel encoding",
+        "whole-script writer"
+      ],
+      "test_class": "AgeTests"
+    },
+    {
+      "id": "cyberworks",
+      "knowledge": "engines/cyberworks.md",
+      "module": "python/engines/cyberworks.py",
+      "source_usage": "algorithm adaptation without source global state",
+      "sources": [
+        {
+          "repository": "SExtractor",
+          "path": "src/extract_Cyberworks.py",
+          "symbols": [
+            "initExtra",
+            "readFileDataImp",
+            "replaceEndImp"
+          ]
+        }
+      ],
+      "interfaces": [
+        "Block",
+        "read_blocks",
+        "write_blocks",
+        "patch_blocks"
+      ],
+      "implemented": [
+        "u32 a0 block framing",
+        "S byte lengths and short-length XOR key",
+        "T UTF-16-code-unit lengths and two-byte XOR key",
+        "opaque M blocks",
+        "prefix/suffix and zero-sentinel tail preservation"
+      ],
+      "not_implemented": [
+        "encrypted S length >=256",
+        "automatic encoding guessing",
+        "S line-splitting into extra blocks",
+        "name inference",
+        "outer containers"
+      ],
+      "test_class": "CyberworksTests"
+    },
+    {
+      "id": "kaguya",
+      "knowledge": "engines/kaguya.md",
+      "module": "python/engines/kaguya.py",
+      "source_usage": "MIT ver4 algorithm adaptation; GPL earlier-version source used for format comparison only",
+      "sources": [
+        {
+          "repository": "VNTextPatch-net8",
+          "path": "VNTextPatch.Shared/Scripts/KaguyaScript.cs",
+          "symbols": [
+            "Read",
+            "ReadString",
+            "ReadMessage",
+            "ReadMessageGroup",
+            "WriteString",
+            "WriteMessage"
+          ]
+        },
+        {
+          "repository": "SExtractor",
+          "path": "src/extract_Kaguya_dat.py",
+          "symbols": [
+            "readFileDataImp"
+          ],
+          "purpose": "confirm earlier-format incompatibility, not copied into writer"
+        }
+      ],
+      "interfaces": [
+        "Document",
+        "Message",
+        "Group",
+        "read_message_dat",
+        "write_message_dat"
+      ],
+      "implemented": [
+        "exact [SCR-MESSAGE]ver4.0 header",
+        "name/choice/message/group tables",
+        "header-selected XOR",
+        "message lengths",
+        "UTF-16LE voice strings",
+        "CP932 F040/8193 mapping at character boundaries",
+        "shared-index preservation"
+      ],
+      "not_implemented": [
+        "SExtractor 02/03 message.dat format",
+        "unknown extension tails",
+        "tunnel encoding",
+        "outer containers"
+      ],
+      "cautions": [
+        "value-level rebuild may normalize CP932 aliases; shared message edits affect all referencing groups"
+      ],
+      "test_class": "KaguyaTests"
+    },
+    {
+      "id": "mware",
+      "knowledge": "engines/mware.md",
+      "module": "python/engines/mware.py",
+      "source_usage": "literal algorithm adaptation and conservative reference-local copy-on-write design",
+      "sources": [
+        {
+          "repository": "VNTextPatch-net8",
+          "path": "VNTextPatch.Shared/Scripts/Mware/SquirrelObject.cs",
+          "symbols": [
+            "Read",
+            "Write",
+            "ObjectType"
+          ]
+        },
+        {
+          "repository": "VNTextPatch-net8",
+          "path": "VNTextPatch.Shared/Scripts/Mware/MwareScript.cs",
+          "symbols": [
+            "MergeIntoLiteralPools",
+            "PatchLiteralPools",
+            "PatchLiteralReferences",
+            "GetTextRanges"
+          ]
+        }
+      ],
+      "interfaces": [
+        "read_literal",
+        "write_literal",
+        "clone_translated_references"
+      ],
+      "implemented": [
+        "Squirrel v2 null/i32/f32/string tagged objects",
+        "reference-ordinal translation mapping",
+        "clone instead of global literal replacement",
+        "u8/i32 operand-width checks"
+      ],
+      "not_implemented": [
+        "NUT disassembler",
+        "automatic text-reference discovery",
+        "pool/file relocation",
+        "outer length repair",
+        "whole NUT writer"
+      ],
+      "test_class": "MwareTests"
+    },
+    {
+      "id": "propeller",
+      "knowledge": "engines/propeller.md",
+      "module": "python/engines/propeller.py",
+      "source_usage": "algorithm adaptation with explicit balanced-toggle subset",
+      "sources": [
+        {
+          "repository": "VNTextPatch-net8",
+          "path": "VNTextPatch.Shared/Scripts/Propeller/PropellerScript.cs",
+          "symbols": [
+            "FormattingReplacements",
+            "GetParsedString",
+            "WritePatched"
+          ]
+        }
+      ],
+      "interfaces": [
+        "read_text_field",
+        "write_text_field",
+        "split_names"
+      ],
+      "implemented": [
+        "i32 byte-length text fields",
+        "_r newlines",
+        "<,> comma prefix",
+        "FC FD/FE/FF style toggles",
+        "multi-speaker bracket splitting"
+      ],
+      "not_implemented": [
+        "MSC disassembler",
+        "address relocation",
+        "cross-field style state",
+        "tunnel encoding",
+        "whole MSC writer"
+      ],
+      "test_class": "PropellerTests"
+    },
+    {
+      "id": "reallive",
+      "knowledge": "engines/reallive.md",
+      "module": "python/engines/reallive.py",
+      "source_usage": "algorithm adaptation for local assembler fragments only",
+      "sources": [
+        {
+          "repository": "VNTextPatch-net8",
+          "path": "VNTextPatch.Shared/Scripts/RealLive/RealLiveAssembler.cs",
+          "symbols": [
+            "WriteString",
+            "WriteFunctionCall",
+            "WriteLineBreak"
+          ]
+        },
+        {
+          "repository": "VNTextPatch-net8",
+          "path": "VNTextPatch.Shared/Scripts/RealLive/RealLiveScript.cs",
+          "symbols": [
+            "EncodeMessage",
+            "WritePatched"
+          ]
+        }
+      ],
+      "interfaces": [
+        "quote_text",
+        "unquote_text",
+        "assemble_message",
+        "LINE_BREAK"
+      ],
+      "implemented": [
+        "CP932-aware quote escaping",
+        "DBCS trail-byte protection",
+        "function 0/3/201/0/0 linebreak fragment",
+        "explicit name prefix"
+      ],
+      "not_implemented": [
+        "full VM parser",
+        "SEEN decoding",
+        "jump/call relocation",
+        "whole-script writer"
+      ],
+      "cautions": [
+        "ASCII backslash is rejected in the limited token subset",
+        "regex replacement cannot repair RealLive VM addresses"
+      ],
+      "test_class": "RealLiveTests"
+    },
+    {
+      "id": "shsystem",
+      "knowledge": "engines/shsystem.md",
+      "module": "python/engines/shsystem.py",
+      "source_usage": "read-only algorithm adaptation",
+      "sources": [
+        {
+          "repository": "VNTextPatch-net8",
+          "path": "VNTextPatch.Shared/Scripts/ShSystem/ShSystemDisassembler.cs",
+          "symbols": [
+            "TryReadLiteralExpression",
+            "SkipExpression",
+            "SkipString",
+            "SkipList"
+          ]
+        },
+        {
+          "repository": "VNTextPatch-net8",
+          "path": "VNTextPatch.Shared/Scripts/ShSystem/ShSystemScript.cs",
+          "symbols": [
+            "HandleScriptCall",
+            "GetStrings",
+            "WritePatched"
+          ]
+        }
+      ],
+      "interfaces": [
+        "read_header",
+        "read_scriptcall"
+      ],
+      "implemented": [
+        "SHSysSC signature and big-endian u24 size",
+        "bounded local opcode 0x03 scriptcall parse",
+        "expression and string argument boundaries",
+        "only literal script ID 0x33 with five args and final literal exports text"
+      ],
+      "not_implemented": [
+        "whole-file opcode traversal",
+        "writer",
+        "address relocation"
+      ],
+      "upstream_limitation": "ShSystemScript.WritePatched throws NotImplementedException",
+      "test_class": "ShSystemTests"
+    },
+    {
+      "id": "systemnnn",
+      "knowledge": "engines/systemnnn.md",
+      "module": "python/engines/systemnnn.py",
+      "source_usage": "algorithm adaptation with development/release formats kept separate",
+      "sources": [
+        {
+          "repository": "VNTextPatch-net8",
+          "path": "VNTextPatch.Shared/Scripts/SystemNnn/SystemNnnDevScript.cs",
+          "symbols": [
+            "GetTextRanges",
+            "WritePatched"
+          ]
+        },
+        {
+          "repository": "VNTextPatch-net8",
+          "path": "VNTextPatch.Shared/Scripts/SystemNnn/SystemNnnReleaseScript.cs",
+          "symbols": [
+            "Load",
+            "GetSptItems",
+            "FormatFileText",
+            "PatchAddresses"
+          ]
+        },
+        {
+          "repository": "VNTextPatch-net8",
+          "path": "VNTextPatch.Shared/Scripts/SystemNnn/SystemNnnBaseScript.cs",
+          "symbols": [
+            "ParseFileText",
+            "FormatFileText"
+          ],
+          "purpose": "document name/control semantics; not applied as lossy text normalization"
+        }
+      ],
+      "interfaces": [
+        "Slot",
+        "read_nnn_slots",
+        "patch_nnn",
+        "read_spt_items",
+        "word_to_offset",
+        "offset_to_word",
+        "encode_spt_text"
+      ],
+      "implemented": [
+        "NNN fixed message/Case slot recognition and byte-capacity patch",
+        "SPT XOR 0xff and bounded word-length item walk",
+        "four-byte address conversion",
+        "aligned plaintext SPT string block"
+      ],
+      "not_implemented": [
+        "SPT message/choice reference discovery",
+        "SPT relocation/writer",
+        "formatting and name normalization",
+        "outer containers"
+      ],
+      "test_class": "SystemNnnTests"
+    },
+    {
+      "id": "tmrhiro",
+      "knowledge": "engines/tmrhiro.md",
+      "module": "python/engines/tmrhiro.py",
+      "source_usage": "algorithm adaptation with signed-length overflow checks",
+      "sources": [
+        {
+          "repository": "VNTextPatch-net8",
+          "path": "VNTextPatch.Shared/Scripts/TmrHiroAdvSystem/TmrHiroAdvSystemTextScript.cs",
+          "symbols": [
+            "GetStrings",
+            "WritePatched"
+          ]
+        }
+      ],
+      "interfaces": [
+        "read_text",
+        "write_text",
+        "patch_text"
+      ],
+      "implemented": [
+        "complete repeated i16 byte-length text stream",
+        "strict decode/encode",
+        "empty strings",
+        "record-index patch preserving untouched raw bytes"
+      ],
+      "not_implemented": [
+        "TmrHiroAdvSystemCodeScript",
+        "container packing",
+        "cross-file reference analysis",
+        "tunnel encoding"
+      ],
+      "test_class": "TmrHiroTests"
+    },
+    {
+      "id": "whale",
+      "knowledge": "engines/whale.md",
+      "module": "python/engines/whale.py",
+      "source_usage": "algorithm adaptation for a finite textual subset",
+      "sources": [
+        {
+          "repository": "VNTextPatch-net8",
+          "path": "VNTextPatch.Shared/Scripts/WhaleScript.cs",
+          "symbols": [
+            "GetMessageRanges",
+            "GetSelectRanges",
+            "GetTextForRead",
+            "GetTextForWrite"
+          ]
+        }
+      ],
+      "interfaces": [
+        "Target",
+        "extract",
+        "patch"
+      ],
+      "implemented": [
+        "non-ASCII-leading dialogue lines",
+        "name bracket and metadata preservation",
+        "SELECT text spans excluding labels",
+        "[n] newline conversion",
+        "fullwidth-space protection of ASCII-leading translated lines"
+      ],
+      "not_implemented": [
+        "CS/MS.HS command arguments",
+        "all SELECT variants",
+        "layout wrapping",
+        "container packing"
+      ],
+      "test_class": "WhaleTests"
+    },
+    {
+      "id": "renpy",
+      "knowledge": "engines/renpy.md",
+      "module": "python/engines/renpy.py",
+      "source_usage": "original finite lexer; source files compared to identify limitations rather than copied wholesale",
+      "sources": [
+        {
+          "repository": "VNTextPatch-net8",
+          "path": "VNTextPatch.Shared/Scripts/RenpyScript.cs",
+          "symbols": [
+            "GetRanges"
+          ],
+          "purpose": "quote-scanning limitations comparison"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "src/extract_RenPy.py",
+          "symbols": [
+            "parseImp"
+          ],
+          "purpose": "text/old-new handling comparison"
+        }
+      ],
+      "interfaces": [
+        "Target",
+        "extract",
+        "patch"
+      ],
+      "implemented": [
+        "single-line quoted literals and escapes",
+        "comment-aware tokenization",
+        "indentation contexts",
+        "exact Character declarations",
+        "speaker-whitelisted say",
+        "narration/menu captions",
+        "translate strings new-only",
+        "span-preserving re-escaping"
+      ],
+      "not_implemented": [
+        "rpyc decompilation/compilation",
+        "multiline/triple strings",
+        "all Ren'Py grammar",
+        "screen text extraction",
+        "Python execution",
+        "archive packing"
+      ],
+      "archive_module_link": "python/archives/rpa.py",
+      "cautions": [
+        "only .rpy accepted",
+        "resource paths/comments/Python blocks are not quote-scanned into dialogue",
+        "caller supplies encoding and preserves tags/interpolation"
+      ],
+      "test_class": "RenpyTests"
+    }
+  ]
+}

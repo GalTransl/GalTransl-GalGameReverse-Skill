@@ -1,0 +1,85 @@
+{
+  "schema": "galgame-reference-sources/1",
+  "snapshot_date": "2026-10-01",
+  "purpose": "Development provenance only. None of these repositories is a runtime dependency.",
+  "repositories": [
+    {
+      "id": "GARbro-Mod",
+      "url": "https://github.com/nanami5270/GARbro-Mod",
+      "commit": "bc26d991ef5cdc0e1ecb32122ee9a48c3375750c",
+      "root_license": "MIT",
+      "license_file": "licenses/MIT-GARbro.txt",
+      "warning": "Root MIT is not a blanket license for embedded third-party code. File-level headers govern; KogadoCocotte GPLv2 and Lz4Stream BSD-derived material require separate handling.",
+      "registry_sources": [
+        "ArcFormats/ArcFormats.csproj",
+        "Legacy/Legacy.csproj",
+        "Experimental/Experimental.csproj",
+        "GameRes/GameRes.csproj"
+      ],
+      "representative_sources": [
+        "ArcFormats/KiriKiri/ArcXP3.cs",
+        "ArcFormats/RenPy/ArcRPA.cs",
+        "ArcFormats/NScripter/ArcSAR.cs",
+        "ArcFormats/Artemis/ArcPFS.cs",
+        "ArcFormats/RealLive/ArcSCENE.cs"
+      ]
+    },
+    {
+      "id": "msg-tool",
+      "url": "https://github.com/lifegpc/msg-tool",
+      "commit": "f72716cee88554d40c1cdface2812493b14ca653",
+      "root_license": "GPL-3.0-or-later",
+      "license_file": "licenses/GPL-3.0.txt",
+      "license_evidence": [
+        "LICENSE",
+        "Cargo.toml"
+      ],
+      "registry_sources": [
+        "src/scripts/mod.rs",
+        "src/types.rs"
+      ],
+      "warning": "Custom/structured export is not necessarily name/message JSON; per-component upstream notices may also apply."
+    },
+    {
+      "id": "SExtractor",
+      "url": "https://github.com/satan53x/SExtractor",
+      "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+      "root_license": "GPL-3.0",
+      "license_file": "licenses/GPL-3.0.txt",
+      "registry_sources": [
+        "src/engine.ini",
+        "src/reg.yaml",
+        "tools/"
+      ],
+      "warning": "Native Python was adapted without GUI/global state. Individual tools have distinct versions and third-party attribution; tool directory presence alone is not implementation support."
+    },
+    {
+      "id": "VNTextPatch-net8",
+      "url": "https://github.com/rafael-vasconcellos/VNTextPatch-net8",
+      "commit": "d9c0fab7b72fdcf87d674ef12a84d3829c9188be",
+      "root_license": "MIT",
+      "license_file": "licenses/MIT-VNTextPatch.txt",
+      "registry_sources": [
+        "VNTextPatch.Shared/Scripts/FolderScriptCollection.cs",
+        "VNTextPatch.Shared/VNTextPatch.Shared.csproj"
+      ],
+      "representative_sources": [
+        "VNTextPatch.Shared/Scripts/JsonScript.cs",
+        "VNTextPatch.Shared/Util/BinaryPatcher.cs"
+      ],
+      "warning": "ShSystem writer is unimplemented; Kirikiri SCN is disabled in this branch; RenpyScript is not a complete semantic parser."
+    }
+  ],
+  "compatibility_check_only": {
+    "project": "GalTransl",
+    "source": "GalTransl/Loader.py:load_transList",
+    "result": "Ordered array of objects with required message and optional name/names; no import or runtime dependency."
+  },
+  "new_common_code": [
+    "python/common/",
+    "python/detect.py",
+    "tools/check_skill.py",
+    "tools/update_engine_index.py"
+  ],
+  "per_module_details": "Other JSON files in this provenance directory and individual Python headers record exact source symbols, scope and license notices."
+}

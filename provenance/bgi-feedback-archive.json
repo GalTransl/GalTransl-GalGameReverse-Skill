@@ -1,0 +1,157 @@
+{
+  "schema_version": 1,
+  "component": "bgi-feedback-archive-index-and-dsc",
+  "scope_note": "This record supersedes only the BGI decoder/scope and msg-tool-use statements in the initial archives.json for the new APIs. The legacy inspect/require_plain functions retain their original behavior. Other archive modules are unchanged.",
+  "runtime": "Python >= 3.10; standard library only; no GalTransl, GARbro or msg-tool runtime dependencies; no import-time filesystem/network I/O",
+  "sources_are_read_only": true,
+  "sources": [
+    {
+      "repository": "GARbro-Mod",
+      "path": "ArcFormats/Ethornell/ArcBGI.cs",
+      "commit": "bc26d991ef5cdc0e1ecb32122ee9a48c3375750c",
+      "working_file_sha256": "96a1be6a77ddb132a9ac297c6110b422e45f20a8fa3ad12edf6c0da5e1930c40",
+      "working_file_matches_HEAD": true,
+      "license": "MIT",
+      "copyright": "Copyright (C) 2014-2015 by morkt",
+      "symbols": [
+        "ArcOpener.TryOpen",
+        "ArcOpener.OpenEntry",
+        "Arc2Opener.Open",
+        "Arc2Opener.OpenEntry",
+        "BgiDecoderBase.UpdateKey",
+        "DscDecoder constructor",
+        "DscDecoder.Unpack",
+        "DscDecoder.CreateHuffmanTree",
+        "DscDecoder.HuffmanDecompress"
+      ],
+      "adapted_into": [
+        "python/archives/bgi.py",
+        "python/archives/bgi_dsc.py"
+      ],
+      "notice_retention": "Full source-file MIT copyright, permission notice and disclaimer retained in both module docstrings. General GARbro MIT text also exists at provenance/licenses/MIT-GARbro.txt."
+    },
+    {
+      "repository": "https://github.com/lifegpc/msg-tool",
+      "path": "src/scripts/bgi/archive/dsc.rs",
+      "commit": "f72716cee88554d40c1cdface2812493b14ca653",
+      "working_file_sha256": "f51607e23459f1f837a3e68be995806089935fb684f4ecdce75ec3932b72ea25",
+      "working_file_matches_HEAD": true,
+      "license": "GPL-3.0-or-later",
+      "license_evidence": "Cargo.toml package.license = GPL-3.0-or-later; repository LICENSE contains GNU GPL version 3.",
+      "attribution": "lifegpc/msg-tool contributors; no separate per-file copyright notice in dsc.rs",
+      "symbols": [
+        "DscDecoder::new",
+        "DscDecoder::unpack",
+        "DscDecoder::update_key",
+        "DscDecoder::create_huffman_tree",
+        "DscDecoder::huffman_decompress"
+      ],
+      "additional_cross_checks": [
+        "DscEncoder::pack",
+        "package_merge singleton length convention",
+        "generate_canonical_codes"
+      ],
+      "adapted_into": [
+        "python/archives/bgi_dsc.py"
+      ],
+      "not_ported": [
+        "DscEncoder",
+        "LZ match finder",
+        "package-merge encoder",
+        "ScriptBuilder integration",
+        "warning-and-partial-output behavior"
+      ],
+      "notice_retention": "GPL-3.0-or-later attribution and warranty notice in module docstring; full GPL text already included at LICENSE and provenance/licenses/GPL-3.0.txt."
+    },
+    {
+      "repository": "https://github.com/lifegpc/msg-tool",
+      "path": "src/scripts/bgi/archive/v1.rs",
+      "commit": "f72716cee88554d40c1cdface2812493b14ca653",
+      "working_file_sha256": "ebede3737028bc584d3c315b928c582b671e96625e325f2c82d1f247ae9f83b9",
+      "working_file_matches_HEAD": true,
+      "license": "GPL-3.0-or-later",
+      "attribution": "lifegpc/msg-tool contributors; no separate per-file copyright notice in v1.rs",
+      "symbols": [
+        "BgiFileHeader",
+        "BgiArchive::new",
+        "BgiArchive::open_file",
+        "detect_script_type"
+      ],
+      "adapted_into": [
+        "python/archives/bgi.py"
+      ],
+      "scope": "0x20 index records, relative member offsets, stored-member probing. No script classifier, archive writer, BSE or image decoder ported."
+    },
+    {
+      "repository": "https://github.com/lifegpc/msg-tool",
+      "path": "src/scripts/bgi/archive/v2.rs",
+      "commit": "f72716cee88554d40c1cdface2812493b14ca653",
+      "working_file_sha256": "f8cd7d91aa43ffffa0fb9d6603a93193cb698b77b7b52fd722ca4c9b083a0484",
+      "working_file_matches_HEAD": true,
+      "license": "GPL-3.0-or-later",
+      "attribution": "lifegpc/msg-tool contributors; no separate per-file copyright notice in v2.rs",
+      "symbols": [
+        "BgiFileHeader",
+        "BgiArchive::new",
+        "BgiArchive::open_file",
+        "detect_script_type"
+      ],
+      "adapted_into": [
+        "python/archives/bgi.py"
+      ],
+      "scope": "0x80 index records, relative member offsets, stored-member probing. No script classifier, archive writer, BSE or image decoder ported."
+    }
+  ],
+  "license_summary": "GPL-derived additions are GPL-3.0-or-later; source-specific MIT notices remain applicable and retained. Translation from C#/Rust to Python does not remove upstream licensing obligations. Newly authored synthetic tests/fixtures use GPL-3.0-or-later, consistent with the skill's existing license.",
+  "public_api": {
+    "error": "BgiArchiveError(ValueError), instance attributes code:str, stage:str, offset:int|None",
+    "records": [
+      "frozen IndexEntry(ordinal:int, name:str, offset:int, size:int)",
+      "frozen ArchiveIndex(version:int, archive_size:int, index_end:int, index_sha256:str, entries:tuple[IndexEntry,...])",
+      "frozen MemberProbe(codec:str, unpacked_size:int|None, header:bytes)",
+      "existing frozen Entry(name, stored_data, offset, codec, unpacked_size) unchanged"
+    ],
+    "functions": [
+      "read_index(stream, *, name_encoding='cp932', max_entries=100000, max_index_size=16<<20, max_archive_size=None) -> ArchiveIndex",
+      "probe_member(stream, index, entry) -> MemberProbe",
+      "read_member(stream, index, entry, *, max_stored_size=64<<20) -> Entry",
+      "decode_member(entry, *, max_output_size=64<<20, max_symbols=2000000) -> bytes",
+      "bgi_dsc.decode(data, *, max_output_size=64<<20, max_symbols=2000000) -> bytes",
+      "bgi_dsc.decode_dsc is an alias of decode"
+    ],
+    "legacy_unchanged": [
+      "inspect signature, budget accounting and opaque wrapper behavior",
+      "require_plain signature and refusal of DSC/BSE/image wrappers"
+    ],
+    "error_stages": [
+      "index",
+      "probe",
+      "stored",
+      "decode"
+    ],
+    "required_budget_codes": [
+      "index_budget",
+      "stored_budget",
+      "decoded_budget",
+      "unsupported_codec"
+    ],
+    "offset_semantics": "Archive-absolute byte offsets for stream parsing/probing; member-local DSC byte offsets for decoding. None when no particular byte is responsible."
+  },
+  "safety_and_semantics": {
+    "index": "Only the 16-byte header and index are read; stream EOF is obtained by seek/tell. max_index_size includes the header. No member payload or aggregate payload budget is charged. max_archive_size=None imposes no whole-archive size rejection. index_sha256 covers every byte in [0,index_end), including unused index fields, and is not a whole-archive SHA.",
+    "members": "A selected row must be the identical IndexEntry object in index.entries at its ordinal. The current stream size and selected range are revalidated. probe_member reads at most 0x220 bytes. read_member charges only stored size, never advertised DSC output. Stream positions are restored, including on errors; finite partial reads are supported, premature EOF is fatal.",
+    "stream_identity_limit": "ArchiveIndex is not an authentication token. Caller must retain the same unchanged seekable binary archive. Same-size content changes and concurrent writes are not detected. No member call rehashes the full index or payload.",
+    "dsc_layout": "512 encrypted code lengths begin at 0x20; decrypt with (src-key_byte)&255, not XOR. uint32 seed/key arithmetic; MSB-first compressed bits begin at 0x220. Literals 0..255; match length=(symbol&255)+2 (2..257), distance=12-bit value+2 (2..4097).",
+    "dsc_limits": "Stored DSC input has a fixed 64 MiB ceiling; output capped by max_output_size. max_symbols caps declared symbols and bit-reading work to 32*max_symbols including distances; callers may explicitly increase it for unusually deep codes. Tree construction is bounded by 512 byte-sized depths and at most 1023 nodes, without recursion.",
+    "dsc_strictness": "Reject oversubscribed/incomplete trees except valid single depth-1 symbol. Permit all-zero tree only for empty output/count. Reject unused singleton branch, truncated literals/distances, backreferences before output start, output overrun/underrun and impossible count/length pairs. Require exact declared symbol count and output length. Only zero padding bits up to the next byte boundary are accepted; extra zero bytes or nonzero tail padding fail. Never return warning-only or partially decoded output.",
+    "unsupported": [
+      "BSE decoding",
+      "CompressedBG/image decoding",
+      "recursive wrapper decoding",
+      "archive writing",
+      "DSC encoding",
+      "script disassembly/classification or proof that decoded bytes are script/text"
+    ],
+    "no_execution": "No GUI, game execution, original-library runtime invocation, asset writes, paid API calls or external processes in the archive APIs."
+  }
+}

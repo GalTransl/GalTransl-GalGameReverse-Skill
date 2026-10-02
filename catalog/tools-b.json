@@ -1,0 +1,1156 @@
+{
+  "schema": "galgame-script-roundtrip-tools-b-v1",
+  "group": "tools-b",
+  "scope": "21 tools families with bounded partial implementations, 4 additional rule references, 2 source-only tools families",
+  "sources": {
+    "SExtractor": {
+      "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+      "license": "GPL-3.0-only",
+      "read_only": true
+    },
+    "GARbro-Mod": {
+      "commit": "bc26d991ef5cdc0e1ecb32122ee9a48c3375750c",
+      "license": "MIT (per cited files)",
+      "read_only": true
+    }
+  },
+  "runtime": "Standard library only. No reference-repository imports, GalTransl modules, plugins, caches, import-time IO, eval, executables, games, network, or paid API runs.",
+  "test_file": "tests/test_engines_tools_b.py",
+  "entries": [
+    {
+      "id": "overflow",
+      "name": "Overflow",
+      "status": "partial",
+      "stage": "decoded-text-roundtrip",
+      "page": "engines/overflow.md",
+      "module": "python/engines/overflow.py",
+      "apis": [
+        "extract_xml",
+        "rewrite_xml"
+      ],
+      "implemented": [
+        "Script/TextRes/Log resource-ID association",
+        "referenced name/message XML rewriting",
+        "shared-resource and dangling-reference checks"
+      ],
+      "missing_stages": [
+        "archive unpack/repack",
+        "binary-to-XML and XML-to-binary",
+        "other OBJ/SCR/XML variants",
+        "complete inline-control grammar",
+        "game deployment"
+      ],
+      "source_paths": [
+        "tools/Overflow/MISS EACH OTHER/script_xml_text.py",
+        "tools/Overflow/README.md"
+      ],
+      "context_paths": [
+        "tools/Overflow/サマー ラディッシュ バケーション 2/srv2_xml_text.py"
+      ],
+      "attribution": "瑜瑜 & Steins;Gate; SExtractor contributors",
+      "license": "GPL-3.0-only",
+      "tests": [
+        "TextTables.test_overflow_reference_roles_and_shared_ids",
+        "TextTables.test_overflow_duplicate_and_dangling_resource"
+      ]
+    },
+    {
+      "id": "patisserie",
+      "name": "Patisserie",
+      "status": "partial",
+      "stage": "container-only",
+      "page": "engines/patisserie.md",
+      "module": "python/archives/patisserie.py",
+      "apis": [
+        "pack_oz",
+        "unpack_oz"
+      ],
+      "implemented": [
+        "OZ/OFST offset table",
+        "DATA/DFLT member encoding",
+        "bounded zlib decoding"
+      ],
+      "missing_stages": [
+        "external filename-list association",
+        "script recognition",
+        "name/message extraction",
+        "script writer",
+        "game deployment"
+      ],
+      "source_paths": [
+        "tools/Patisserie/bin_pack.py",
+        "tools/Patisserie/README.md"
+      ],
+      "supplemental_sources": [
+        {
+          "repository": "GARbro-Mod",
+          "path": "ArcFormats/Patisserie/ArcBIN.cs",
+          "role": "documentation corroboration only",
+          "copyright": "Copyright (C) 2016 by morkt",
+          "license": "MIT"
+        }
+      ],
+      "attribution": "Steins;Gate; SExtractor contributors",
+      "license": "GPL-3.0-only",
+      "tests": [
+        "ArchiveAndCodecStages.test_oz_data_dflt_and_offsets"
+      ]
+    },
+    {
+      "id": "puremail",
+      "name": "PureMail",
+      "status": "partial",
+      "stage": "indexed-string-roundtrip",
+      "page": "engines/puremail.md",
+      "module": "python/engines/puremail.py",
+      "apis": [
+        "parse_obj",
+        "extract_obj",
+        "rewrite_obj"
+      ],
+      "implemented": [
+        "explicit OBJ V1/V2 index widths",
+        "contiguous string-table rebuilding",
+        "opaque-tail pointer relocation",
+        "strict control-byte preservation"
+      ],
+      "missing_stages": [
+        "DAT container",
+        "VM-level name/message roles",
+        "overlapping/aliased OBJ layouts",
+        "game deployment"
+      ],
+      "source_paths": [
+        "tools/PureMail/obj_processor.py",
+        "tools/PureMail/obj_processor_v2.py",
+        "tools/PureMail/README.md"
+      ],
+      "attribution": "Steins;Gate; SExtractor contributors",
+      "license": "GPL-3.0-only",
+      "tests": [
+        "TextTables.test_puremail_both_versions_and_tail_pointer",
+        "TextTables.test_puremail_rejects_gaps_and_u16_overflow"
+      ]
+    },
+    {
+      "id": "ransel",
+      "name": "Ransel",
+      "status": "partial",
+      "stage": "container-only",
+      "page": "engines/ransel.md",
+      "module": "python/archives/ransel.py",
+      "apis": [
+        "pack_bcd",
+        "unpack_bcd"
+      ],
+      "implemented": [
+        "BinaryCombineData BCD/BCL paired archive",
+        "decimal absolute offsets and byte lengths",
+        "explicit archive-name pairing"
+      ],
+      "missing_stages": [
+        "member script format",
+        "name/message extraction",
+        "script writer",
+        "game deployment"
+      ],
+      "source_paths": [
+        "tools/Ransel/pack_bcd.py"
+      ],
+      "attribution": "satan53x / SExtractor contributors",
+      "license": "GPL-3.0-only",
+      "tests": [
+        "ArchiveAndCodecStages.test_bcd_pair_names_and_byte_lengths"
+      ]
+    },
+    {
+      "id": "sfa",
+      "name": "SFA",
+      "status": "partial",
+      "stage": "member-codec-and-text-dialect",
+      "page": "engines/sfa.md",
+      "module": "python/engines/sfa.py",
+      "apis": [
+        "extract_aos_lines"
+      ],
+      "implemented": [
+        "MSB-first pre-order Huffman member codec",
+        "bounded tree decoder",
+        "explicit bracket-name AOS lines and slctwnd choices"
+      ],
+      "missing_stages": [
+        "full linked-block FGA archive writer",
+        "complete AOS syntax",
+        "text script writer",
+        "game deployment"
+      ],
+      "source_paths": [
+        "tools/SFA/fga_pack.py",
+        "tools/SFA/README.md",
+        "src/reg.yaml"
+      ],
+      "attribution": "Steins;Gate; SExtractor contributors",
+      "license": "GPL-3.0-only",
+      "tests": [
+        "ArchiveAndCodecStages.test_sfa_huffman_single_symbol_vector_and_roundtrip",
+        "ArchiveAndCodecStages.test_sfa_aos_is_not_arbitrary_text"
+      ],
+      "source_symbols": [
+        {
+          "path": "src/reg.yaml",
+          "symbol": "SFA_AOS"
+        }
+      ],
+      "archive_module": "python/archives/sfa.py",
+      "module_api": {
+        "python/engines/sfa.py": [
+          "extract_aos_lines"
+        ],
+        "python/archives/sfa.py": [
+          "compress_member",
+          "decompress_member"
+        ]
+      }
+    },
+    {
+      "id": "slgsystem",
+      "name": "SLGSystem",
+      "status": "partial",
+      "stage": "container-roundtrip",
+      "page": "engines/slgsystem.md",
+      "module": "python/archives/slgsystem.py",
+      "apis": [
+        "crypt_member",
+        "pack_szs",
+        "unpack_szs"
+      ],
+      "implemented": [
+        "SZS100__ u64 index rebuild",
+        "LCG XOR and add/sub cipher directions",
+        "explicit seed/mode"
+      ],
+      "missing_stages": [
+        "script VM",
+        "name/message/choice extraction",
+        "script writer",
+        "key discovery",
+        "game deployment"
+      ],
+      "source_paths": [
+        "tools/SLGSystem/szs_tool.py",
+        "tools/SLGSystem/README.md"
+      ],
+      "attribution": "Steins;Gate & 多了芒果; SExtractor contributors",
+      "license": "GPL-3.0-only",
+      "tests": [
+        "ArchiveAndCodecStages.test_szs_cipher_vectors_and_archive"
+      ]
+    },
+    {
+      "id": "sakanagl",
+      "name": "SakanaGL",
+      "status": "partial",
+      "stage": "cipher-and-decoded-index",
+      "page": "engines/sakanagl.md",
+      "module": "python/archives/sakanagl.py",
+      "apis": [
+        "crypt_data",
+        "member_keys",
+        "parse_decoded_index"
+      ],
+      "implemented": [
+        "u32 SakanaGL stream cipher with clear tail bytes",
+        "offset/size member keys",
+        "big-endian decoded SX index and iterative tree validation"
+      ],
+      "missing_stages": [
+        "Zstandard",
+        "SSXXDEFL outer index decoding/encoding",
+        "complete SXStorage writer",
+        "metadata hash policy",
+        "script semantics",
+        "game deployment"
+      ],
+      "source_paths": [
+        "tools/SakanaGL/sxstorage_pack.py",
+        "tools/SakanaGL/README.md"
+      ],
+      "attribution": "Steins;Gate; SExtractor contributors; upstream Python credits a GARbro C# cipher port",
+      "license": "GPL-3.0-only",
+      "tests": [
+        "ArchiveAndCodecStages.test_sakana_word_cipher_tail_and_key_derivation",
+        "ArchiveAndCodecStages.test_sakana_decoded_index_tree"
+      ]
+    },
+    {
+      "id": "sceneplayer",
+      "name": "ScenePlayer",
+      "status": "partial",
+      "stage": "container-only",
+      "page": "engines/sceneplayer.md",
+      "module": "python/archives/sceneplayer.py",
+      "apis": [
+        "pack_pmx",
+        "unpack_pmx"
+      ],
+      "implemented": [
+        "PMX whole-stream zlib then XOR21 wrapper",
+        "count/name/size index reconstruction",
+        "bounded inflate"
+      ],
+      "missing_stages": [
+        "script member grammar",
+        "name/message extraction",
+        "script writer",
+        "other ScenePlayer formats",
+        "game deployment"
+      ],
+      "source_paths": [
+        "tools/ScenePlayer/pmx_pack.py",
+        "tools/ScenePlayer/README.md"
+      ],
+      "supplemental_sources": [
+        {
+          "repository": "GARbro-Mod",
+          "path": "ArcFormats/ScenePlayer/ArcPMX.cs",
+          "role": "documentation corroboration only",
+          "copyright": "Copyright (C) 2017 by morkt",
+          "license": "MIT"
+        }
+      ],
+      "attribution": "Steins;Gate; SExtractor contributors",
+      "license": "GPL-3.0-only",
+      "tests": [
+        "ArchiveAndCodecStages.test_pmx_inflate_xor_archive_and_limits"
+      ]
+    },
+    {
+      "id": "selene",
+      "name": "Selene",
+      "status": "source-only",
+      "stage": "gap",
+      "page": null,
+      "module": null,
+      "apis": [],
+      "implemented": [],
+      "missing_stages": [
+        "readable text-script extraction and writer",
+        "native dialogue semantic route",
+        "font-independent script format",
+        "game deployment"
+      ],
+      "source_paths": [
+        "tools/Selene/sff_dump.py"
+      ],
+      "available_artifacts": [
+        "tools/Selene/font_to_tga.py",
+        "tools/Selene/Selene_dll_1E4330h_20000h.dat"
+      ],
+      "evidence": "Reviewed SFF source is a font-atlas/character-box dumper using PIL and fixed font resources, not a script parser. No fake text support created.",
+      "supplemental_sources": [
+        {
+          "repository": "GARbro-Mod",
+          "path": "ArcFormats/Selene/ArcKCAP.cs",
+          "role": "archive/encryption context only; not implemented",
+          "copyright": "Copyright (C) 2015 by morkt",
+          "license": "MIT"
+        }
+      ],
+      "attribution": "satan53x / SExtractor contributors",
+      "license": "GPL-3.0-only",
+      "tests": []
+    },
+    {
+      "id": "studiomiris",
+      "name": "StudioMiris",
+      "status": "partial",
+      "stage": "indexed-string-roundtrip",
+      "page": "engines/studiomiris.md",
+      "module": "python/engines/studiomiris.py",
+      "apis": [
+        "parse_skm",
+        "extract_skm",
+        "rewrite_skm"
+      ],
+      "implemented": [
+        "SKMSd relative offset/length table",
+        "XOR-FF string pool",
+        "dynamic or explicit pool base with gap/tail preservation"
+      ],
+      "missing_stages": [
+        "outer archive",
+        "VM name/message references",
+        "noncontiguous/overlapping tables",
+        "game deployment"
+      ],
+      "source_paths": [
+        "tools/StudioMiris/skm_to_txt.py",
+        "tools/StudioMiris/txt_to_skm.py",
+        "tools/StudioMiris/README.md"
+      ],
+      "attribution": "Coroz; SExtractor contributors",
+      "license": "GPL-3.0-only",
+      "tests": [
+        "TextTables.test_skm_dynamic_pool_and_preserved_gap",
+        "TextTables.test_skm_bad_offset"
+      ]
+    },
+    {
+      "id": "studiopolaris",
+      "name": "StudioPolaris",
+      "status": "partial",
+      "stage": "decrypted-script-roundtrip",
+      "page": "engines/studiopolaris.md",
+      "module": "python/engines/studiopolaris.py",
+      "apis": [
+        "parse_scd",
+        "extract_scd",
+        "rewrite_scd"
+      ],
+      "implemented": [
+        "known SCD_ instruction boundaries",
+        "opcode-00 TEXT",
+        "code-relative jump and header-label relocation"
+      ],
+      "missing_stages": [
+        "scddecompress encryption/compression stage",
+        "archive",
+        "stack-flow name/choice interpretation",
+        "complete text-control grammar",
+        "game deployment"
+      ],
+      "source_paths": [
+        "tools/StudioPolaris/opcode.py",
+        "tools/StudioPolaris/disassembler.py",
+        "tools/StudioPolaris/assembler.py",
+        "tools/StudioPolaris/README.md"
+      ],
+      "attribution": "Steins;Gate; SExtractor contributors",
+      "license": "GPL-3.0-only",
+      "tests": [
+        "VirtualMachineSubsets.test_scd_label_and_jump_relocation",
+        "VirtualMachineSubsets.test_scd_does_not_extract_generic_string_operands"
+      ]
+    },
+    {
+      "id": "succubus",
+      "name": "Succubus",
+      "status": "partial",
+      "stage": "container-only",
+      "page": "engines/succubus.md",
+      "module": "python/archives/succubus.py",
+      "apis": [
+        "parse_vfa",
+        "build_vfa"
+      ],
+      "implemented": [
+        "RIFF/VFA1 hdri/data/dent",
+        "directory-event order and UTF-16 names",
+        "all chunk sizes and data-relative file offsets rebuilt"
+      ],
+      "missing_stages": [
+        "ARC1 implementation",
+        "script VM",
+        "name/message extraction",
+        "script writer",
+        "font atlases",
+        "game deployment"
+      ],
+      "source_paths": [
+        "tools/Succubus/VFA包处理工具/extract.py",
+        "tools/Succubus/VFA包处理工具/repack.py",
+        "tools/Succubus/README.md"
+      ],
+      "context_paths": [
+        "tools/Succubus/arc_DATA_pack.py"
+      ],
+      "attribution": "这位同学 (VFA); Steins;Gate (other tools); SExtractor contributors",
+      "license": "GPL-3.0-only",
+      "tests": [
+        "ArchiveAndCodecStages.test_vfa_event_order_chunk_sizes_and_odd_payload"
+      ]
+    },
+    {
+      "id": "systemc",
+      "name": "SystemC / SystemB3",
+      "status": "partial",
+      "stage": "member-encoder-and-text-header",
+      "page": "engines/systemc.md",
+      "module": "python/engines/systemc.py",
+      "apis": [
+        "systemc_name_header"
+      ],
+      "implemented": [
+        "ZLC2 literal groups and decoded-length header",
+        "literal-only bounded reader",
+        "explicit fullwidth-number name header"
+      ],
+      "missing_stages": [
+        "FPK full writer and size-field clarification",
+        "general LZ decoder",
+        "script name/message pairing",
+        "script writer",
+        "font handling",
+        "game deployment"
+      ],
+      "source_paths": [
+        "tools/SystemC/fpk_pack_SystemB3.py",
+        "tools/SystemC/README.md",
+        "src/reg.yaml"
+      ],
+      "attribution": "satan53x / SExtractor contributors",
+      "license": "GPL-3.0-only",
+      "tests": [
+        "ArchiveAndCodecStages.test_zlc2_literal_control_groups"
+      ],
+      "source_symbols": [
+        {
+          "path": "src/reg.yaml",
+          "symbol": "_BIN_SystemC"
+        }
+      ],
+      "archive_module": "python/archives/systemc.py",
+      "module_api": {
+        "python/engines/systemc.py": [
+          "systemc_name_header"
+        ],
+        "python/archives/systemc.py": [
+          "encode_zlc2_literals",
+          "decode_zlc2_literals"
+        ]
+      }
+    },
+    {
+      "id": "tanaka",
+      "name": "Tanaka",
+      "status": "partial",
+      "stage": "container-and-isolated-record",
+      "page": "engines/tanaka.md",
+      "module": "python/engines/tanaka.py",
+      "apis": [
+        "parse_text_record",
+        "rewrite_text_record"
+      ],
+      "implemented": [
+        "SCB1 template preserving index and recalculating member offsets",
+        "isolated 25/09/24 text records",
+        "stored-byte-length delta"
+      ],
+      "missing_stages": [
+        "ARCG variant",
+        "full script relocation",
+        "name/message pairing",
+        "selection semantics",
+        "game deployment"
+      ],
+      "source_paths": [
+        "tools/Tanaka/SCB1_unpack.py",
+        "tools/Tanaka/SCB1_pack.py",
+        "tools/Tanaka/README.md",
+        "src/reg.yaml",
+        "src/extract_BIN.py"
+      ],
+      "attribution": "satan53x / SExtractor contributors",
+      "license": "GPL-3.0-only",
+      "tests": [
+        "ArchiveAndCodecStages.test_scb1_template_offsets_and_members",
+        "PresetBoundaries.test_tanaka_record_delta_and_opcode_scope"
+      ],
+      "source_symbols": [
+        {
+          "path": "src/reg.yaml",
+          "symbol": "_BIN_Tanaka"
+        }
+      ],
+      "archive_module": "python/archives/tanaka.py",
+      "module_api": {
+        "python/engines/tanaka.py": [
+          "parse_text_record",
+          "rewrite_text_record"
+        ],
+        "python/archives/tanaka.py": [
+          "parse_scb1",
+          "repack_scb1"
+        ]
+      }
+    },
+    {
+      "id": "triangle",
+      "name": "Triangle",
+      "status": "partial",
+      "stage": "isolated-block-roundtrip",
+      "page": "engines/triangle.md",
+      "module": "python/engines/triangle.py",
+      "apis": [
+        "parse_block",
+        "extract_block",
+        "rewrite_block"
+      ],
+      "implemented": [
+        "MOP/EXD/KLH explicit text/choice profiles",
+        "name references and voice trailers",
+        "encoded-character wrapping and segment-count rebuild"
+      ],
+      "missing_stages": [
+        "whole-SD disassembler",
+        "embedded data recovery",
+        "whole-file jump relocation",
+        "name pool",
+        "archive",
+        "game deployment"
+      ],
+      "source_paths": [
+        "tools/Triangle/mop_sd.py",
+        "tools/Triangle/text_extract.py",
+        "tools/Triangle/text_inject.py",
+        "tools/Triangle/README.md"
+      ],
+      "attribution": "多了芒果; SExtractor contributors",
+      "license": "GPL-3.0-only",
+      "tests": [
+        "VirtualMachineSubsets.test_triangle_run_count_voice_and_character_boundary",
+        "VirtualMachineSubsets.test_triangle_choice_and_profile_rejection"
+      ]
+    },
+    {
+      "id": "ugos",
+      "name": "U-GOS",
+      "status": "partial",
+      "stage": "reviewed-pointer-pool-roundtrip",
+      "page": "engines/ugos.md",
+      "module": "python/engines/ugos.py",
+      "apis": [
+        "parse_references",
+        "extract_o",
+        "rewrite_o"
+      ],
+      "implemented": [
+        "explicit code_end and known opcode widths",
+        "u8/u16/u32 pointer-backed candidates",
+        "append-only changed blocks and all known alias pointers",
+        "edge-control preservation"
+      ],
+      "missing_stages": [
+        "DET archive",
+        "automatic verified code boundary",
+        "complete VM semantics",
+        "interior control segmentation",
+        "unknown aliases",
+        "game deployment"
+      ],
+      "source_paths": [
+        "tools/U-GOS/o_tool.py",
+        "tools/U-GOS/README.md"
+      ],
+      "attribution": "朝比奈真冬 (batch additions); Cosetto (container-route attribution); SExtractor contributors",
+      "license": "GPL-3.0-only",
+      "tests": [
+        "VirtualMachineSubsets.test_ugos_alias_pointer_relocation_and_control_edges",
+        "VirtualMachineSubsets.test_ugos_small_pointer_overflow_and_unknown_opcode"
+      ]
+    },
+    {
+      "id": "umesoft",
+      "name": "U-MeSoft",
+      "status": "partial",
+      "stage": "archive-and-member-subset",
+      "page": "engines/umesoft.md",
+      "module": "python/engines/umesoft.py",
+      "apis": [
+        "extract_script_lines"
+      ],
+      "implemented": [
+        "PK footer index and preserved six-byte metadata",
+        "SCR/TBL alignment, XOR42, literal groups and FF0000 terminator",
+        "narrow mes/$L/\\n/\\x0 text dialect"
+      ],
+      "missing_stages": [
+        "general LZ decoder",
+        "full SCR grammar and writer",
+        "other text commands",
+        "game deployment"
+      ],
+      "source_paths": [
+        "tools/U-MeSoft/PK_pack.py",
+        "src/reg.yaml"
+      ],
+      "attribution": "satan53x / SExtractor contributors",
+      "license": "GPL-3.0-only",
+      "tests": [
+        "ArchiveAndCodecStages.test_umesoft_alignment_terminator_and_pk_metadata",
+        "ArchiveAndCodecStages.test_umesoft_narrow_text_rules"
+      ],
+      "source_symbols": [
+        {
+          "path": "src/reg.yaml",
+          "symbol": "U-MeSoft"
+        }
+      ],
+      "archive_module": "python/archives/umesoft.py",
+      "module_api": {
+        "python/engines/umesoft.py": [
+          "extract_script_lines"
+        ],
+        "python/archives/umesoft.py": [
+          "encode_member",
+          "decode_literal_member",
+          "parse_pk",
+          "repack_pk"
+        ]
+      }
+    },
+    {
+      "id": "unison",
+      "name": "Unison / Softpal Lazy",
+      "status": "partial",
+      "stage": "reviewed-text-pool-roundtrip",
+      "page": "engines/unison.md",
+      "module": "python/engines/unison.py",
+      "apis": [
+        "parse_val",
+        "extract_val",
+        "rewrite_val"
+      ],
+      "implemented": [
+        "VAL u24 code/table sizes",
+        "explicit reviewed DD type-zero sites",
+        "pool object rebuilding with gap/tail preservation",
+        "unreviewed alias and suffix overlap rejection"
+      ],
+      "missing_stages": [
+        "VCT archive",
+        "complete bytecode disassembler",
+        "name/choice interpretation",
+        "game deployment"
+      ],
+      "source_paths": [
+        "tools/Unison/lazy_common.py",
+        "tools/Unison/val_extract.py",
+        "tools/Unison/README.md"
+      ],
+      "attribution": "Steins;Gate; SExtractor contributors",
+      "license": "GPL-3.0-only",
+      "tests": [
+        "TextTables.test_unison_reviewed_sites_and_pool_relocation",
+        "TextTables.test_unison_unreviewed_alias_and_suffix_overlap"
+      ]
+    },
+    {
+      "id": "valkyria",
+      "name": "Valkyria",
+      "status": "source-only",
+      "stage": "gap",
+      "page": null,
+      "module": null,
+      "apis": [],
+      "implemented": [],
+      "missing_stages": [
+        "readable native DAT/ODN extractor and writer",
+        "external-conversion contract",
+        "complete script/control grammar",
+        "game deployment"
+      ],
+      "source_paths": [
+        "tools/Valkyria/README.md",
+        "tools/Valkyria/bmp_compress.py",
+        "src/reg.yaml"
+      ],
+      "available_artifacts": [
+        "tools/Valkyria/ValkyriaTool-v4.exe"
+      ],
+      "evidence": "Reviewed Python handles BMP pixels only; native archive/script converter is executable-only. reg.yaml documents secondary JSON/text patterns but not a trustworthy standalone native roundtrip. No fake native support created.",
+      "attribution": "无聊荒芜 (tool README); SExtractor contributors",
+      "license": "GPL-3.0-only (readable repository material; executable-specific license not established)",
+      "tests": [],
+      "source_symbols": [
+        {
+          "path": "src/reg.yaml",
+          "symbol": "Valkyria_dat_txt"
+        },
+        {
+          "path": "src/reg.yaml",
+          "symbol": "Valkyria_odn"
+        }
+      ]
+    },
+    {
+      "id": "winters",
+      "name": "Winters",
+      "status": "partial",
+      "stage": "container-only",
+      "page": "engines/winters.md",
+      "module": "python/engines/winters.py",
+      "apis": [
+        "pad_isd_to_original"
+      ],
+      "implemented": [
+        "IFP sparse first/subsequent index placement",
+        "explicit unmasked member types",
+        "fixed data base and capacity checks",
+        "original-ISD-allocation guard"
+      ],
+      "missing_stages": [
+        "CAPYBARA DAT writer",
+        "masked IFP members",
+        "ISD text and control-flow semantics",
+        "script writer",
+        "game deployment"
+      ],
+      "source_paths": [
+        "tools/Winters/ifp_pack.py",
+        "tools/Winters/bytes_pad.py",
+        "tools/Winters/README.md"
+      ],
+      "context_paths": [
+        "tools/Winters/dat_pack.py",
+        "src/reg.yaml"
+      ],
+      "attribution": "Steins;Gate; SExtractor contributors",
+      "license": "GPL-3.0-only",
+      "tests": [
+        "ArchiveAndCodecStages.test_ifp_sparse_index_and_explicit_types"
+      ],
+      "source_symbols": [
+        {
+          "path": "src/reg.yaml",
+          "symbol": "_BIN_Winters"
+        }
+      ],
+      "archive_module": "python/archives/winters.py",
+      "module_api": {
+        "python/engines/winters.py": [
+          "pad_isd_to_original"
+        ],
+        "python/archives/winters.py": [
+          "pack_ifp",
+          "unpack_ifp"
+        ]
+      }
+    },
+    {
+      "id": "xuse",
+      "name": "Xuse",
+      "status": "partial",
+      "stage": "container-and-script-transform",
+      "page": "engines/xuse.md",
+      "module": "python/engines/xuse.py",
+      "apis": [
+        "crypt_script"
+      ],
+      "implemented": [
+        "GD plus companion DLL DATA index",
+        "member offsets/lengths rebuilt with gap preservation",
+        "explicit four-byte script XOR key"
+      ],
+      "missing_stages": [
+        "script grammar",
+        "name/message extraction",
+        "script writer",
+        "other Xuse archive families",
+        "game deployment"
+      ],
+      "source_paths": [
+        "tools/Xuse/gd_scr_decrypt.py",
+        "tools/Xuse/README.md"
+      ],
+      "supplemental_sources": [
+        {
+          "repository": "GARbro-Mod",
+          "path": "ArcFormats/Xuse/ArcGD.cs",
+          "role": "implementation and documentation",
+          "copyright": "Copyright (C) 2016 by morkt",
+          "license": "MIT"
+        }
+      ],
+      "attribution": "satan53x / SExtractor contributors; morkt",
+      "license": "GPL-3.0-only AND MIT",
+      "tests": [
+        "ArchiveAndCodecStages.test_xuse_companion_index_gaps_and_cipher"
+      ],
+      "archive_module": "python/archives/xuse.py",
+      "module_api": {
+        "python/engines/xuse.py": [
+          "crypt_script"
+        ],
+        "python/archives/xuse.py": [
+          "parse_gd",
+          "repack_gd"
+        ]
+      }
+    },
+    {
+      "id": "yatagarasu",
+      "name": "Yatagarasu",
+      "status": "partial",
+      "stage": "container-only",
+      "page": "engines/yatagarasu.md",
+      "module": "python/archives/yatagarasu.py",
+      "apis": [
+        "pack_pkg",
+        "unpack_pkg"
+      ],
+      "implemented": [
+        "PKG v1 length-XOR signature",
+        "136-byte encrypted index with embedded key slots",
+        "per-member restarted XOR phase"
+      ],
+      "missing_stages": [
+        "later PKG versions",
+        "script grammar",
+        "name/message extraction",
+        "script writer",
+        "game deployment"
+      ],
+      "source_paths": [
+        "tools/Yatagarasu/pkg_pack_v1.py",
+        "tools/Yatagarasu/README.md"
+      ],
+      "attribution": "Steins;Gate; SExtractor contributors",
+      "license": "GPL-3.0-only",
+      "tests": [
+        "ArchiveAndCodecStages.test_pkg_signature_embedded_key_and_per_member_phase"
+      ]
+    },
+    {
+      "id": "yuka",
+      "name": "Yuka",
+      "status": "partial",
+      "stage": "typed-script-roundtrip",
+      "page": "engines/yuka.md",
+      "module": "python/engines/yuka.py",
+      "apis": [
+        "parse_yks",
+        "extract_yks",
+        "rewrite_yks"
+      ],
+      "implemented": [
+        "canonical YKS002 section validation",
+        "explicit GraphicTextOut PARAM and Select.Text links",
+        "typed T/B pool relocation and binary preservation",
+        "shared-role/control checks"
+      ],
+      "missing_stages": [
+        "YKS001/v1.1",
+        "archive",
+        "PARAM-embedded name variant",
+        "other output commands",
+        "game deployment"
+      ],
+      "source_paths": [
+        "tools/Yuka/yks_text_v2.py",
+        "tools/Yuka/README.md"
+      ],
+      "attribution": "瑜瑜 & Steins;Gate; SExtractor contributors",
+      "license": "GPL-3.0-only",
+      "tests": [
+        "VirtualMachineSubsets.test_yks_semantic_routes_and_typed_pool_relocation",
+        "VirtualMachineSubsets.test_yks_wrong_version_unknown_node_and_controls"
+      ]
+    },
+    {
+      "id": "livemaker",
+      "name": "Livemaker CSV dialect",
+      "status": "partial",
+      "stage": "converted-text-roundtrip",
+      "page": "engines/livemaker.md",
+      "module": "python/engines/livemaker.py",
+      "apis": [
+        "extract_csv",
+        "rewrite_csv"
+      ],
+      "implemented": [
+        "exact Original text header",
+        "bracket-name parsing",
+        "adjacent target-column rewrite with proper multiline CSV quoting"
+      ],
+      "missing_stages": [
+        "native LSB",
+        "external CSV exporter/importer",
+        "script control grammar",
+        "archive",
+        "game deployment"
+      ],
+      "source_paths": [
+        "src/reg.yaml",
+        "src/extract_CSV.py"
+      ],
+      "attribution": "satan53x / SExtractor contributors",
+      "license": "GPL-3.0-only",
+      "tests": [
+        "TextTables.test_livemaker_adjacent_column_and_multiline_csv",
+        "TextTables.test_livemaker_missing_destination"
+      ],
+      "source_symbols": [
+        {
+          "path": "src/reg.yaml",
+          "symbol": "CSV_Livemaker"
+        }
+      ]
+    },
+    {
+      "id": "nsystem",
+      "name": "NSystem BIN preset",
+      "status": "partial",
+      "stage": "preset-record-only",
+      "page": "engines/nsystem.md",
+      "module": "python/engines/nsystem.py",
+      "apis": [
+        "address_table",
+        "parse_message_record",
+        "rewrite_message_record",
+        "name_identifier"
+      ],
+      "implemented": [
+        "fixed 0x458/count-based address table arithmetic without eval",
+        "isolated record preLen-27 relation",
+        "uppercase name identifier preservation"
+      ],
+      "missing_stages": [
+        "archive",
+        "full VM and record boundaries",
+        "whole-script relocation",
+        "display-name mapping",
+        "game deployment"
+      ],
+      "source_paths": [
+        "src/reg.yaml",
+        "src/extract_TXT.py",
+        "src/extract_BIN.py"
+      ],
+      "attribution": "satan53x / SExtractor contributors",
+      "license": "GPL-3.0-only",
+      "tests": [
+        "PresetBoundaries.test_nsystem_address_base_is_arithmetic_not_eval",
+        "PresetBoundaries.test_nsystem_length_plus27_and_identifier"
+      ],
+      "source_symbols": [
+        {
+          "path": "src/reg.yaml",
+          "symbol": "_BIN_NSystem"
+        }
+      ]
+    },
+    {
+      "id": "system-epsilon",
+      "name": "SYSTEM-ε BIN preset",
+      "status": "partial",
+      "stage": "preset-segment-only",
+      "page": "engines/system-epsilon.md",
+      "module": "python/engines/system_epsilon.py",
+      "apis": [
+        "parse_segment",
+        "rewrite_segment",
+        "pointer_candidates"
+      ],
+      "implemented": [
+        "isolated segment name marker and opaque stored-length delta",
+        "bounded exact preset pointer patterns",
+        "control/role preservation"
+      ],
+      "missing_stages": [
+        "archive",
+        "full VM",
+        "verified record directory",
+        "whole-file relocation",
+        "name/message association",
+        "game deployment"
+      ],
+      "source_paths": [
+        "src/reg.yaml",
+        "src/extract_BIN.py",
+        "src/extract_TXT.py"
+      ],
+      "attribution": "satan53x / SExtractor contributors",
+      "license": "GPL-3.0-only",
+      "tests": [
+        "PresetBoundaries.test_system_epsilon_length_delta_and_pointer_patterns"
+      ],
+      "source_symbols": [
+        {
+          "path": "src/reg.yaml",
+          "symbol": "_BIN_SYSTEM-ε"
+        }
+      ]
+    },
+    {
+      "id": "violent",
+      "name": "Violent BIN candidate rule (not an engine)",
+      "status": "analysis-only",
+      "stage": "candidate-only",
+      "page": "engines/violent.md",
+      "module": "python/engines/violent.py",
+      "apis": [
+        "is_allowed_sjis",
+        "scan_candidates"
+      ],
+      "implemented": [
+        "historical restricted JIS byte-pair validator",
+        "explicit-region NUL candidate scan",
+        "unknown-role evidence only"
+      ],
+      "missing_stages": [
+        "engine identification",
+        "archive/decryption",
+        "name/message semantics",
+        "any writer",
+        "relocation",
+        "game deployment"
+      ],
+      "source_paths": [
+        "src/reg.yaml",
+        "src/common.py"
+      ],
+      "attribution": "satan53x / SExtractor contributors",
+      "license": "GPL-3.0-only",
+      "tests": [
+        "PresetBoundaries.test_violent_candidates_are_not_dialogue"
+      ],
+      "source_symbols": [
+        {
+          "path": "src/reg.yaml",
+          "symbol": "_BIN_Violent"
+        },
+        {
+          "path": "src/common.py",
+          "symbol": "isShiftJis/checkJIS"
+        }
+      ]
+    }
+  ],
+  "reviewed_non_engine_rules": [
+    {
+      "rule": "_TXT_TwoLine",
+      "source": "src/reg.yaml",
+      "disposition": "secondary translated-text marker only; not a native engine route; no fake engine module"
+    },
+    {
+      "rule": "_OutputAll",
+      "source": "src/reg.yaml",
+      "disposition": "generic capture-all, explicitly not dialogue recognition"
+    },
+    {
+      "rule": "__Custom0",
+      "source": "src/reg.yaml",
+      "disposition": "configuration placeholder, not an engine"
+    },
+    {
+      "rule": "__None",
+      "source": "src/reg.yaml",
+      "disposition": "configuration placeholder, not an engine"
+    }
+  ],
+  "delegated_rule_families_not_duplicated": [
+    "Nexas",
+    "AdvSys3",
+    "Melonpan",
+    "RealLive",
+    "major engines handled by other groups"
+  ],
+  "global_limitations": [
+    "All tests use authored synthetic fixtures only",
+    "No game execution or deployment validation",
+    "Partial/container-only/candidate-only stages are not end-to-end support",
+    "Unknown encodings and native control grammars require separate evidence"
+  ],
+  "license": "GPL-3.0-only (with separately identified MIT reference material)"
+}

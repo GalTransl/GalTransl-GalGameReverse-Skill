@@ -1,0 +1,27 @@
+{
+  "engine": "yuris",
+  "variant": "482 / 0x1E2",
+  "license": "GPL-3.0-only for new adaptations; existing MIT origin notices retained",
+  "sources": [
+    {
+      "project": "msg-tool",
+      "commit": "f72716cee88554d40c1cdface2812493b14ca653",
+      "files": {
+        "src/scripts/yuris/arc/ypf.rs": "1f4e89415314ac855b81eaedd03a7c35c5ca30bab2c71c39fed37d24a58f4ad1",
+        "src/scripts/yuris/yscm.rs": "cb8cc2a28dd2686c9e0917b8e5a471f61c3a3c582ac03e82090723d96452299d",
+        "src/utils/murmur2.rs": "fec232ee9a1dc79217b96bb270ed821cd4ae0de1444a6661e61ca0a76a4c5459"
+      },
+      "use": "64-bit YPF offsets, name/stored Murmur2, YSCM diagnostic strings plus 256-byte opaque table; ystb.rs consulted for attribute flags and substring pooling"
+    },
+    {
+      "project": "VNTextPatch-net8",
+      "commit": "d9c0fab7b72fdcf87d674ef12a84d3829c9188be",
+      "use": "YurisAttribute.cs/YurisScenarioScript.cs descriptor layout and WORD/GOSUB literal semantics; existing MIT references"
+    },
+    {
+      "project": "SExtractor",
+      "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+      "use": "extract_Yuris.py version/layout/key evidence; no execution of eval-based extraction options"
+    }
+  ]
+}

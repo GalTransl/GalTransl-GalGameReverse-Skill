@@ -1,0 +1,333 @@
+{
+  "schema_version": 1,
+  "component": "standalone-archive-references",
+  "runtime": "Python >= 3.10; standard library only; no import-time filesystem/network I/O",
+  "sources_are_read_only": true,
+  "reference_repositories": [
+    {
+      "repository": "GARbro-Mod",
+      "commit": "bc26d991ef5cdc0e1ecb32122ee9a48c3375750c",
+      "license": "MIT",
+      "license_path": "LICENSE",
+      "license_scope": "Each listed C# source also carries an MIT permission notice. Relevant copyright and permission text are retained in each Python module."
+    },
+    {
+      "repository": "msg-tool",
+      "commit": "f72716cee88554d40c1cdface2812493b14ca653",
+      "use": "Revision checked only; no code or engine parser imported/copied into these archive modules.",
+      "license": "not relied upon for this component"
+    }
+  ],
+  "modules": [
+    {
+      "module": "python/archives/xp3.py",
+      "sources": [
+        {
+          "repository": "GARbro-Mod",
+          "path": "ArcFormats/KiriKiri/ArcXP3.cs",
+          "commit": "bc26d991ef5cdc0e1ecb32122ee9a48c3375750c",
+          "license": "MIT",
+          "copyright": "Copyright (C) 2014-2017 by morkt",
+          "symbols": [
+            "Xp3Opener.TryOpen",
+            "Xp3Opener.OpenEntry",
+            "Xp3Opener.Create",
+            "Xp3Opener.RawFileCopy"
+          ]
+        }
+      ],
+      "implementation": "Original bounded Python structure parsing and standard-library zlib/adler32, based on the cited format layout.",
+      "public_api": [
+        "extract(data: bytes, *, filter_name: str, ...)->list[Entry]",
+        "build(files: list[tuple[str, bytes]], *, filter_name: str, ...)->bytes"
+      ],
+      "supported": [
+        "Standalone XP3 standard File/info/segm/adlr",
+        "raw or zlib index",
+        "ordered raw/zlib segments, including repeated physical ranges",
+        "Adler-32 checks",
+        "new standard V1 writer"
+      ],
+      "refused": [
+        "unknown or implicit filter_name",
+        "nonzero info encryption flags",
+        "unknown/duplicate index sections",
+        "EXE overlays",
+        "index chaining",
+        "unknown compression flags",
+        "truncated, oversized, mismatched or trailing zlib input"
+      ],
+      "caveat": "filter_name='none' is an explicit caller assertion; zero flags and Adler-32 are not proof that no unmarked game filter exists."
+    },
+    {
+      "module": "python/archives/rpa.py",
+      "sources": [
+        {
+          "repository": "GARbro-Mod",
+          "path": "ArcFormats/RenPy/ArcRPA.cs",
+          "commit": "bc26d991ef5cdc0e1ecb32122ee9a48c3375750c",
+          "license": "MIT",
+          "copyright": "Copyright (C) 2014 by morkt",
+          "symbols": [
+            "RpaOpener.TryOpen",
+            "RpaOpener.OpenEntry",
+            "RpaOpener.Create",
+            "Pickle"
+          ]
+        }
+      ],
+      "implementation": "Independent allowlist interpreter over pickletools.genops; no pickle deserialization execution, no C# Pickle port.",
+      "public_api": [
+        "extract(data: bytes, ...)->list[Entry]"
+      ],
+      "supported": [
+        "RPA-3.0 exact header",
+        "bounded zlib index",
+        "data-only pickle protocol 0..3 subset",
+        "single-chunk entries",
+        "UTF-8 names",
+        "byte or Latin-1 Unicode prefixes"
+      ],
+      "refused": [
+        "RPA2/RPA4",
+        "multi-chunk and empty chunk lists",
+        "GLOBAL/REDUCE/BUILD and all non-allowlisted opcodes",
+        "protocol 4+ and frames",
+        "container memo references/cycles",
+        "duplicate dictionary/decoded names",
+        "memo/stack/opcode/depth limit violations",
+        "writer"
+      ],
+      "length_rule": "offset = tuple[0] XOR key; decoded_length = tuple[1] XOR key; stored_length = decoded_length - prefix_length. Only stored_length bytes are read before the index.",
+      "caveat": "The reference C# reader selects values[0]; this Python version deliberately rejects len(chunks)!=1 instead of losing data. Legitimate object-constructor pickles are also refused."
+    },
+    {
+      "module": "python/archives/nscripter.py",
+      "sources": [
+        {
+          "repository": "GARbro-Mod",
+          "path": "ArcFormats/NScripter/Script.cs",
+          "commit": "bc26d991ef5cdc0e1ecb32122ee9a48c3375750c",
+          "license": "MIT",
+          "copyright": "Copyright (C) 2023 by morkt",
+          "symbols": [
+            "NSOpener.IsScript",
+            "NSOpener.ConvertFrom",
+            "NSOpener.ConvertBack"
+          ]
+        },
+        {
+          "repository": "GARbro-Mod",
+          "path": "ArcFormats/NScripter/ArcSAR.cs",
+          "commit": "bc26d991ef5cdc0e1ecb32122ee9a48c3375750c",
+          "license": "MIT",
+          "copyright": "No separate copyright line in this source's MIT notice",
+          "symbols": [
+            "SarOpener.TryOpen",
+            "SarOpener.Create"
+          ]
+        },
+        {
+          "repository": "GARbro-Mod",
+          "path": "ArcFormats/NScripter/ArcNSA.cs",
+          "commit": "bc26d991ef5cdc0e1ecb32122ee9a48c3375750c",
+          "license": "MIT",
+          "copyright": "Copyright (C) 2014-2015 by morkt",
+          "symbols": [
+            "NsaOpener.ReadIndex",
+            "NsaOpener.UnpackEntry",
+            "NsaOpener.Create",
+            "Compression"
+          ]
+        }
+      ],
+      "implementation": "Independent big-endian archive reader/writer, XOR transform and bounded stdlib bz2. No SPB/LZSS unpacker code copied.",
+      "public_api": [
+        "xor_nscript(data: bytes, ...)->bytes",
+        "decode_nbz(data: bytes, ...)->bytes",
+        "extract_sar(data: bytes, ...)->list[Entry]",
+        "extract_nsa(data: bytes, ...)->list[Entry]",
+        "build_sar(files, ...)->bytes",
+        "build_nsa(files, *, compression=0, ...)->bytes"
+      ],
+      "supported": [
+        "nscript.dat XOR 0x84",
+        "SAR big-endian indexes",
+        "plain NSA, optional two-zero header prefix",
+        "raw and NBZ method 4",
+        "NBZ-by-suffix behavior",
+        "new SAR/raw NSA/NBZ NSA writers"
+      ],
+      "refused": [
+        "NSA password encryption",
+        "SPB/LZSS and unknown methods",
+        "nonstandard index padding",
+        "bzip2 truncation/trailing data/oversized expansion",
+        "invalid or duplicate names"
+      ],
+      "caveat": "No dialogue parser is implemented. nscript.dat has no intrinsic magic. Rebuilding changes layout/compression and is not promised byte-identical. The writer refuses raw .nbz names to prevent unintended suffix-triggered decoding."
+    },
+    {
+      "module": "python/archives/pfs.py",
+      "sources": [
+        {
+          "repository": "GARbro-Mod",
+          "path": "ArcFormats/Artemis/ArcPFS.cs",
+          "commit": "bc26d991ef5cdc0e1ecb32122ee9a48c3375750c",
+          "license": "MIT",
+          "copyright": "Copyright (C) 2016-2017 by morkt",
+          "symbols": [
+            "PfsOpener.OpenPf",
+            "PfsOpener.OpenPf2",
+            "PfsOpener.OpenPf0",
+            "PfsOpener.OpenEntry"
+          ]
+        }
+      ],
+      "implementation": "Independent index reader and hashlib SHA-1 cyclic XOR.",
+      "public_api": [
+        "extract(data: bytes, *, name_encoding='cp932', ...)->list[Entry]"
+      ],
+      "supported": [
+        "pf0 fixed 0x10c records/ASCII names",
+        "pf2 CP932 names and longer metadata",
+        "pf6 raw payloads",
+        "pf8 SHA1(index[7:7+index_size]) 20-byte cyclic XOR restarted per member"
+      ],
+      "refused": [
+        "other pf versions",
+        "index extensions/padding",
+        "invalid name lengths/ranges/counts",
+        "output budget violations",
+        "writer"
+      ],
+      "caveat": "Skipped metadata is not interpreted. Name encoding for pf6/pf8 is explicit, with no automatic guessing. SHA-1 is a format key derivation, not authentication."
+    },
+    {
+      "module": "python/archives/majiro.py",
+      "sources": [
+        {
+          "repository": "GARbro-Mod",
+          "path": "ArcFormats/Majiro/ArcMajiro.cs",
+          "commit": "bc26d991ef5cdc0e1ecb32122ee9a48c3375750c",
+          "license": "MIT",
+          "copyright": "Copyright (C) 2014 by morkt",
+          "symbols": [
+            "ArcOpener.TryOpen",
+            "ArcOpener.Create"
+          ]
+        }
+      ],
+      "implementation": "Independent V1/V2/V3 reader and fixed-V1 CRC32-sorted writer.",
+      "public_api": [
+        "extract(data: bytes, ...)->list[Entry]",
+        "build_v1(files, ...)->bytes"
+      ],
+      "supported": [
+        "V1 8-byte records with extra end sentinel",
+        "V2 12-byte records",
+        "V3 16-byte records/u64 hashes",
+        "CP932 C-string names",
+        "new V1 archives, including empty members"
+      ],
+      "refused": [
+        "other versions",
+        "missing names or extra names padding",
+        "descending V1 offsets",
+        "invalid V1 end sentinel",
+        "V2/V3 writing",
+        "writer directory stripping or CRC32 collision acceptance"
+      ],
+      "caveat": "Archive payloads remain unchanged; MJO bytecode encryption/text rewriting is not part of this module. Reader preserves hashes without claiming to authenticate them."
+    },
+    {
+      "module": "python/archives/bgi.py",
+      "sources": [
+        {
+          "repository": "GARbro-Mod",
+          "path": "ArcFormats/Ethornell/ArcBGI.cs",
+          "commit": "bc26d991ef5cdc0e1ecb32122ee9a48c3375750c",
+          "license": "MIT",
+          "copyright": "Copyright (C) 2014-2015 by morkt",
+          "symbols": [
+            "ArcOpener.TryOpen",
+            "ArcOpener.OpenEntry",
+            "Arc2Opener.Open",
+            "Arc2Opener.OpenEntry",
+            "DscDecoder constructor"
+          ]
+        }
+      ],
+      "implementation": "Independent archive index reader; DSC/BSE decoders are intentionally not ported.",
+      "public_api": [
+        "inspect(data: bytes, ...)->list[Entry]",
+        "require_plain(entry: Entry)->bytes"
+      ],
+      "supported": [
+        "PackFile 0x20 records/0x10 names",
+        "BURIKO ARC20 0x80 records/0x60 names",
+        "explicit stored_data and codec metadata",
+        "DSC advertised size budget checks"
+      ],
+      "refused": [
+        "unknown archive signature",
+        "truncated/unknown DSC and BSE versions",
+        "require_plain on DSC/BSE/CompressedBG images",
+        "DSC/BSE decompression",
+        "writer"
+      ],
+      "caveat": "Entry.stored_data is NOT decompressed output. codec='raw' only means no recognized archive wrapper; it does not establish textual/plaintext content."
+    },
+    {
+      "module": "python/archives/siglus.py",
+      "sources": [
+        {
+          "repository": "GARbro-Mod",
+          "path": "ArcFormats/RealLive/ArcSCENE.cs",
+          "commit": "bc26d991ef5cdc0e1ecb32122ee9a48c3375750c",
+          "license": "MIT",
+          "copyright": "Copyright (C) 2026 by morkt",
+          "symbols": [
+            "SceneOpener.TryOpen",
+            "SceneOpener.OpenEntry",
+            "SceneOpener.DefaultKey"
+          ]
+        },
+        {
+          "repository": "GARbro-Mod",
+          "path": "ArcFormats/RealLive/ImageG00.cs",
+          "commit": "bc26d991ef5cdc0e1ecb32122ee9a48c3375750c",
+          "license": "MIT",
+          "copyright": "Copyright (C) 2016 by morkt",
+          "symbols": [
+            "G00Reader.LzDecompress"
+          ]
+        }
+      ],
+      "implementation": "MIT fixed-key constant adaptation plus independent bounded LZ decoder using min_count=2/bytes_pp=1.",
+      "public_api": [
+        "extract(data: bytes, *, game_key: bytes | None = None, ...)->list[Entry]",
+        "lz_decompress(data: bytes, ...)->bytes",
+        "DEFAULT_KEY: bytes"
+      ],
+      "supported": [
+        "0x5c header with four equal scene counts",
+        "ordered bounded name/name-index/position/data tables",
+        "UTF16LE scene names",
+        "fixed 256-byte key",
+        "explicit 16-byte extra game key",
+        "strict Scene LZ including overlapping copies"
+      ],
+      "refused": [
+        "unknown header or extra-key flag",
+        "missing/wrong-size game key",
+        "automatic key guessing",
+        "alternate scene table order",
+        "invalid references/truncation/trailing LZ data",
+        "bytecode text extraction/recompilation",
+        "Scene.pck writer"
+      ],
+      "caveat": "Output .ss remains bytecode. Header [0x04,0x34) and word 0x58 are not interpreted. Format checks are not authentication of a key."
+    }
+  ]
+}

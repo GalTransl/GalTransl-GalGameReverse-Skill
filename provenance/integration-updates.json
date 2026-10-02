@@ -1,0 +1,29 @@
+{
+  "schema": "galgame-integration-updates/1",
+  "date": "2026-10-01",
+  "purpose": "Integration fixes on top of the per-group provenance snapshots; not upstream changes.",
+  "changes": [
+    {
+      "file": "python/common/binary.py",
+      "change": "Reject u32 address fields intersecting any edited span, even equal-length replacement."
+    },
+    {
+      "file": "python/common/contract.py",
+      "change": "Validate manifest identity, nonempty locator, settings object, exact integer types and text codec independently of record count."
+    },
+    {
+      "file": "python/detect.py",
+      "change": "Inspect QLIE footer hints in small .pack files using the already-read header buffer."
+    },
+    {
+      "file": "python/archives/rpa.py",
+      "change": "Preserve Python-2 protocol-0 STRING high bytes with a bounded data-only opcode reader; retain pre-operand whitelist and all stack/memo/depth limits.",
+      "basis": "RPA-3.0 index data format; Python standard-library pickletools operand readers and codecs.escape_decode. No unrestricted unpickling."
+    },
+    {
+      "file": "tests/test_roundtrip_recipe.py",
+      "change": "Connect the real limited TmrHiro text codec to independent JSON/manifest validation and no-overwrite output using synthetic fixtures only.",
+      "basis": "python/engines/tmrhiro.py; no runtime GalTransl dependency"
+    }
+  ]
+}

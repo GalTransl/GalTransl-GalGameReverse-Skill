@@ -1,0 +1,1425 @@
+{
+  "schema_version": 1,
+  "group": "tools-a",
+  "scope": "SExtractor tools 第一组家族；参考能力按算法层级标注，不等同完整引擎支持",
+  "source_commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+  "garbro_commit": "bc26d991ef5cdc0e1ecb32122ee9a48c3375750c",
+  "entries": [
+    {
+      "id": "agsi",
+      "title": "AGSI / SB2",
+      "status": "implemented-reference",
+      "level": "script-pool-rebuild",
+      "sources": [
+        "tools/AGSI/agsi_common.py",
+        "tools/AGSI/agsi_sb_tool.py",
+        "tools/AGSI/agsi_inject.py"
+      ],
+      "symbols": [
+        "swap_nibble_bytes",
+        "read_cstr_decode",
+        "rebuild_cstr_files",
+        "parse_segments",
+        "inject"
+      ],
+      "garbro": [],
+      "recognition": [
+        "SB 文件魔数为 SB2 空格，固定头长 0x2C。",
+        "头部第3个u32为CODE字节数，第9个为CSTR条目数（从0计数）。",
+        "九段依次为 CODE、TTBL、两份FTBL、VTBL、CSTR、CDBL、两份DBG_。"
+      ],
+      "pipeline": [
+        "外层资源包不在本模块范围；先取得完整SB2字节。",
+        "split_sb2 根据各段专用记录数和长度读取，不能把段标签当搜索分隔符。",
+        "CSTR先有count×8的offset/size表，再有nibble交换过的字符串池。"
+      ],
+      "mapping": [
+        "Mess$is、MessC$s 是上游对白候选API；Cmd1$s至Cmd5$s对应选择。",
+        "FTBL_1可提供API地址，82+u32是PUSH_STR，C6+u32是CALL；字节扫描不是完整反汇编。",
+        "Talk$s、Voice$s不能自动当正式name；参考仅按已核准CSTR index注入。",
+        "调用方提供(index, 原文, 译文)，保留资源路径和变量字符串，不从所有CSTR猜台词。"
+      ],
+      "rebuild": [
+        "每条size含结尾NUL；offset以池首为基址，重建时按现有index顺序重新累计。",
+        "只交换字符串池的高低4bit，索引表不交换。",
+        "不改CODE，不增删CSTR；旧原文不匹配、内嵌NUL、共享index译文冲突一律拒绝。",
+        "上游inject会对重复冲突last-wins，本参考刻意收紧为错误。"
+      ],
+      "conditions": [
+        "输入必须是本段顺序的SB2；已知非连续/别名池布局不自动推断。",
+        "严格cp932编码；换码页必须先确认字库和引擎读取能力。"
+      ],
+      "limits": [
+        "不提供全VM解释、API上下文证明或外层包重新部署。",
+        "仅有合成段测试，不把上游真实样本报告算作本参考验证。"
+      ],
+      "example": [
+        "from python.engines import agsi",
+        "new_sb = agsi.inject_sb2(sb_bytes, [(0, 'A', 'LONG')])",
+        "entries = agsi.read_cstr(cstr_bytes, count=2)"
+      ],
+      "validation": [
+        "已测试CSTR offset/size、nibble自反、共享引用冲突、过期原文。",
+        "已测试SB2空注入逐字节一致、CODE和尾部保持及变长池重建。"
+      ],
+      "doc": "engines/agsi.md",
+      "python": "python/engines/agsi.py",
+      "tests": [
+        "tests/test_engines_tools_a.py"
+      ]
+    },
+    {
+      "id": "ai5win",
+      "title": "AI5WIN",
+      "status": "source-only",
+      "sources": [
+        "tools/AI5WIN/README.md",
+        "tools/AI5WIN/TBL_exchange.py",
+        "tools/AI5WIN/png_to_FNT.py"
+      ],
+      "gap": "此目录只有FNT/PAL/TBL字库与字符表处理源码和字体资源；未确认可读文本脚本提取/回填路线。没有建立Python引擎模块或空白文档。",
+      "next_evidence": "需额外取得对应版本脚本解析、指令文本类型和写回偏移来源；FONT.TBL不等于对白数据库。"
+    },
+    {
+      "id": "arcx",
+      "title": "ARCX 工具目录 / SCX.ARC 顺序记录",
+      "status": "implemented-reference",
+      "level": "container-unpack",
+      "sources": [
+        "tools/ARCX/arc_unpack.py",
+        "tools/ARCX/arc_pack.py",
+        "libs/lzss/lzss.c"
+      ],
+      "symbols": [
+        "unpack_arc_file",
+        "pack_arc",
+        "lzss_decompress",
+        "Padding"
+      ],
+      "garbro": [
+        "ArcFormats/ArcARCX.cs",
+        "ArcFormats/LzssStream.cs"
+      ],
+      "recognition": [
+        "tools脚本只跳过16字节头，并未校验魔数；不能凭目录名伪造识别结论。",
+        "必须显式传variant='tools-sequential'，由调用方确认来源及布局。",
+        "GARbro的ARCX魔数对应固定100字节文件名+28字节字段索引，不是tools的顺序记录布局。"
+      ],
+      "pipeline": [
+        "SCX.ARC → 顺序成员头 → 有名资源块 → 可选LZSS → 明文字节。",
+        "每个记录有total_size、name_len、header_size、packed_size、unpacked_size五个u32。",
+        "压缩标志在记录+0x1B；下一记录地址=当前地址+total_size。"
+      ],
+      "mapping": [
+        "该工具仅证实容器和压缩层；解封出的文本还需对应脚本语法解析。",
+        "文件名和内容均不自动认作name/message；不得把路径或标签送去翻译。",
+        "上层用稳定成员序号和脚本内定位键关联译文。"
+      ],
+      "rebuild": [
+        "LZSS使用4096字节环、初始写指针0xFEE、低位优先控制位，1为字面量。",
+        "回引用offset=lo|((hi&0xF0)<<4)，长度=(hi&15)+3，支持重叠复制。",
+        "libs/lzss/lzss.c确认Padding=0；不加载同目录.pyd。",
+        "参考实现只解封；完整回封还需保留原16字节头及更新三种长度字段。"
+      ],
+      "conditions": [
+        "压缩总输出默认限制64MiB，可由调用方显式调整。",
+        "越界记录、截断token、超出声明长度及尾随压缩数据报错，不回退成伪明文。"
+      ],
+      "limits": [
+        "不声称兼容GARbro固定索引变体或所有同名ARC。",
+        "当前未实现SCX指令解析及引擎部署验证。"
+      ],
+      "example": [
+        "from python.archives import arcx",
+        "members = arcx.unpack(archive_bytes, variant='tools-sequential')",
+        "plain = arcx.lzss(b'\\x03AB\\xEE\\xF3', 8)"
+      ],
+      "validation": [
+        "合成测试包含字面量、初始零字典、重叠回引用与尺寸上限。",
+        "合成顺序资源记录可解封；错误变体显式拒绝。"
+      ],
+      "doc": "engines/arcx.md",
+      "python": "python/archives/arcx.py",
+      "tests": [
+        "tests/test_engines_tools_a.py"
+      ]
+    },
+    {
+      "id": "ast",
+      "title": "AST / ARC1、ARC2",
+      "status": "implemented-reference",
+      "level": "container-index",
+      "sources": [
+        "tools/AST/arc2_pack.py"
+      ],
+      "symbols": [
+        "pack",
+        "xorBytes"
+      ],
+      "garbro": [
+        "ArcFormats/ArcAST.cs"
+      ],
+      "recognition": [
+        "识别ARC1或ARC2魔数，随后u32成员数。",
+        "索引变长：u32绝对offset、u32未压缩size、u8名字字节数、cp932名字。",
+        "ARC2名字逐字节XOR FF；ARC1名字不作该变换。"
+      ],
+      "pipeline": [
+        "dat等容器 → index() → 原存储payload及声明解压长度。",
+        "tools列出.adv、.anm、.db需压缩，正文先XOR FF再LZSS。",
+        "GARbro补充ARC2解压环初始填FF，解压后再XOR FF；PNG另有壳处理。"
+      ],
+      "mapping": [
+        "参考返回容器成员，不把.adv全文件当一条message。",
+        "语句命令、参数、说话人绑定须由对应AST文本规则识别；该目录没有VM文本解析。",
+        "name目前仅表示archive member name，不是角色名。"
+      ],
+      "rebuild": [
+        "stored保持压缩字节，不能对它直接做cp932替换。",
+        "真实封包必须重算变长索引及成员起点；本模块未提供封包器。",
+        "按相邻offset求存储长度，末项到EOF；不把未压缩size用作磁盘切片长度。"
+      ],
+      "conditions": [
+        "参考采用严格连续、单调有效offset子集；GARbro的零offset空槽不在范围。",
+        "不依赖上游pylzss旧版本，因本模块只实现索引。"
+      ],
+      "limits": [
+        "并未实现AST压缩/编码层，不能把返回stored称为明文。",
+        "不是完整AST文本往返插件。"
+      ],
+      "example": [
+        "from python.archives import ast",
+        "entries = ast.index(archive_bytes)",
+        "stored = entries[0]['stored']"
+      ],
+      "validation": [
+        "合成ARC2索引验证名字XOR、绝对offset和未压缩size分离。",
+        "缺头/越界索引会拒绝。"
+      ],
+      "doc": "engines/ast.md",
+      "python": "python/archives/ast.py",
+      "tests": [
+        "tests/test_engines_tools_a.py"
+      ]
+    },
+    {
+      "id": "advsys3",
+      "title": "AdvSys3 / arc*.dat",
+      "status": "implemented-reference",
+      "level": "container-roundtrip",
+      "sources": [
+        "tools/AdvSys3/ExAdvsys3.py",
+        "tools/AdvSys3/README.md"
+      ],
+      "symbols": [
+        "try_open_arc",
+        "extract_arc"
+      ],
+      "garbro": [
+        "ArcFormats/AdvSys/ArcAdvSys3.cs"
+      ],
+      "recognition": [
+        "无固定魔数，目录证据是arc开头的.dat文件与顺序记录布局。",
+        "记录头为u32 payload_size、u32 counter、u16 name_length。",
+        "name_length范围1..256；随后名字字节与payload，size=0可终止。"
+      ],
+      "pipeline": [
+        "arc*.dat → 有序成员及counter → 各成员自己的脚本/图像/音频格式。",
+        "上游改版把counter缓存到arc.json以便封包，本参考直接在返回tuple中保留。",
+        "参考使用tools明确的UTF-8名字规则；不悄悄忽略解码错误。"
+      ],
+      "mapping": [
+        "容器成员名字不是角色name，counter也不是对白ID。",
+        "上游会探测GWD/WAVE；这不能证明每个成员都是脚本。",
+        "需先定位实际文本成员，再建立脚本内name/message映射；此模块不猜测。"
+      ],
+      "rebuild": [
+        "重建按输入成员顺序生成长度头，counter原样保留。",
+        "零size终止后的字节作为trailer原样返回/写回。",
+        "不允许把空payload写成普通成员，避免被解释为全档终止。",
+        "不复制上游按类型改后缀行为，真实资源名必须稳定。"
+      ],
+      "conditions": [
+        "没有仅凭扩展名自动执行；调用方需核对容器布局。",
+        "这是无压缩顺序容器重建，不要求任何外部exe。"
+      ],
+      "limits": [
+        "不提供成员脚本指令编译和游戏加载验证。",
+        "UTF-8名字规则来自该tools版本，其他码页需新证据而不是errors=ignore。"
+      ],
+      "example": [
+        "from python.archives import advsys3",
+        "entries, trailer = advsys3.unpack(archive_bytes)",
+        "rebuilt = advsys3.pack(entries, trailer)"
+      ],
+      "validation": [
+        "合成容器逐字节往返，保留counter和带不透明尾部的终止块。",
+        "变长成员重建及空成员拒绝已测试。"
+      ],
+      "doc": "engines/advsys3.md",
+      "python": "python/archives/advsys3.py",
+      "tests": [
+        "tests/test_engines_tools_a.py"
+      ]
+    },
+    {
+      "id": "ail",
+      "title": "Ail / SNL",
+      "status": "implemented-reference",
+      "level": "container-literal-pack",
+      "sources": [
+        "tools/Ail/dat_pack_fake_compress.py"
+      ],
+      "symbols": [
+        "AilArchivePacker.pack_archive",
+        "AilArchivePacker.lzss_compress"
+      ],
+      "garbro": [
+        "ArcFormats/Ail/ArcAil.cs"
+      ],
+      "recognition": [
+        "无固定魔数：u32槽位数及count×u32存储长度表；扩展名可为.dat/.snl。",
+        "0或FFFFFFFF大小项为缺失槽，不能压缩掉其编号。",
+        "压缩成员头为u16=1及u32解压长度，之后才是压缩流。"
+      ],
+      "pipeline": [
+        "脚本成员明文字节 → literal_block → 大小表容器。",
+        "源码按sall#数字保留槽位；参考用list[bytes|None]明确传递空槽。",
+        "stored_entries只分割磁盘成员，不承诺解压/识别对白。"
+      ],
+      "mapping": [
+        "脚本内文本类型不在此目录的packer中；须另有脚本解析依据。",
+        "稳定定位应使用槽号和脚本内ID，不从生成的sall#文件名推断角色名。",
+        "不可把Ogg资源内容当message。"
+      ],
+      "rebuild": [
+        "本格式literal标志位为0，与常见LZSS的1为literal相反。",
+        "每8个原始字节前写控制字节00；这是合法字面量编码，不是通用byte替换。",
+        "参考仅生成全字面量流，没有匹配压缩优化；文件会变大。"
+      ],
+      "conditions": [
+        "生成前需评估游戏加载缓冲区与体积上限。",
+        "不实现上游Ogg特判的无压缩分支；当前所有非空槽按压缩头封装。"
+      ],
+      "limits": [
+        "不提供通用Ail LZSS解码与脚本语义回填。",
+        "返回stored含6字节压缩头，不能直接视为文本。"
+      ],
+      "example": [
+        "from python.archives import ail",
+        "archive = ail.pack([None, b'synthetic'])",
+        "slots = ail.stored_entries(archive)"
+      ],
+      "validation": [
+        "独立期望字节验证6字节头、零控制字节、跨8字节组。",
+        "测试缺失槽不移动及大小表等于存储块大小。"
+      ],
+      "doc": "engines/ail.md",
+      "python": "python/archives/ail.py",
+      "tests": [
+        "tests/test_engines_tools_a.py"
+      ]
+    },
+    {
+      "id": "astronauts",
+      "title": "Astronauts",
+      "status": "source-only",
+      "sources": [
+        "tools/Astronauts/README.md",
+        "tools/Astronauts/AVGEngineV2_Tool/AVGEngineV2.exe",
+        "tools/Astronauts/GxpPacker/GxpPacker.exe",
+        "tools/Astronauts/MwbExtractor/MwbExtractor.exe"
+      ],
+      "gap": "目录为EXE/DLL及外部项目链接，未提供可审阅的文本处理源码；不执行或包装这些工具。没有Python模块或空白页。",
+      "next_evidence": "需离线取得与目标GXP/MWB版本相符的源码及许可证，再确认脚本提取与写回。"
+    },
+    {
+      "id": "digitalworks",
+      "title": "DigitalWorks / BunBun TAK",
+      "status": "implemented-reference",
+      "level": "text-instruction-codec",
+      "sources": [
+        "tools/DigitalWorks/文本工具(反编译与写回)/tak_text.py"
+      ],
+      "symbols": [
+        "disassemble",
+        "encode_text",
+        "lzs_decompress"
+      ],
+      "garbro": [
+        "ArcFormats/DigitalWorks/ArcBIN.cs"
+      ],
+      "recognition": [
+        "TAK.BIN容器本身无稳定魔数；源码的索引位于EXE，不应移植游戏专用地址。",
+        "单条文本指令头为A8/AA、00、u16 identifier。",
+        "A8对应NAME，AA对应MSG，结束指令分别A9/AB。"
+      ],
+      "pipeline": [
+        "包/TAK.BIN → 经独立核准索引取得脚本 → 可选LZS外壳 → 单条文本指令。",
+        "本模块从已定界的文本指令开始，不读取EXE也不使用上游硬编码索引偏移。",
+        "LZS解压和整脚本分割在本参考外。"
+      ],
+      "mapping": [
+        "A8的正文为name，AA的正文为message；identifier原样传递。",
+        "不要从文件名或音频命令推断说话人。",
+        "模块不把整脚本线性扫描的偶然A8/AA字节误当文本起点。"
+      ],
+      "rebuild": [
+        "正文要求偶数字节，4字节头后按4字节对齐，必要时补两个00。",
+        "尾随A9/AB四字节指令保持其类别。",
+        "AC是16bit绝对跳转；本模块不重定位全脚本，变长指令不能直接原地拼回TAK。"
+      ],
+      "conditions": [
+        "严格cp932，单字节ASCII导致奇数长度时拒绝而非静默损坏边界。",
+        "正文在双字节边界不能与结束opcode冲突。"
+      ],
+      "limits": [
+        "范围是单条文本指令codec，不是整TAK.BIN回封器。",
+        "不提供任何商业EXE补丁、硬编码偏移或游戏字库。"
+      ],
+      "example": [
+        "from python.engines import digitalworks",
+        "raw = digitalworks.encode_text_instruction('message', 1, 'Ａ')",
+        "kind, identifier, text = digitalworks.decode_text_instruction(raw)"
+      ],
+      "validation": [
+        "合成全角字符测试NAME/MSG和2/4字节正文的对齐。",
+        "奇数长度正文与非法结束结构拒绝。"
+      ],
+      "doc": "engines/digitalworks.md",
+      "python": "python/engines/digitalworks.py",
+      "tests": [
+        "tests/test_engines_tools_a.py"
+      ]
+    },
+    {
+      "id": "dxlib",
+      "title": "DxLib / Pix Studio",
+      "status": "source-only",
+      "sources": [
+        "tools/DxLib/README.md",
+        "tools/DxLib/exDxBin.exe",
+        "tools/DxLib/Pix Studio/PIXUnpack.exe"
+      ],
+      "gap": "只有EXE与外部源码链接；README的DX版本和特定游戏key不构成可移植文本实现。不复制测试key，不执行工具，也不生成Python包装。",
+      "next_evidence": "需离线可读的对应DX/Pix容器与脚本源码、版本/密钥参数约定和许可证。"
+    },
+    {
+      "id": "emonengine",
+      "title": "EmonEngine / EME",
+      "status": "implemented-reference",
+      "level": "script-container-pack",
+      "sources": [
+        "tools/EmonEngine/eme_pack.py"
+      ],
+      "symbols": [
+        "Arc.pack",
+        "Arc.encrypt"
+      ],
+      "garbro": [
+        "ArcFormats/EmonEngine/ArcEME.cs"
+      ],
+      "recognition": [
+        "头部RREDATA 空格，末4字节是成员数。",
+        "尾部count×0x60索引之前有40字节密钥区。",
+        "此参考仅处理全零密钥、Subtype=3的剧本分支。"
+      ],
+      "pipeline": [
+        "已确认的明文脚本 → 全字面量LZSS → 12字节零子头 → EME文件。",
+        "0x40..0x43记录frame=0x1000及init-distance=0x12。",
+        "GARbro换算写指针为frame-init=0xFEE；未实现加密索引。"
+      ],
+      "mapping": [
+        "EME名字是资源名，不是角色name；内部脚本仍需专门文本解析。",
+        "保留输入成员次序，不把图片音频当Subtype=3打包。",
+        "参考不会从脚本二进制中猜测message。"
+      ],
+      "rebuild": [
+        "索引+0x4C为压缩长度，+0x50为明文长度，+0x54为12字节子头起点。",
+        "压缩长度不含12字节子头，后续offset必须包含子头总开销。",
+        "全字面量1-bit标志替换.pyd压缩依赖，保持合法流而非相同压缩字节。"
+      ],
+      "conditions": [
+        "生成零密钥档需目标加载器支持该路径；不能推断所有游戏均接受。",
+        "分段脚本压缩、非零密钥、图片音频及其它Subtype不在支持范围。"
+      ],
+      "limits": [
+        "没有全EME解密器，zero_key_index只检查本子集。",
+        "档案可增大，缓冲区和部署接受性尚未实机验证。"
+      ],
+      "example": [
+        "from python.archives import emonengine",
+        "archive = emonengine.pack_scripts([('test.bin', b'synthetic')])",
+        "records = emonengine.zero_key_index(archive)"
+      ],
+      "validation": [
+        "合成测试核对Subtype、起点、子头与未压缩长度。",
+        "生成流经独立的LZSS reader还原；非零密钥会拒绝。"
+      ],
+      "doc": "engines/emonengine.md",
+      "python": "python/archives/emonengine.py",
+      "tests": [
+        "tests/test_engines_tools_a.py"
+      ]
+    },
+    {
+      "id": "flyingshine",
+      "title": "FlyingShine / PD2",
+      "status": "implemented-reference",
+      "level": "container-script-shell-roundtrip",
+      "sources": [
+        "tools/FlyingShine/flytool.py"
+      ],
+      "symbols": [
+        "parse_header",
+        "read_entries",
+        "decrypt_script_payload",
+        "encrypt_script_payload"
+      ],
+      "garbro": [
+        "ArcFormats/FlyingShine/ArcPD.cs"
+      ],
+      "recognition": [
+        "魔数FlyingShinePDFile加NUL共18字节；头长0x20。",
+        "+0x14是索引XOR key，+0x1C为成员数；每项0x30字节。",
+        ".def/.dsf是上游确认的脚本候选；不能泛化到全部.pd版本。"
+      ],
+      "pipeline": [
+        "PD2 → 逐项索引XOR → 取stored → 脚本尾部CRLF推导正文XOR key。",
+        "索引名字字段0x24字节；其后的shift加在offset和size上。",
+        "正文key=末字节XOR 0A，并要求倒数第二字节XOR key为0D。"
+      ],
+      "mapping": [
+        "解除XOR后仍需脚本文法；本参考不切分台词或认定某个命令是name。",
+        "归档文件名与shift均不是角色信息。",
+        "应在语法确认后提取对白，保留资源命令、标签、控制码和CRLF。"
+      ],
+      "rebuild": [
+        "script_encode要求终端CRLF；不替调用方追加换行来掩盖异常。",
+        "rebuild接收已经加壳的stored列表，按原次序保留header、name field与shift。",
+        "新的offset和size写回前加shift，检查u32溢出。",
+        "本模块不修复OGG、不自动改变音频，避免与文本改动混杂。"
+      ],
+      "conditions": [
+        "CRLF校验失败必须停止；不能把猜不到key的数据当成功解密。",
+        "尾部推导是格式启发，不是密码学认证；仍需内容及脚本语法复核。"
+      ],
+      "limits": [
+        "不重算未知头部校验字段，也不保证存储间隙原样；需要部署前验证。",
+        "不是旧Pack/PD版本通用解析器。"
+      ],
+      "example": [
+        "from python.engines import flyingshine",
+        "from python.archives import flyingshine as flyingshine_archive",
+        "plain, key = flyingshine.script_decode(stored_bytes)",
+        "stored_new = flyingshine.script_encode(plain, key)",
+        "new_pd = flyingshine_archive.rebuild(pd_bytes, stored_payloads)"
+      ],
+      "validation": [
+        "独立合成索引验证XOR与shift减法、空回封字节一致。",
+        "正文XOR往返、CRLF拒绝、变长payload长度更新已测试。"
+      ],
+      "doc": "engines/flyingshine.md",
+      "python": "python/engines/flyingshine.py",
+      "tests": [
+        "tests/test_engines_tools_a.py"
+      ],
+      "archive_module": "python/archives/flyingshine.py",
+      "module_api": {
+        "python/engines/flyingshine.py": [
+          "script_decode",
+          "script_encode"
+        ],
+        "python/archives/flyingshine.py": [
+          "index",
+          "rebuild"
+        ]
+      }
+    },
+    {
+      "id": "frontwing",
+      "title": "FrontWing / FRONTWING_ADV CSB",
+      "status": "implemented-reference",
+      "level": "script-node-rebuild",
+      "sources": [
+        "tools/FrontWing/csb_extract.py",
+        "tools/FrontWing/csb_inject.py"
+      ],
+      "symbols": [
+        "parse_csb",
+        "extract",
+        "build_csb",
+        "inject"
+      ],
+      "garbro": [
+        "ArcFormats/FrontWing/ArcDAT.cs"
+      ],
+      "recognition": [
+        "CSB小端魔数0x63736200，对应字节00 62 73 63。",
+        "+4为header_size，+8为node_count；节点8字节头。",
+        "节点含u16 type、u16 argc、4字节未知字段，再跟u16长度前缀参数。"
+      ],
+      "pipeline": [
+        "外层资源包需独立核准；不同FrontWing包格式不可互换。",
+        "本参考从CSB明文字节开始，按node_count顺序读参数。",
+        "原节点头的4字节未知值和文件尾保留，不像上游builder统一写零。"
+      ],
+      "mapping": [
+        "0x16 SET且参数0为$Msg时，参数1是message。",
+        "往前最多7节点找$Name SET，获得name候选；这是上游启发，不是控制流证明。",
+        "$str20等变量名字保持变量，不改写成人名。",
+        "上游还识别system\\DoSelect调用；本参考未实现选择肢或name注入。"
+      ],
+      "rebuild": [
+        "按节点index回填$Msg参数，重算u16字符串长度，不增加节点。",
+        "保留原字符串是否以NUL结束；拒绝内嵌NUL和65535字节溢出。",
+        "不全局替换相同字节；非$Msg节点拒绝作为目标。"
+      ],
+      "conditions": [
+        "严格cp932；切换gbk需要字库与解释器先决证据。",
+        "变量/表达式型$Msg需要更丰富语法识别，不应直接翻译。"
+      ],
+      "limits": [
+        "name回溯只是候选；没有整VM跳转或分支求值。",
+        "不覆盖FrontWing所有年代/引擎。"
+      ],
+      "example": [
+        "from python.engines import frontwing",
+        "rows = frontwing.extract(csb_bytes)",
+        "new_csb = frontwing.replace_messages(csb_bytes, {1: 'synthetic'})"
+      ],
+      "validation": [
+        "合成CSB测试$Msg定位、$str20保留、未知字段和尾部保留。",
+        "空回填byte-exact，变长参数和错误节点拒绝已测试。"
+      ],
+      "doc": "engines/frontwing.md",
+      "python": "python/engines/frontwing.py",
+      "tests": [
+        "tests/test_engines_tools_a.py"
+      ]
+    },
+    {
+      "id": "hcsystem",
+      "title": "HCSystem / PACK",
+      "status": "implemented-reference",
+      "level": "container-index-raw-pack",
+      "sources": [
+        "tools/HCSystem/hcsystem_pak_tool.py"
+      ],
+      "symbols": [
+        "crypt_index",
+        "read_index",
+        "build_index",
+        "cmd_pack"
+      ],
+      "garbro": [
+        "ArcFormats/HCSystem/ArcPAK.cs"
+      ],
+      "recognition": [
+        "头部PACK、u32 count、索引加密标志；索引从0x0C开始。",
+        "每项0x4C字节，前0x40字节为UTF-16LE名字。",
+        "后面依次为未压缩长度、压缩长度、绝对offset。"
+      ],
+      "pipeline": [
+        "PAK → 根据标志交换索引nibble → 成员stored字节。",
+        "packed_size=0表示无压缩；否则源码用4096字节、空格填充的LZSS。",
+        "参考只提供索引读取和raw包生成，不把压缩stored自动当明文。"
+      ],
+      "mapping": [
+        "UTF-16名字是archive member name，不能当角色name。",
+        "只有脚本成员经语法解析后才生成message；此目录的工具不提供该层。",
+        "非文本资源保持原始内容，不能一起用raw文本规则处理。"
+      ],
+      "rebuild": [
+        "pack_raw写packed_size=0，依据所有名字和payload重算offset。",
+        "索引加密只交换每字节高低nibble，与CSTR文本池不是同一层。",
+        "名字最多31个UTF-16码元并留NUL；拒绝截断，避免同名碰撞。"
+      ],
+      "conditions": [
+        "raw分支兼容性来自上游工具，最终游戏接受性仍需验证。",
+        "压缩成员改成raw会变大；谨慎检查读取缓存和磁盘预算。"
+      ],
+      "limits": [
+        "不支持本模块直接LZSS解码或脚本文本注入。",
+        "新包生成不是原压缩档的逐字节回放。"
+      ],
+      "example": [
+        "from python.archives import hcsystem",
+        "entries = hcsystem.index(pak_bytes)",
+        "new_pak = hcsystem.pack_raw([('test.bin', b'synthetic')])"
+      ],
+      "validation": [
+        "合成测试验证UTF-16名字、0x4C项宽、起点及nibble索引。",
+        "超长名字与截断头拒绝。"
+      ],
+      "doc": "engines/hcsystem.md",
+      "python": "python/archives/hcsystem.py",
+      "tests": [
+        "tests/test_engines_tools_a.py"
+      ]
+    },
+    {
+      "id": "hotsoup",
+      "title": "HotSoup / HSP DPMX",
+      "status": "implemented-reference",
+      "level": "container-zero-key-roundtrip",
+      "sources": [
+        "tools/HotSoup/dpm_pack.py"
+      ],
+      "symbols": [
+        "pack"
+      ],
+      "garbro": [
+        "ArcFormats/HSP/ArcDPM.cs"
+      ],
+      "recognition": [
+        "DPMX魔数，16字节头；+4为data_base、+8为count。",
+        "每索引项32字节，前16字节cp932名字。",
+        "+0x14为key、+0x18为相对data_base偏移、+0x1C为大小。"
+      ],
+      "pipeline": [
+        "DPMX → 零key资源成员 → AX等脚本仍需反编译。",
+        "此参考明确只支持key=0分支，不携带游戏测试密钥。",
+        "外部EXE附加档和DPM其它版本需另行识别。"
+      ],
+      "mapping": [
+        ".ax只是脚本候选，不代表可以按普通文本行翻译。",
+        "DPM名字是成员路径，不是角色name。",
+        "语义层缺失时不输出虚假的name/message列表。"
+      ],
+      "rebuild": [
+        "包头data_base等于头长加索引总长，成员offset只记录数据区内位置。",
+        "每项+0x10保留常用FFFFFFFF占位，本packer固定零key。",
+        "严格名字长度检查，避免上游越长写入扩展记录的隐患。"
+      ],
+      "conditions": [
+        "读取非零key项立即拒绝，而不是宣称解密。",
+        "重新生成的零key档是否允许替代加密原档需加载器证明。"
+      ],
+      "limits": [
+        "没有AX文本反编译/组装，也没有加密DPMX支持。",
+        "不可因扩展名DAT就套用该格式。"
+      ],
+      "example": [
+        "from python.archives import hotsoup",
+        "archive = hotsoup.pack([('test.ax', b'synthetic')])",
+        "entries = hotsoup.unpack(archive)"
+      ],
+      "validation": [
+        "双成员合成测试核对data_base与第二项相对offset。",
+        "零key往返通过，非零key显式拒绝。"
+      ],
+      "doc": "engines/hotsoup.md",
+      "python": "python/archives/hotsoup.py",
+      "tests": [
+        "tests/test_engines_tools_a.py"
+      ]
+    },
+    {
+      "id": "ice",
+      "title": "ICE / 索引字表文本流",
+      "status": "implemented-reference",
+      "level": "message-token-codec",
+      "sources": [
+        "tools/ICE/ice_op.py"
+      ],
+      "symbols": [
+        "Charset.encode_idx",
+        "tokenize",
+        "seg_to_str",
+        "str_to_bytes"
+      ],
+      "garbro": [
+        "ArcFormats/Ice/ScriptISD.cs"
+      ],
+      "recognition": [
+        "文本流无独立魔数，必须先由脚本指令识别消息区。",
+        "源码op68/69为消息，71/72为名字，74为即时文本。",
+        "System.grp中的字符表参与解释；不能直接把token字节按cp932解码。"
+      ],
+      "pipeline": [
+        "GRP资源 → 脚本指令定位 → 索引字符/控制码token → 调用方提供字表映射。",
+        "本模块保留token级别，不包含GRP HDJ解压或全VM指令表。",
+        "GARbro Ice/ScriptISD是邻近格式证据，不代表此opcode版本普适。"
+      ],
+      "mapping": [
+        "name/message由承载opcode确定，不由字表索引决定。",
+        "E7/E8是自动名字/变量插入，不可翻译成固定人名。",
+        "保留换行/分页的参数字节、颜色起止和EC终止符。"
+      ],
+      "rebuild": [
+        "单字节字符index< E7或==E9；F7..FF前缀配下一字节形成256..2559索引。",
+        "EA/EB带参数，ED ED复位，ED..F6颜色；encode_tokens保持这些结构。",
+        "禁止2560以上索引，避免依赖上游EXE补丁扩展到4863的私有条件。"
+      ],
+      "conditions": [
+        "需要调用方合法取得字表；没有字表也可无损保留token，不能生成猜测文本。",
+        "文本流必须有EC终止且无尾随字节。"
+      ],
+      "limits": [
+        "不改EXE、不扩字库、不提供相对跳转重定位。",
+        "纯token往返不等于全脚本注入或字体可显示。"
+      ],
+      "example": [
+        "from python.engines import ice",
+        "tokens = ice.tokenize(message_bytes)",
+        "same = ice.encode_tokens(tokens)"
+      ],
+      "validation": [
+        "合成混合流覆盖多字节index、插入、带参换行、颜色复位和EC。",
+        "截断token及未打补丁时不可编码的索引拒绝。"
+      ],
+      "doc": "engines/ice.md",
+      "python": "python/engines/ice.py",
+      "tests": [
+        "tests/test_engines_tools_a.py"
+      ]
+    },
+    {
+      "id": "ikura",
+      "title": "IKURA / MPX、ISF",
+      "status": "implemented-reference",
+      "level": "container-mpx-roundtrip",
+      "sources": [
+        "tools/IKURA/ikura_decryptor.py"
+      ],
+      "symbols": [
+        "unpack_mpx",
+        "unpack_drs",
+        "handle_isf_xor"
+      ],
+      "garbro": [
+        "ArcFormats/Ikura/ArcDRS.cs"
+      ],
+      "recognition": [
+        "本模块识别SM2MPX10八字节签名，+8为count，索引从32开始。",
+        "20字节项含12字节ASCII名字、u32绝对offset、u32size。",
+        "早期DRS是另一布局，不能让无魔数输入自动落入DRS猜测。"
+      ],
+      "pipeline": [
+        "MPX → ISF/SNR等成员stored → 可能的SECRETFILTER外壳 → 脚本语义。",
+        "源码提供基于调用方secret的ISF外壳算法，但本参考只实现MPX容器层。",
+        "不会从EXE扫描密钥，也不会携带任何游戏secret。"
+      ],
+      "mapping": [
+        "ISF内部name/message需ISF_FILE等解析依据，成员名不是说话人。",
+        "被加密的成员始终作为stored传递，不冒充解密后的对白。",
+        "建立脚本定位键必须在正确解壳之后。"
+      ],
+      "rebuild": [
+        "按原索引次序和原12字节名字字段重算绝对offset和size。",
+        "32字节原头保留；成员数量不能变。",
+        "正文壳的重加密、控制码和脚本跳转不由MPX重建器处理。"
+      ],
+      "conditions": [
+        "只接受本新版MPX，不把所有IKURA归档强行视为该版。",
+        "如果正文仍有secret filter，需要额外合法密钥和算法层确认。"
+      ],
+      "limits": [
+        "不覆盖DRS、ISF AST或加密脚本写回。",
+        "外壳成员可往返不代表文本层已完成。"
+      ],
+      "example": [
+        "from python.archives import ikura",
+        "entries = ikura.unpack_mpx(mpx_bytes)",
+        "new_mpx = ikura.rebuild_mpx(mpx_bytes, stored_payloads)"
+      ],
+      "validation": [
+        "合成SM2MPX10检查20字节索引和绝对offset。",
+        "变长成员重建保留32字节头并更新size。"
+      ],
+      "doc": "engines/ikura.md",
+      "python": "python/archives/ikura.py",
+      "tests": [
+        "tests/test_engines_tools_a.py"
+      ]
+    },
+    {
+      "id": "ivory",
+      "title": "Ivory / fAGS OCB",
+      "status": "implemented-reference",
+      "level": "script-section-cipher",
+      "sources": [
+        "tools/Ivory/OCB.py"
+      ],
+      "symbols": [
+        "generate_keys",
+        "process_data",
+        "parse_fags_sections",
+        "decode_ctex_from_raw",
+        "decode_ccod_from_raw"
+      ],
+      "garbro": [
+        "ArcFormats/Ivory/ArcPK.cs"
+      ],
+      "recognition": [
+        "OCB顶层fAGS魔数及u32总长；各子节有tag、section_size、header_size。",
+        "cTEX承载文本池，cCOD承载字节码及跳转表。",
+        "外层PK与其它Ivory资源不能直接当fAGS解析。"
+      ],
+      "pipeline": [
+        "PK等归档 → OCB → sections → 按节头seed调用crypt解除正文壳。",
+        "cTEX seed在节+12；cCOD seed在+16，不能把两类头混用。",
+        "返回节原始字节，调用方保留未知头与节顺序。"
+      ],
+      "mapping": [
+        "解密文本池中的字符串未必都是台词；必须结合cCOD引用。",
+        "name/message分类不能仅凭字符串内容或出现次序。",
+        "上游FFN/FFn是换行，FFS/FFs是空格控制；本cipher不改这些字节。"
+      ],
+      "rebuild": [
+        "每DWORD按seed轮转索引生成32组key；根据key的位对差异交换相邻bit。",
+        "加密先XOR后置换，解密先置换后XOR，顺序不能互换。",
+        "不足4字节的尾部保留；仅加解密不改变长度或偏移。"
+      ],
+      "conditions": [
+        "seed由调用方从正确节头提供，严格u32；无内置游戏key。",
+        "节边界要求12<=header_size<=section_size且不超顶层声明长度。"
+      ],
+      "limits": [
+        "不实现cCOD完整解析、变长文本池引用修正或跳转表重建。",
+        "cipher往返成功只证明外壳，不证明完整文本部署。"
+      ],
+      "example": [
+        "from python.engines import ivory",
+        "sections = ivory.sections(ocb_bytes)",
+        "plain = ivory.crypt(payload_bytes, seed)",
+        "stored = ivory.crypt(plain, seed, encrypt=True)"
+      ],
+      "validation": [
+        "seed=1的独立bit-pair期望向量验证不只是自反测试。",
+        "跨32组key轮转、DWORD余数及fAGS节解析已测试。"
+      ],
+      "doc": "engines/ivory.md",
+      "python": "python/engines/ivory.py",
+      "tests": [
+        "tests/test_engines_tools_a.py"
+      ]
+    },
+    {
+      "id": "leaf",
+      "title": "Leaf / KCAP、SDT",
+      "status": "implemented-reference",
+      "level": "container-index-raw-pack",
+      "sources": [
+        "tools/Leaf/pak_tool.py"
+      ],
+      "symbols": [
+        "parse_pak",
+        "extract_payload",
+        "lzss_literal_compress"
+      ],
+      "garbro": [
+        "ArcFormats/Leaf/ArcPAK.cs"
+      ],
+      "recognition": [
+        "KCAP魔数及u32count；此变体每项36字节。",
+        "u32flag、24字节名字、u32offset、u32size。",
+        "脚本候选为.sdt；Leaf存在多种包版本，不能由厂商名统配。"
+      ],
+      "pipeline": [
+        "KCAP → index返回stored与flag → 有压缩时需要LZSS块解码 → SDT VM。",
+        "压缩成员有packed_size/unpacked_size两DWORD子头；当前模块不解码该分支。",
+        "pack_raw用于明文字节，flag固定0；SDT assembler/disassembler仅作为后续源码路线。"
+      ],
+      "mapping": [
+        "归档名不是角色名；SDT须按具体opcode/操作数选择message和name。",
+        "不把资源名、跳转标签或整个SDT二进制作为翻译文本。",
+        "共享字符串引用需在脚本层处理，不能用容器偏移替代。"
+      ],
+      "rebuild": [
+        "raw分支按当前名字和payload重算36字节索引及绝对offset。",
+        "名字最多23字节留NUL；不截断或替换非法字符。",
+        "FFFFFFFF等不能凭直觉当删除标记；参考明确拒绝源码所见CCCCCCCC删除项。"
+      ],
+      "conditions": [
+        "只有确认加载器支持flag=0时才考虑以raw替换压缩成员。",
+        "不提供可直接写入游戏目录的IO函数。"
+      ],
+      "limits": [
+        "没有SDT全指令表和跳转重定位；未声称完整Leaf往返。",
+        "压缩档改raw不是byte-exact重压缩。"
+      ],
+      "example": [
+        "from python.archives import leaf",
+        "entries = leaf.index(pak_bytes)",
+        "new_pak = leaf.pack_raw([('test.sdt', b'synthetic')])"
+      ],
+      "validation": [
+        "合成KCAP检查固定项宽、flag=0、绝对offset和payload。",
+        "缺头/截断目录拒绝。"
+      ],
+      "doc": "engines/leaf.md",
+      "python": "python/archives/leaf.py",
+      "tests": [
+        "tests/test_engines_tools_a.py"
+      ]
+    },
+    {
+      "id": "malie",
+      "title": "Malie / 2008 UTF16 与 data5 EXEC",
+      "status": "implemented-reference",
+      "level": "versioned-script-pool-rebuild",
+      "sources": [
+        "tools/Malie/light社08年UTF16新版/malie_fmt.py",
+        "tools/Malie/light社08年UTF16新版/malie_selftest.py",
+        "tools/Malie/light社12年data5/malie_fmt.py",
+        "tools/Malie/light社12年data5/malie_selftest.py"
+      ],
+      "symbols": [
+        "ExecImage",
+        "Reader",
+        "OPERAND_WIDTHS",
+        "message_raw",
+        "main"
+      ],
+      "garbro": [
+        "ArcFormats/Malie/ArcLIB.cs"
+      ],
+      "recognition": [
+        "解壳后的EXEC没有统一魔数；必须显式fmt，不根据游戏年份自动猜。",
+        "utf16-2008-v0：u32 ident_count前缀，seg5池在纯offset消息表之前。",
+        "data5-v1：u16零头、无count标识符链，以STRING_FLAG识别后续ident；带不透明尾部。",
+        "data5-v2：v0风格前段，随后off/len消息表，再seg5池，无尾部。"
+      ],
+      "pipeline": [
+        "LIBP等外包/加密EXEC → 已由可靠路径得到EXEC明文 → parse(fmt) → 消息池。",
+        "Camellia、外包key、DLL加速和EXE操作均未移植；无合法key则停在外壳。",
+        "String长度高位80000000是flag，真正字节长需去掉高位；VarType按链读至tag=0。"
+      ],
+      "mapping": [
+        "消息表index可作为稳定ID；UTF-16正文混有voice、ruby、分页等控制。",
+        "不能把语音名当name；常量池seg3也不全是对白。",
+        "本模块只接受完整message bytes，不进行自动name/message切割或控制码清洗。"
+      ],
+      "rebuild": [
+        "v1/v2的pair offset和length均为seg5内字节位置，不是字符数或seg3+seg5地址。",
+        "上游顶部旧注释与实际message_raw有冲突，本参考采用实际解析/访问代码。",
+        "所有ident/func/label/seg3/CODE前缀原样保留；只重排连续消息池及其索引。",
+        "共享/重叠/有缝池拒绝；不让简单重建误伤别名引用。",
+        "op51必须额外读u8；2008版未知>51拒绝，data5版按来源允许默认零宽opcode。"
+      ],
+      "conditions": [
+        "标签必须落在指令边界；截断指令、奇数字节消息、未知fmt均报错。",
+        "本参考保留所有传入控制码，不照搬上游某项目删除中间特效的策略。"
+      ],
+      "limits": [
+        "未提供消息token重写、语音/注音重构或所有旧版Malie VM。",
+        "data5不透明尾部原样保留，但其外层校验/签名语义仍需部署验证。"
+      ],
+      "example": [
+        "from python.engines import malie",
+        "fmt = 'data5-v2'  # 按实际布局选定后保持一致",
+        "report = malie.selftest(exec_plain, fmt=fmt)",
+        "image = malie.parse(exec_plain, fmt=fmt)",
+        "new_exec = malie.rebuild_messages(exec_plain, raw_messages, fmt=fmt)"
+      ],
+      "validation": [
+        "三种fmt均有合成空往返和变长pool偏移测试，CODE与尾部保持。",
+        "单独测试op51宽度、data5新增opcode门禁；没有运行上游真实游戏自测。"
+      ],
+      "doc": "engines/malie.md",
+      "python": "python/engines/malie.py",
+      "tests": [
+        "tests/test_engines_tools_a.py"
+      ]
+    },
+    {
+      "id": "masys",
+      "title": "Masys / MEG 表达式字符串",
+      "status": "implemented-reference",
+      "level": "expression-string-cipher",
+      "sources": [
+        "tools/Masys/meg_crypt.py"
+      ],
+      "symbols": [
+        "walk_and_crypt",
+        "xor_buf",
+        "EXPR_ATOM",
+        "EXPR_OPS"
+      ],
+      "garbro": [
+        "ArcFormats/Masys/ArcMGS.cs"
+      ],
+      "recognition": [
+        "完整MEG源码检查前三字节MEG并跳过32字节头。",
+        "本接口输入不是整MEG，而是由VM可靠定界的一条表达式。",
+        "表达式00结束，atom62有u16长度和字符串字节；不能全文搜索62。"
+      ],
+      "pipeline": [
+        "MGS等归档 → MEG脚本 → 根据opcode参数模式找到表达式 → crypt_expression。",
+        "参考内置已读到的表达式atom宽度，不导入opcodelist也不依赖sys.path。",
+        "字符串key必须显式传入；本参考不内置项目默认key。"
+      ],
+      "mapping": [
+        "字符串atom可以是对白、变量或资源；必须结合上层opcode判断name/message。",
+        "整数0x62006200等包含62字节仍为整数，不应被解密。",
+        "独立表达式返回同结构bytes，不自动导出翻译清单。"
+      ],
+      "rebuild": [
+        "只XOR atom62的正文，不改u16长度和其它操作数。",
+        "每一个字符串从key位置0开始循环，多个atom不续接key计数。",
+        "此算法用于等长壳转换；变长翻译必须由MEG assembler重算结构和分支。"
+      ],
+      "conditions": [
+        "空key、空表达式、未知token、截断操作数和尾随数据拒绝。",
+        "不使用上游未知opcode自由表达式回退来假装全VM解析。"
+      ],
+      "limits": [
+        "不支持整MEG自动定位、全指令组装或跳转重定位。",
+        "通用byte替换不能替代该token解析器。"
+      ],
+      "example": [
+        "from python.engines import masys",
+        "plain_expr = masys.crypt_expression(expression_bytes, supplied_key)",
+        "stored_expr = masys.crypt_expression(plain_expr, supplied_key)"
+      ],
+      "validation": [
+        "合成表达式同时包含整数和两个字符串，核对只改字符串及key重置。",
+        "截断字符串与空key拒绝。"
+      ],
+      "doc": "engines/masys.md",
+      "python": "python/engines/masys.py",
+      "tests": [
+        "tests/test_engines_tools_a.py"
+      ]
+    },
+    {
+      "id": "melonpan",
+      "title": "Melonpan / WCW TTD",
+      "status": "implemented-reference",
+      "level": "container-index-script-xor",
+      "sources": [
+        "tools/Melonpan/ttd_pack.py",
+        "tools/Melonpan/xorff.py"
+      ],
+      "symbols": [
+        "parse_ttd",
+        "xor_file"
+      ],
+      "garbro": [
+        "Legacy/Melonpan/ArcTTD.cs"
+      ],
+      "recognition": [
+        "WCW前三字节签名，+4是count，+8保留字段；索引从12开始。",
+        "每项size、offset、unknown各u32，再跟统一固定宽名字。",
+        "记录宽度=(首payload偏移-12)/count；必须整除且边界有效。"
+      ],
+      "pipeline": [
+        "TTD → 索引及stored → 若DSFF头则另解LZSS → 已确认剧本再XOR FF。",
+        "GARbro对应实现实际在Legacy/Melonpan，不是ArcFormats/Morning的.FRC格式。",
+        "DSFF长8字节，LZSS初始写指针0xFF0，与通用0xFEE不同。"
+      ],
+      "mapping": [
+        "名字字段是资源名，不是对白name；XOR解壳并不提供脚本语义。",
+        "name/message需要已确认的剧本命令规则，不能直接把所有文本串视作台词。",
+        "unknown字段不可根据看起来像数字就改写。"
+      ],
+      "rebuild": [
+        "index只提取存储切片，保留unknown与name_width便于后续重建。",
+        "script_xor明确用于已确认脚本层，操作自反，不能对整个TTD乱套。",
+        "参考没有重压缩DSFF或回封TTD；上游packer需要原档保存字段。"
+      ],
+      "conditions": [
+        "首次offset推断只能在整个目录都通过边界检查后接受。",
+        "没有压缩库依赖，不调用上游全目录写文件接口。"
+      ],
+      "limits": [
+        "不能把同扩展名Morning TTD套用此实现。",
+        "未声称完成脚本文本往返和部署。"
+      ],
+      "example": [
+        "from python.engines import melonpan",
+        "from python.archives import melonpan as melonpan_archive",
+        "entries = melonpan_archive.index(ttd_bytes)",
+        "plain_script = melonpan.script_xor(confirmed_script_bytes)"
+      ],
+      "validation": [
+        "独立合成WCW验证宽度推导、unknown保留与payload切片。",
+        "XOR已验证固定字节向量，目录越界拒绝。"
+      ],
+      "doc": "engines/melonpan.md",
+      "python": "python/engines/melonpan.py",
+      "tests": [
+        "tests/test_engines_tools_a.py"
+      ],
+      "archive_module": "python/archives/melonpan.py",
+      "module_api": {
+        "python/engines/melonpan.py": [
+          "script_xor"
+        ],
+        "python/archives/melonpan.py": [
+          "index"
+        ]
+      }
+    },
+    {
+      "id": "mirai",
+      "title": "Mirai / ACV1 script.dat",
+      "status": "implemented-reference",
+      "level": "keyed-script-container-roundtrip",
+      "sources": [
+        "tools/Mirai/acv1_dat_tool.py"
+      ],
+      "symbols": [
+        "crc64_ecma_msb",
+        "parse_index",
+        "build_index",
+        "xor_payload_dwords",
+        "pack_entry"
+      ],
+      "garbro": [
+        "ArcFormats/NonColor/ArcACV.cs"
+      ],
+      "recognition": [
+        "必须为ACV1字面魔数；+4的count需XOR 8B6A4E5F。",
+        "索引从8开始，每项21字节：lo、hi、flag、offset、packed_size、capacity。",
+        "offset额外XOR 8B6A4E5F；NonColor旧分支没有这个额外因子。"
+      ],
+      "pipeline": [
+        "ACV1 → 反混淆索引 → DWORD XOR → zlib → script bytes。",
+        "正文DWORD key=调用方crc_low XOR entry.key_lo，末1..3字节不XOR。",
+        "title_key接受调用方提供的标题编码bytes，无默认商业标题或测试key。"
+      ],
+      "mapping": [
+        "解封脚本常含星号标签；标签用于定位，不是要翻译的name。",
+        "容器只有key/hash没有角色信息，不能从key_hi猜name。",
+        "对白与$name变量需脚本文法；该参考不把解出的全部行直接当message。"
+      ],
+      "rebuild": [
+        "保留entry次序、lo/hi、flag及索引到首payload之间的header gap。",
+        "压缩后重新DWORD XOR，重算offset/packed_size，capacity至少容纳新明文。",
+        "密钥来源必须正确；错误key或不完整zlib流拒绝，不输出乱码假成功。",
+        "CRC多项式为42F0E1EBA9EA3693，MSB-first，初末值全1，不是零初值ECMA常见变种。"
+      ],
+      "conditions": [
+        "解压默认累计输出限制64MiB，并限制声明capacity。",
+        "当前是源码中script.dat分支，不把所有ACV资源flags解释为同一解码路线。"
+      ],
+      "limits": [
+        "回封会规范化成员间隙/压缩流，不承诺整个原包byte-exact。",
+        "不提供脚本文本语法回填或游戏加载验证。"
+      ],
+      "example": [
+        "from python.archives import mirai",
+        "key = mirai.title_key(title_text.encode('cp932'))",
+        "scripts = mirai.unpack(dat_bytes, crc_low=key)",
+        "new_dat = mirai.rebuild(dat_bytes, scripts, crc_low=key)"
+      ],
+      "validation": [
+        "ACV1合成key、gap、变长回封及错误key测试通过。",
+        "CRC标准输入123456789低32位向量和DWORD尾余数独立测试。"
+      ],
+      "doc": "engines/mirai.md",
+      "python": "python/archives/mirai.py",
+      "tests": [
+        "tests/test_engines_tools_a.py"
+      ]
+    },
+    {
+      "id": "mnoviolet",
+      "title": "M no Violet / DAT、CScript",
+      "status": "implemented-reference",
+      "level": "container-index-script-header",
+      "sources": [
+        "tools/MnoViolet/mnv_tool.py"
+      ],
+      "symbols": [
+        "find_name_size",
+        "read_entries",
+        "is_script_payload"
+      ],
+      "garbro": [
+        "ArcFormats/MnoViolet/ArcMnoViolet.cs"
+      ],
+      "recognition": [
+        "DAT无固定魔数，u32count后为固定宽名字及size/offset。",
+        "只接受100、68、44字节三种名字字段，且首offset需等于完整目录末尾。",
+        "若有多个宽度满足条件会拒绝歧义，而非按猜测顺序接受。"
+      ],
+      "pipeline": [
+        "DAT → name_width与stored列表 → 脚本24字节压缩头 → 另解LZSS → VM。",
+        "支持的脚本头前16字节为0，随后packed_size、unpacked_size。",
+        "script_header只验证/拆头，不把压缩字节当已解码正文。"
+      ],
+      "mapping": [
+        "上游mnv_script有更高层VM路线；本参考不导入它或附带的游戏script.dat。",
+        "归档名字不是角色name；opcode识别后才可分类message。",
+        "保持成员次序和原变量，不从资源命名猜角色映射。"
+      ],
+      "rebuild": [
+        "此模块未实现DAT重新打包或VM组装；返回bytes有明确stored标记。",
+        "目录宽度和offset不能因翻译后名字变化而自动扩展。",
+        "脚本压缩长度应等于存储长度减24，拒绝截断或额外字节。"
+      ],
+      "conditions": [
+        "本源码LZSS字典初始零、写指针0xFEE；若补解码需沿用该配置。",
+        "未加载目录随附的商业游戏script.dat与script_info.dat。"
+      ],
+      "limits": [
+        "不把与CScript的别名关系当作所有格式都等同。",
+        "没有完整文本往返与引擎启动验证。"
+      ],
+      "example": [
+        "from python.engines import mnoviolet",
+        "from python.archives import mnoviolet as mnoviolet_archive",
+        "name_width, entries = mnoviolet_archive.index(dat_bytes)",
+        "compressed, size = mnoviolet.script_header(script_stored)"
+      ],
+      "validation": [
+        "三种名字宽度均有合成索引测试。",
+        "24字节脚本头的尺寸检查和truncation拒绝已覆盖。"
+      ],
+      "doc": "engines/mnoviolet.md",
+      "python": "python/engines/mnoviolet.py",
+      "tests": [
+        "tests/test_engines_tools_a.py"
+      ],
+      "archive_module": "python/archives/mnoviolet.py",
+      "module_api": {
+        "python/engines/mnoviolet.py": [
+          "script_header"
+        ],
+        "python/archives/mnoviolet.py": [
+          "index"
+        ]
+      }
+    },
+    {
+      "id": "nejii",
+      "title": "NEJII / CDT、144字节BIN",
+      "status": "implemented-reference",
+      "level": "container-raw-pack-fixed-record-text",
+      "sources": [
+        "tools/NEJII/cdt_pack.py",
+        "tools/NEJII/nejii_tool.py"
+      ],
+      "symbols": [
+        "pack_cdt",
+        "parse_cdt",
+        "parse_records",
+        "inject_bin"
+      ],
+      "garbro": [
+        "ArcFormats/Nejii/ArcCDT.cs"
+      ],
+      "recognition": [
+        "CDT尾部12字节为RK1 NUL、count、index_offset；不是文件头魔数。",
+        "每项32字节：16字节ASCII名、packed_size、unpacked_size、flag、offset。",
+        "脚本BIN由144字节定长记录组成，余数字节拒绝。"
+      ],
+      "pipeline": [
+        "CDT → stored成员 → 若压缩需另解LZSS → BIN记录。",
+        "参考提供raw归档生成、目录解析及明确文本opcode的记录提取。",
+        "早期cdt_pack只针对图片；文本路线由同目录nejii_tool额外确认。"
+      ],
+      "mapping": [
+        "64为dialog、6A为name、69为chapter，正文从记录+1开始。",
+        "name只与最多5条记录后的下一dialog配对，配对后清空；是源码启发。",
+        "上游选择肢在+65使用启发识别，本参考不猜该分支。"
+      ],
+      "rebuild": [
+        "dialog正文槽129字节，name/chapter槽143字节；保留终止NUL空间。",
+        "replace_record只更新该槽，dialog+130的换行flag及其后控制字段不变。",
+        "超长译文拒绝，不继承上游截断字符串的策略，也不变动总记录数。"
+      ],
+      "conditions": [
+        "cp932默认严格；使用gbk前必须验证目标字体/编码。",
+        "压缩成员reader未实现，stored不是明文；raw封包须确认目标支持。"
+      ],
+      "limits": [
+        "name回溯不是控制流证明；不支持全部选择/章节语义。",
+        "固定槽回填不能让译文无限增长。"
+      ],
+      "example": [
+        "from python.engines import nejii",
+        "from python.archives import nejii as nejii_archive",
+        "rows = nejii.extract_records(bin_bytes)",
+        "new_bin = nejii.replace_record(bin_bytes, 1, 'synthetic')",
+        "new_cdt = nejii_archive.pack_raw([('test.BIN', new_bin)])"
+      ],
+      "validation": [
+        "合成CDT尾索引、BIN说话人绑定与定长回填已测试。",
+        "保留dialog flag并验证超长译文拒绝。"
+      ],
+      "doc": "engines/nejii.md",
+      "python": "python/engines/nejii.py",
+      "tests": [
+        "tests/test_engines_tools_a.py"
+      ],
+      "archive_module": "python/archives/nejii.py",
+      "module_api": {
+        "python/engines/nejii.py": [
+          "extract_records",
+          "replace_record"
+        ],
+        "python/archives/nejii.py": [
+          "pack_raw",
+          "index"
+        ]
+      }
+    },
+    {
+      "id": "noncolor",
+      "title": "NonColor / legacy ACV",
+      "status": "implemented-reference",
+      "level": "keyed-legacy-script-container-roundtrip",
+      "sources": [
+        "tools/NonColor/dat_tool.py"
+      ],
+      "symbols": [
+        "parse_header",
+        "build_header",
+        "xor_payload_dwords",
+        "unpack_entry"
+      ],
+      "garbro": [
+        "ArcFormats/NonColor/ArcDAT.cs",
+        "ArcFormats/NonColor/ArcACV.cs"
+      ],
+      "recognition": [
+        "此参考专门处理无ACV1字面魔数的legacy分支。",
+        "首u32=count XOR 26ACA46E，索引从4开始，每项仍21字节。",
+        "offset仅XOR key_lo；不可带入Mirai ACV1的8B6A4E5F额外XOR。"
+      ],
+      "pipeline": [
+        "legacy DAT → 索引 → DWORD XOR → zlib → script bytes。",
+        "标题CRC低32位由调用方给定；不复制上游DEFAULT_GAME_TITLE。",
+        "本模块只复用同知识库mirai中的纯CRC/XOR/zlib函数，没有运行时上游依赖。"
+      ],
+      "mapping": [
+        "key_lo/key_hi不代表角色name，标签和变量也不自动变台词。",
+        "仍需脚本文法来识别name/message/选择/控制命令。",
+        "保留$str20一类变量原样，上层翻译不可擅自实化。"
+      ],
+      "rebuild": [
+        "索引末尾到首payload的gap长度不固定，按原字节完整保留。",
+        "只XOR完整DWORD，末1..3字节保持原样；压缩使用标准库zlib。",
+        "按原次序保留entry keys、flag，重新计算offset/packed_size并确保capacity足够。",
+        "ACV1输入显式拒绝，避免把近似结构当成相同格式。"
+      ],
+      "conditions": [
+        "必须取得合法crc_low或正确标题编码；缺key不猜测、不联网查找。",
+        "zlib解压检查EOF、尾随数据、capacity及累计输出预算。"
+      ],
+      "limits": [
+        "上游工具能读两分支，本参考拆为两个显式模块以避免误路由。",
+        "成员间隙和压缩结果规范化，未承诺全档byte-exact或完整VM文本往返。"
+      ],
+      "example": [
+        "from python.archives import noncolor",
+        "scripts = noncolor.unpack(dat_bytes, crc_low=supplied_key)",
+        "new_dat = noncolor.rebuild(dat_bytes, scripts, crc_low=supplied_key)"
+      ],
+      "validation": [
+        "合成legacy档验证无魔数count、无extra-XOR及8字节gap保持。",
+        "和Mirai互相拒绝错误分支，错误key/预算限制及变长重建已测试。"
+      ],
+      "doc": "engines/noncolor.md",
+      "python": "python/archives/noncolor.py",
+      "tests": [
+        "tests/test_engines_tools_a.py"
+      ]
+    }
+  ]
+}

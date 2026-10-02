@@ -1,0 +1,3694 @@
+{
+  "schema": "galgame-script-roundtrip-provenance-v1",
+  "group": "tools-b",
+  "source_revisions": {
+    "SExtractor": {
+      "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+      "license": "GPL-3.0-only",
+      "read_only": true
+    },
+    "GARbro-Mod": {
+      "commit": "bc26d991ef5cdc0e1ecb32122ee9a48c3375750c",
+      "license": "MIT (per cited files)",
+      "read_only": true
+    }
+  },
+  "license_notice": "SExtractor-derived code remains GPL-3.0-only; root integration must include GPLv3 full text. xuse.py contains the complete MIT notice for its GARbro-derived GD index algorithm.",
+  "source_only": [
+    {
+      "id": "selene",
+      "evidence": "Reviewed SFF source is a font-atlas/character-box dumper using PIL and fixed font resources, not a script parser. No fake text support created.",
+      "sources": [
+        "tools/Selene/sff_dump.py"
+      ],
+      "available_artifacts_not_executed": [
+        "tools/Selene/font_to_tga.py",
+        "tools/Selene/Selene_dll_1E4330h_20000h.dat"
+      ]
+    },
+    {
+      "id": "valkyria",
+      "evidence": "Reviewed Python handles BMP pixels only; native archive/script converter is executable-only. reg.yaml documents secondary JSON/text patterns but not a trustworthy standalone native roundtrip. No fake native support created.",
+      "sources": [
+        "tools/Valkyria/README.md",
+        "tools/Valkyria/bmp_compress.py",
+        "src/reg.yaml"
+      ],
+      "available_artifacts_not_executed": [
+        "tools/Valkyria/ValkyriaTool-v4.exe"
+      ]
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "python/engines/overflow.py",
+      "engine_id": "overflow",
+      "kind": "self-contained Python adaptation",
+      "license": "GPL-3.0-only",
+      "upstream_attribution": "瑜瑜 & Steins;Gate; SExtractor contributors",
+      "sources": [
+        {
+          "repository": "SExtractor",
+          "path": "tools/Overflow/MISS EACH OTHER/script_xml_text.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/Overflow/README.md",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        }
+      ],
+      "source_symbols": [],
+      "implemented_scope": [
+        "Script/TextRes/Log resource-ID association",
+        "referenced name/message XML rewriting",
+        "shared-resource and dangling-reference checks"
+      ],
+      "not_implemented": [
+        "archive unpack/repack",
+        "binary-to-XML and XML-to-binary",
+        "other OBJ/SCR/XML variants",
+        "complete inline-control grammar",
+        "game deployment"
+      ]
+    },
+    {
+      "path": "engines/overflow.md",
+      "engine_id": "overflow",
+      "kind": "Chinese evidence and scoped workflow reference",
+      "license": "GPL-3.0-only",
+      "upstream_attribution": "瑜瑜 & Steins;Gate; SExtractor contributors",
+      "sources": [
+        {
+          "repository": "SExtractor",
+          "path": "tools/Overflow/MISS EACH OTHER/script_xml_text.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/Overflow/README.md",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/Overflow/サマー ラディッシュ バケーション 2/srv2_xml_text.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "documentation context only"
+        }
+      ],
+      "source_symbols": [],
+      "implemented_scope": [
+        "Script/TextRes/Log resource-ID association",
+        "referenced name/message XML rewriting",
+        "shared-resource and dangling-reference checks"
+      ],
+      "not_implemented": [
+        "archive unpack/repack",
+        "binary-to-XML and XML-to-binary",
+        "other OBJ/SCR/XML variants",
+        "complete inline-control grammar",
+        "game deployment"
+      ]
+    },
+    {
+      "path": "python/archives/patisserie.py",
+      "engine_id": "patisserie",
+      "kind": "self-contained Python adaptation",
+      "license": "GPL-3.0-only",
+      "upstream_attribution": "Steins;Gate; SExtractor contributors",
+      "sources": [
+        {
+          "repository": "SExtractor",
+          "path": "tools/Patisserie/bin_pack.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/Patisserie/README.md",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        }
+      ],
+      "source_symbols": [],
+      "implemented_scope": [
+        "OZ/OFST offset table",
+        "DATA/DFLT member encoding",
+        "bounded zlib decoding"
+      ],
+      "not_implemented": [
+        "external filename-list association",
+        "script recognition",
+        "name/message extraction",
+        "script writer",
+        "game deployment"
+      ]
+    },
+    {
+      "path": "engines/patisserie.md",
+      "engine_id": "patisserie",
+      "kind": "Chinese evidence and scoped workflow reference",
+      "license": "GPL-3.0-only",
+      "upstream_attribution": "Steins;Gate; SExtractor contributors",
+      "sources": [
+        {
+          "repository": "SExtractor",
+          "path": "tools/Patisserie/bin_pack.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/Patisserie/README.md",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "GARbro-Mod",
+          "path": "ArcFormats/Patisserie/ArcBIN.cs",
+          "role": "documentation corroboration only",
+          "copyright": "Copyright (C) 2016 by morkt",
+          "license": "MIT",
+          "commit": "bc26d991ef5cdc0e1ecb32122ee9a48c3375750c"
+        }
+      ],
+      "source_symbols": [],
+      "implemented_scope": [
+        "OZ/OFST offset table",
+        "DATA/DFLT member encoding",
+        "bounded zlib decoding"
+      ],
+      "not_implemented": [
+        "external filename-list association",
+        "script recognition",
+        "name/message extraction",
+        "script writer",
+        "game deployment"
+      ]
+    },
+    {
+      "path": "python/engines/puremail.py",
+      "engine_id": "puremail",
+      "kind": "self-contained Python adaptation",
+      "license": "GPL-3.0-only",
+      "upstream_attribution": "Steins;Gate; SExtractor contributors",
+      "sources": [
+        {
+          "repository": "SExtractor",
+          "path": "tools/PureMail/obj_processor.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/PureMail/obj_processor_v2.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/PureMail/README.md",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        }
+      ],
+      "source_symbols": [],
+      "implemented_scope": [
+        "explicit OBJ V1/V2 index widths",
+        "contiguous string-table rebuilding",
+        "opaque-tail pointer relocation",
+        "strict control-byte preservation"
+      ],
+      "not_implemented": [
+        "DAT container",
+        "VM-level name/message roles",
+        "overlapping/aliased OBJ layouts",
+        "game deployment"
+      ]
+    },
+    {
+      "path": "engines/puremail.md",
+      "engine_id": "puremail",
+      "kind": "Chinese evidence and scoped workflow reference",
+      "license": "GPL-3.0-only",
+      "upstream_attribution": "Steins;Gate; SExtractor contributors",
+      "sources": [
+        {
+          "repository": "SExtractor",
+          "path": "tools/PureMail/obj_processor.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/PureMail/obj_processor_v2.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/PureMail/README.md",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        }
+      ],
+      "source_symbols": [],
+      "implemented_scope": [
+        "explicit OBJ V1/V2 index widths",
+        "contiguous string-table rebuilding",
+        "opaque-tail pointer relocation",
+        "strict control-byte preservation"
+      ],
+      "not_implemented": [
+        "DAT container",
+        "VM-level name/message roles",
+        "overlapping/aliased OBJ layouts",
+        "game deployment"
+      ]
+    },
+    {
+      "path": "python/archives/ransel.py",
+      "engine_id": "ransel",
+      "kind": "self-contained Python adaptation",
+      "license": "GPL-3.0-only",
+      "upstream_attribution": "satan53x / SExtractor contributors",
+      "sources": [
+        {
+          "repository": "SExtractor",
+          "path": "tools/Ransel/pack_bcd.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        }
+      ],
+      "source_symbols": [],
+      "implemented_scope": [
+        "BinaryCombineData BCD/BCL paired archive",
+        "decimal absolute offsets and byte lengths",
+        "explicit archive-name pairing"
+      ],
+      "not_implemented": [
+        "member script format",
+        "name/message extraction",
+        "script writer",
+        "game deployment"
+      ]
+    },
+    {
+      "path": "engines/ransel.md",
+      "engine_id": "ransel",
+      "kind": "Chinese evidence and scoped workflow reference",
+      "license": "GPL-3.0-only",
+      "upstream_attribution": "satan53x / SExtractor contributors",
+      "sources": [
+        {
+          "repository": "SExtractor",
+          "path": "tools/Ransel/pack_bcd.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        }
+      ],
+      "source_symbols": [],
+      "implemented_scope": [
+        "BinaryCombineData BCD/BCL paired archive",
+        "decimal absolute offsets and byte lengths",
+        "explicit archive-name pairing"
+      ],
+      "not_implemented": [
+        "member script format",
+        "name/message extraction",
+        "script writer",
+        "game deployment"
+      ]
+    },
+    {
+      "path": "python/engines/sfa.py",
+      "engine_id": "sfa",
+      "kind": "self-contained Python adaptation",
+      "license": "GPL-3.0-only",
+      "upstream_attribution": "Steins;Gate; SExtractor contributors",
+      "sources": [
+        {
+          "repository": "SExtractor",
+          "path": "tools/SFA/fga_pack.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/SFA/README.md",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "src/reg.yaml",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        }
+      ],
+      "source_symbols": [
+        {
+          "path": "src/reg.yaml",
+          "symbol": "SFA_AOS"
+        }
+      ],
+      "implemented_scope": [
+        "MSB-first pre-order Huffman member codec",
+        "bounded tree decoder",
+        "explicit bracket-name AOS lines and slctwnd choices"
+      ],
+      "not_implemented": [
+        "full linked-block FGA archive writer",
+        "complete AOS syntax",
+        "text script writer",
+        "game deployment"
+      ],
+      "archive_module": "python/archives/sfa.py",
+      "module_api": {
+        "python/engines/sfa.py": [
+          "extract_aos_lines"
+        ],
+        "python/archives/sfa.py": [
+          "compress_member",
+          "decompress_member"
+        ]
+      },
+      "scope_note": "Historical source/test scope covers both split outputs; module_api records current API ownership. Algorithms and license notices are preserved."
+    },
+    {
+      "path": "engines/sfa.md",
+      "engine_id": "sfa",
+      "kind": "Chinese evidence and scoped workflow reference",
+      "license": "GPL-3.0-only",
+      "upstream_attribution": "Steins;Gate; SExtractor contributors",
+      "sources": [
+        {
+          "repository": "SExtractor",
+          "path": "tools/SFA/fga_pack.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/SFA/README.md",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "src/reg.yaml",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        }
+      ],
+      "source_symbols": [
+        {
+          "path": "src/reg.yaml",
+          "symbol": "SFA_AOS"
+        }
+      ],
+      "implemented_scope": [
+        "MSB-first pre-order Huffman member codec",
+        "bounded tree decoder",
+        "explicit bracket-name AOS lines and slctwnd choices"
+      ],
+      "not_implemented": [
+        "full linked-block FGA archive writer",
+        "complete AOS syntax",
+        "text script writer",
+        "game deployment"
+      ]
+    },
+    {
+      "path": "python/archives/slgsystem.py",
+      "engine_id": "slgsystem",
+      "kind": "self-contained Python adaptation",
+      "license": "GPL-3.0-only",
+      "upstream_attribution": "Steins;Gate & 多了芒果; SExtractor contributors",
+      "sources": [
+        {
+          "repository": "SExtractor",
+          "path": "tools/SLGSystem/szs_tool.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/SLGSystem/README.md",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        }
+      ],
+      "source_symbols": [],
+      "implemented_scope": [
+        "SZS100__ u64 index rebuild",
+        "LCG XOR and add/sub cipher directions",
+        "explicit seed/mode"
+      ],
+      "not_implemented": [
+        "script VM",
+        "name/message/choice extraction",
+        "script writer",
+        "key discovery",
+        "game deployment"
+      ]
+    },
+    {
+      "path": "engines/slgsystem.md",
+      "engine_id": "slgsystem",
+      "kind": "Chinese evidence and scoped workflow reference",
+      "license": "GPL-3.0-only",
+      "upstream_attribution": "Steins;Gate & 多了芒果; SExtractor contributors",
+      "sources": [
+        {
+          "repository": "SExtractor",
+          "path": "tools/SLGSystem/szs_tool.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/SLGSystem/README.md",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        }
+      ],
+      "source_symbols": [],
+      "implemented_scope": [
+        "SZS100__ u64 index rebuild",
+        "LCG XOR and add/sub cipher directions",
+        "explicit seed/mode"
+      ],
+      "not_implemented": [
+        "script VM",
+        "name/message/choice extraction",
+        "script writer",
+        "key discovery",
+        "game deployment"
+      ]
+    },
+    {
+      "path": "python/archives/sakanagl.py",
+      "engine_id": "sakanagl",
+      "kind": "self-contained Python adaptation",
+      "license": "GPL-3.0-only",
+      "upstream_attribution": "Steins;Gate; SExtractor contributors; upstream Python credits a GARbro C# cipher port",
+      "sources": [
+        {
+          "repository": "SExtractor",
+          "path": "tools/SakanaGL/sxstorage_pack.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/SakanaGL/README.md",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        }
+      ],
+      "source_symbols": [],
+      "implemented_scope": [
+        "u32 SakanaGL stream cipher with clear tail bytes",
+        "offset/size member keys",
+        "big-endian decoded SX index and iterative tree validation"
+      ],
+      "not_implemented": [
+        "Zstandard",
+        "SSXXDEFL outer index decoding/encoding",
+        "complete SXStorage writer",
+        "metadata hash policy",
+        "script semantics",
+        "game deployment"
+      ]
+    },
+    {
+      "path": "engines/sakanagl.md",
+      "engine_id": "sakanagl",
+      "kind": "Chinese evidence and scoped workflow reference",
+      "license": "GPL-3.0-only",
+      "upstream_attribution": "Steins;Gate; SExtractor contributors; upstream Python credits a GARbro C# cipher port",
+      "sources": [
+        {
+          "repository": "SExtractor",
+          "path": "tools/SakanaGL/sxstorage_pack.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/SakanaGL/README.md",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        }
+      ],
+      "source_symbols": [],
+      "implemented_scope": [
+        "u32 SakanaGL stream cipher with clear tail bytes",
+        "offset/size member keys",
+        "big-endian decoded SX index and iterative tree validation"
+      ],
+      "not_implemented": [
+        "Zstandard",
+        "SSXXDEFL outer index decoding/encoding",
+        "complete SXStorage writer",
+        "metadata hash policy",
+        "script semantics",
+        "game deployment"
+      ]
+    },
+    {
+      "path": "python/archives/sceneplayer.py",
+      "engine_id": "sceneplayer",
+      "kind": "self-contained Python adaptation",
+      "license": "GPL-3.0-only",
+      "upstream_attribution": "Steins;Gate; SExtractor contributors",
+      "sources": [
+        {
+          "repository": "SExtractor",
+          "path": "tools/ScenePlayer/pmx_pack.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/ScenePlayer/README.md",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        }
+      ],
+      "source_symbols": [],
+      "implemented_scope": [
+        "PMX whole-stream zlib then XOR21 wrapper",
+        "count/name/size index reconstruction",
+        "bounded inflate"
+      ],
+      "not_implemented": [
+        "script member grammar",
+        "name/message extraction",
+        "script writer",
+        "other ScenePlayer formats",
+        "game deployment"
+      ]
+    },
+    {
+      "path": "engines/sceneplayer.md",
+      "engine_id": "sceneplayer",
+      "kind": "Chinese evidence and scoped workflow reference",
+      "license": "GPL-3.0-only",
+      "upstream_attribution": "Steins;Gate; SExtractor contributors",
+      "sources": [
+        {
+          "repository": "SExtractor",
+          "path": "tools/ScenePlayer/pmx_pack.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/ScenePlayer/README.md",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "GARbro-Mod",
+          "path": "ArcFormats/ScenePlayer/ArcPMX.cs",
+          "role": "documentation corroboration only",
+          "copyright": "Copyright (C) 2017 by morkt",
+          "license": "MIT",
+          "commit": "bc26d991ef5cdc0e1ecb32122ee9a48c3375750c"
+        }
+      ],
+      "source_symbols": [],
+      "implemented_scope": [
+        "PMX whole-stream zlib then XOR21 wrapper",
+        "count/name/size index reconstruction",
+        "bounded inflate"
+      ],
+      "not_implemented": [
+        "script member grammar",
+        "name/message extraction",
+        "script writer",
+        "other ScenePlayer formats",
+        "game deployment"
+      ]
+    },
+    {
+      "path": "python/engines/studiomiris.py",
+      "engine_id": "studiomiris",
+      "kind": "self-contained Python adaptation",
+      "license": "GPL-3.0-only",
+      "upstream_attribution": "Coroz; SExtractor contributors",
+      "sources": [
+        {
+          "repository": "SExtractor",
+          "path": "tools/StudioMiris/skm_to_txt.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/StudioMiris/txt_to_skm.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/StudioMiris/README.md",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        }
+      ],
+      "source_symbols": [],
+      "implemented_scope": [
+        "SKMSd relative offset/length table",
+        "XOR-FF string pool",
+        "dynamic or explicit pool base with gap/tail preservation"
+      ],
+      "not_implemented": [
+        "outer archive",
+        "VM name/message references",
+        "noncontiguous/overlapping tables",
+        "game deployment"
+      ]
+    },
+    {
+      "path": "engines/studiomiris.md",
+      "engine_id": "studiomiris",
+      "kind": "Chinese evidence and scoped workflow reference",
+      "license": "GPL-3.0-only",
+      "upstream_attribution": "Coroz; SExtractor contributors",
+      "sources": [
+        {
+          "repository": "SExtractor",
+          "path": "tools/StudioMiris/skm_to_txt.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/StudioMiris/txt_to_skm.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/StudioMiris/README.md",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        }
+      ],
+      "source_symbols": [],
+      "implemented_scope": [
+        "SKMSd relative offset/length table",
+        "XOR-FF string pool",
+        "dynamic or explicit pool base with gap/tail preservation"
+      ],
+      "not_implemented": [
+        "outer archive",
+        "VM name/message references",
+        "noncontiguous/overlapping tables",
+        "game deployment"
+      ]
+    },
+    {
+      "path": "python/engines/studiopolaris.py",
+      "engine_id": "studiopolaris",
+      "kind": "self-contained Python adaptation",
+      "license": "GPL-3.0-only",
+      "upstream_attribution": "Steins;Gate; SExtractor contributors",
+      "sources": [
+        {
+          "repository": "SExtractor",
+          "path": "tools/StudioPolaris/opcode.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/StudioPolaris/disassembler.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/StudioPolaris/assembler.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/StudioPolaris/README.md",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        }
+      ],
+      "source_symbols": [],
+      "implemented_scope": [
+        "known SCD_ instruction boundaries",
+        "opcode-00 TEXT",
+        "code-relative jump and header-label relocation"
+      ],
+      "not_implemented": [
+        "scddecompress encryption/compression stage",
+        "archive",
+        "stack-flow name/choice interpretation",
+        "complete text-control grammar",
+        "game deployment"
+      ]
+    },
+    {
+      "path": "engines/studiopolaris.md",
+      "engine_id": "studiopolaris",
+      "kind": "Chinese evidence and scoped workflow reference",
+      "license": "GPL-3.0-only",
+      "upstream_attribution": "Steins;Gate; SExtractor contributors",
+      "sources": [
+        {
+          "repository": "SExtractor",
+          "path": "tools/StudioPolaris/opcode.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/StudioPolaris/disassembler.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/StudioPolaris/assembler.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/StudioPolaris/README.md",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        }
+      ],
+      "source_symbols": [],
+      "implemented_scope": [
+        "known SCD_ instruction boundaries",
+        "opcode-00 TEXT",
+        "code-relative jump and header-label relocation"
+      ],
+      "not_implemented": [
+        "scddecompress encryption/compression stage",
+        "archive",
+        "stack-flow name/choice interpretation",
+        "complete text-control grammar",
+        "game deployment"
+      ]
+    },
+    {
+      "path": "python/archives/succubus.py",
+      "engine_id": "succubus",
+      "kind": "self-contained Python adaptation",
+      "license": "GPL-3.0-only",
+      "upstream_attribution": "这位同学 (VFA); Steins;Gate (other tools); SExtractor contributors",
+      "sources": [
+        {
+          "repository": "SExtractor",
+          "path": "tools/Succubus/VFA包处理工具/extract.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/Succubus/VFA包处理工具/repack.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/Succubus/README.md",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        }
+      ],
+      "source_symbols": [],
+      "implemented_scope": [
+        "RIFF/VFA1 hdri/data/dent",
+        "directory-event order and UTF-16 names",
+        "all chunk sizes and data-relative file offsets rebuilt"
+      ],
+      "not_implemented": [
+        "ARC1 implementation",
+        "script VM",
+        "name/message extraction",
+        "script writer",
+        "font atlases",
+        "game deployment"
+      ]
+    },
+    {
+      "path": "engines/succubus.md",
+      "engine_id": "succubus",
+      "kind": "Chinese evidence and scoped workflow reference",
+      "license": "GPL-3.0-only",
+      "upstream_attribution": "这位同学 (VFA); Steins;Gate (other tools); SExtractor contributors",
+      "sources": [
+        {
+          "repository": "SExtractor",
+          "path": "tools/Succubus/VFA包处理工具/extract.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/Succubus/VFA包处理工具/repack.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/Succubus/README.md",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/Succubus/arc_DATA_pack.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "documentation context only"
+        }
+      ],
+      "source_symbols": [],
+      "implemented_scope": [
+        "RIFF/VFA1 hdri/data/dent",
+        "directory-event order and UTF-16 names",
+        "all chunk sizes and data-relative file offsets rebuilt"
+      ],
+      "not_implemented": [
+        "ARC1 implementation",
+        "script VM",
+        "name/message extraction",
+        "script writer",
+        "font atlases",
+        "game deployment"
+      ]
+    },
+    {
+      "path": "python/engines/systemc.py",
+      "engine_id": "systemc",
+      "kind": "self-contained Python adaptation",
+      "license": "GPL-3.0-only",
+      "upstream_attribution": "satan53x / SExtractor contributors",
+      "sources": [
+        {
+          "repository": "SExtractor",
+          "path": "tools/SystemC/fpk_pack_SystemB3.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/SystemC/README.md",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "src/reg.yaml",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        }
+      ],
+      "source_symbols": [
+        {
+          "path": "src/reg.yaml",
+          "symbol": "_BIN_SystemC"
+        }
+      ],
+      "implemented_scope": [
+        "ZLC2 literal groups and decoded-length header",
+        "literal-only bounded reader",
+        "explicit fullwidth-number name header"
+      ],
+      "not_implemented": [
+        "FPK full writer and size-field clarification",
+        "general LZ decoder",
+        "script name/message pairing",
+        "script writer",
+        "font handling",
+        "game deployment"
+      ],
+      "archive_module": "python/archives/systemc.py",
+      "module_api": {
+        "python/engines/systemc.py": [
+          "systemc_name_header"
+        ],
+        "python/archives/systemc.py": [
+          "encode_zlc2_literals",
+          "decode_zlc2_literals"
+        ]
+      },
+      "scope_note": "Historical source/test scope covers both split outputs; module_api records current API ownership. Algorithms and license notices are preserved."
+    },
+    {
+      "path": "engines/systemc.md",
+      "engine_id": "systemc",
+      "kind": "Chinese evidence and scoped workflow reference",
+      "license": "GPL-3.0-only",
+      "upstream_attribution": "satan53x / SExtractor contributors",
+      "sources": [
+        {
+          "repository": "SExtractor",
+          "path": "tools/SystemC/fpk_pack_SystemB3.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/SystemC/README.md",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "src/reg.yaml",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        }
+      ],
+      "source_symbols": [
+        {
+          "path": "src/reg.yaml",
+          "symbol": "_BIN_SystemC"
+        }
+      ],
+      "implemented_scope": [
+        "ZLC2 literal groups and decoded-length header",
+        "literal-only bounded reader",
+        "explicit fullwidth-number name header"
+      ],
+      "not_implemented": [
+        "FPK full writer and size-field clarification",
+        "general LZ decoder",
+        "script name/message pairing",
+        "script writer",
+        "font handling",
+        "game deployment"
+      ]
+    },
+    {
+      "path": "python/engines/tanaka.py",
+      "engine_id": "tanaka",
+      "kind": "self-contained Python adaptation",
+      "license": "GPL-3.0-only",
+      "upstream_attribution": "satan53x / SExtractor contributors",
+      "sources": [
+        {
+          "repository": "SExtractor",
+          "path": "tools/Tanaka/SCB1_unpack.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/Tanaka/SCB1_pack.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/Tanaka/README.md",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "src/reg.yaml",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "src/extract_BIN.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        }
+      ],
+      "source_symbols": [
+        {
+          "path": "src/reg.yaml",
+          "symbol": "_BIN_Tanaka"
+        }
+      ],
+      "implemented_scope": [
+        "SCB1 template preserving index and recalculating member offsets",
+        "isolated 25/09/24 text records",
+        "stored-byte-length delta"
+      ],
+      "not_implemented": [
+        "ARCG variant",
+        "full script relocation",
+        "name/message pairing",
+        "selection semantics",
+        "game deployment"
+      ],
+      "archive_module": "python/archives/tanaka.py",
+      "module_api": {
+        "python/engines/tanaka.py": [
+          "parse_text_record",
+          "rewrite_text_record"
+        ],
+        "python/archives/tanaka.py": [
+          "parse_scb1",
+          "repack_scb1"
+        ]
+      },
+      "scope_note": "Historical source/test scope covers both split outputs; module_api records current API ownership. Algorithms and license notices are preserved."
+    },
+    {
+      "path": "engines/tanaka.md",
+      "engine_id": "tanaka",
+      "kind": "Chinese evidence and scoped workflow reference",
+      "license": "GPL-3.0-only",
+      "upstream_attribution": "satan53x / SExtractor contributors",
+      "sources": [
+        {
+          "repository": "SExtractor",
+          "path": "tools/Tanaka/SCB1_unpack.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/Tanaka/SCB1_pack.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/Tanaka/README.md",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "src/reg.yaml",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "src/extract_BIN.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        }
+      ],
+      "source_symbols": [
+        {
+          "path": "src/reg.yaml",
+          "symbol": "_BIN_Tanaka"
+        }
+      ],
+      "implemented_scope": [
+        "SCB1 template preserving index and recalculating member offsets",
+        "isolated 25/09/24 text records",
+        "stored-byte-length delta"
+      ],
+      "not_implemented": [
+        "ARCG variant",
+        "full script relocation",
+        "name/message pairing",
+        "selection semantics",
+        "game deployment"
+      ]
+    },
+    {
+      "path": "python/engines/triangle.py",
+      "engine_id": "triangle",
+      "kind": "self-contained Python adaptation",
+      "license": "GPL-3.0-only",
+      "upstream_attribution": "多了芒果; SExtractor contributors",
+      "sources": [
+        {
+          "repository": "SExtractor",
+          "path": "tools/Triangle/mop_sd.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/Triangle/text_extract.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/Triangle/text_inject.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/Triangle/README.md",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        }
+      ],
+      "source_symbols": [],
+      "implemented_scope": [
+        "MOP/EXD/KLH explicit text/choice profiles",
+        "name references and voice trailers",
+        "encoded-character wrapping and segment-count rebuild"
+      ],
+      "not_implemented": [
+        "whole-SD disassembler",
+        "embedded data recovery",
+        "whole-file jump relocation",
+        "name pool",
+        "archive",
+        "game deployment"
+      ]
+    },
+    {
+      "path": "engines/triangle.md",
+      "engine_id": "triangle",
+      "kind": "Chinese evidence and scoped workflow reference",
+      "license": "GPL-3.0-only",
+      "upstream_attribution": "多了芒果; SExtractor contributors",
+      "sources": [
+        {
+          "repository": "SExtractor",
+          "path": "tools/Triangle/mop_sd.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/Triangle/text_extract.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/Triangle/text_inject.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/Triangle/README.md",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        }
+      ],
+      "source_symbols": [],
+      "implemented_scope": [
+        "MOP/EXD/KLH explicit text/choice profiles",
+        "name references and voice trailers",
+        "encoded-character wrapping and segment-count rebuild"
+      ],
+      "not_implemented": [
+        "whole-SD disassembler",
+        "embedded data recovery",
+        "whole-file jump relocation",
+        "name pool",
+        "archive",
+        "game deployment"
+      ]
+    },
+    {
+      "path": "python/engines/ugos.py",
+      "engine_id": "ugos",
+      "kind": "self-contained Python adaptation",
+      "license": "GPL-3.0-only",
+      "upstream_attribution": "朝比奈真冬 (batch additions); Cosetto (container-route attribution); SExtractor contributors",
+      "sources": [
+        {
+          "repository": "SExtractor",
+          "path": "tools/U-GOS/o_tool.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/U-GOS/README.md",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        }
+      ],
+      "source_symbols": [],
+      "implemented_scope": [
+        "explicit code_end and known opcode widths",
+        "u8/u16/u32 pointer-backed candidates",
+        "append-only changed blocks and all known alias pointers",
+        "edge-control preservation"
+      ],
+      "not_implemented": [
+        "DET archive",
+        "automatic verified code boundary",
+        "complete VM semantics",
+        "interior control segmentation",
+        "unknown aliases",
+        "game deployment"
+      ]
+    },
+    {
+      "path": "engines/ugos.md",
+      "engine_id": "ugos",
+      "kind": "Chinese evidence and scoped workflow reference",
+      "license": "GPL-3.0-only",
+      "upstream_attribution": "朝比奈真冬 (batch additions); Cosetto (container-route attribution); SExtractor contributors",
+      "sources": [
+        {
+          "repository": "SExtractor",
+          "path": "tools/U-GOS/o_tool.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/U-GOS/README.md",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        }
+      ],
+      "source_symbols": [],
+      "implemented_scope": [
+        "explicit code_end and known opcode widths",
+        "u8/u16/u32 pointer-backed candidates",
+        "append-only changed blocks and all known alias pointers",
+        "edge-control preservation"
+      ],
+      "not_implemented": [
+        "DET archive",
+        "automatic verified code boundary",
+        "complete VM semantics",
+        "interior control segmentation",
+        "unknown aliases",
+        "game deployment"
+      ]
+    },
+    {
+      "path": "python/engines/umesoft.py",
+      "engine_id": "umesoft",
+      "kind": "self-contained Python adaptation",
+      "license": "GPL-3.0-only",
+      "upstream_attribution": "satan53x / SExtractor contributors",
+      "sources": [
+        {
+          "repository": "SExtractor",
+          "path": "tools/U-MeSoft/PK_pack.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "src/reg.yaml",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        }
+      ],
+      "source_symbols": [
+        {
+          "path": "src/reg.yaml",
+          "symbol": "U-MeSoft"
+        }
+      ],
+      "implemented_scope": [
+        "PK footer index and preserved six-byte metadata",
+        "SCR/TBL alignment, XOR42, literal groups and FF0000 terminator",
+        "narrow mes/$L/\\n/\\x0 text dialect"
+      ],
+      "not_implemented": [
+        "general LZ decoder",
+        "full SCR grammar and writer",
+        "other text commands",
+        "game deployment"
+      ],
+      "archive_module": "python/archives/umesoft.py",
+      "module_api": {
+        "python/engines/umesoft.py": [
+          "extract_script_lines"
+        ],
+        "python/archives/umesoft.py": [
+          "encode_member",
+          "decode_literal_member",
+          "parse_pk",
+          "repack_pk"
+        ]
+      },
+      "scope_note": "Historical source/test scope covers both split outputs; module_api records current API ownership. Algorithms and license notices are preserved."
+    },
+    {
+      "path": "engines/umesoft.md",
+      "engine_id": "umesoft",
+      "kind": "Chinese evidence and scoped workflow reference",
+      "license": "GPL-3.0-only",
+      "upstream_attribution": "satan53x / SExtractor contributors",
+      "sources": [
+        {
+          "repository": "SExtractor",
+          "path": "tools/U-MeSoft/PK_pack.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "src/reg.yaml",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        }
+      ],
+      "source_symbols": [
+        {
+          "path": "src/reg.yaml",
+          "symbol": "U-MeSoft"
+        }
+      ],
+      "implemented_scope": [
+        "PK footer index and preserved six-byte metadata",
+        "SCR/TBL alignment, XOR42, literal groups and FF0000 terminator",
+        "narrow mes/$L/\\n/\\x0 text dialect"
+      ],
+      "not_implemented": [
+        "general LZ decoder",
+        "full SCR grammar and writer",
+        "other text commands",
+        "game deployment"
+      ]
+    },
+    {
+      "path": "python/engines/unison.py",
+      "engine_id": "unison",
+      "kind": "self-contained Python adaptation",
+      "license": "GPL-3.0-only",
+      "upstream_attribution": "Steins;Gate; SExtractor contributors",
+      "sources": [
+        {
+          "repository": "SExtractor",
+          "path": "tools/Unison/lazy_common.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/Unison/val_extract.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/Unison/README.md",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        }
+      ],
+      "source_symbols": [],
+      "implemented_scope": [
+        "VAL u24 code/table sizes",
+        "explicit reviewed DD type-zero sites",
+        "pool object rebuilding with gap/tail preservation",
+        "unreviewed alias and suffix overlap rejection"
+      ],
+      "not_implemented": [
+        "VCT archive",
+        "complete bytecode disassembler",
+        "name/choice interpretation",
+        "game deployment"
+      ]
+    },
+    {
+      "path": "engines/unison.md",
+      "engine_id": "unison",
+      "kind": "Chinese evidence and scoped workflow reference",
+      "license": "GPL-3.0-only",
+      "upstream_attribution": "Steins;Gate; SExtractor contributors",
+      "sources": [
+        {
+          "repository": "SExtractor",
+          "path": "tools/Unison/lazy_common.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/Unison/val_extract.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/Unison/README.md",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        }
+      ],
+      "source_symbols": [],
+      "implemented_scope": [
+        "VAL u24 code/table sizes",
+        "explicit reviewed DD type-zero sites",
+        "pool object rebuilding with gap/tail preservation",
+        "unreviewed alias and suffix overlap rejection"
+      ],
+      "not_implemented": [
+        "VCT archive",
+        "complete bytecode disassembler",
+        "name/choice interpretation",
+        "game deployment"
+      ]
+    },
+    {
+      "path": "python/engines/winters.py",
+      "engine_id": "winters",
+      "kind": "self-contained Python adaptation",
+      "license": "GPL-3.0-only",
+      "upstream_attribution": "Steins;Gate; SExtractor contributors",
+      "sources": [
+        {
+          "repository": "SExtractor",
+          "path": "tools/Winters/ifp_pack.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/Winters/bytes_pad.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/Winters/README.md",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        }
+      ],
+      "source_symbols": [
+        {
+          "path": "src/reg.yaml",
+          "symbol": "_BIN_Winters"
+        }
+      ],
+      "implemented_scope": [
+        "IFP sparse first/subsequent index placement",
+        "explicit unmasked member types",
+        "fixed data base and capacity checks",
+        "original-ISD-allocation guard"
+      ],
+      "not_implemented": [
+        "CAPYBARA DAT writer",
+        "masked IFP members",
+        "ISD text and control-flow semantics",
+        "script writer",
+        "game deployment"
+      ],
+      "archive_module": "python/archives/winters.py",
+      "module_api": {
+        "python/engines/winters.py": [
+          "pad_isd_to_original"
+        ],
+        "python/archives/winters.py": [
+          "pack_ifp",
+          "unpack_ifp"
+        ]
+      },
+      "scope_note": "Historical source/test scope covers both split outputs; module_api records current API ownership. Algorithms and license notices are preserved."
+    },
+    {
+      "path": "engines/winters.md",
+      "engine_id": "winters",
+      "kind": "Chinese evidence and scoped workflow reference",
+      "license": "GPL-3.0-only",
+      "upstream_attribution": "Steins;Gate; SExtractor contributors",
+      "sources": [
+        {
+          "repository": "SExtractor",
+          "path": "tools/Winters/ifp_pack.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/Winters/bytes_pad.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/Winters/README.md",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/Winters/dat_pack.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "documentation context only"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "src/reg.yaml",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "documentation context only"
+        }
+      ],
+      "source_symbols": [
+        {
+          "path": "src/reg.yaml",
+          "symbol": "_BIN_Winters"
+        }
+      ],
+      "implemented_scope": [
+        "IFP sparse first/subsequent index placement",
+        "explicit unmasked member types",
+        "fixed data base and capacity checks",
+        "original-ISD-allocation guard"
+      ],
+      "not_implemented": [
+        "CAPYBARA DAT writer",
+        "masked IFP members",
+        "ISD text and control-flow semantics",
+        "script writer",
+        "game deployment"
+      ]
+    },
+    {
+      "path": "python/engines/xuse.py",
+      "engine_id": "xuse",
+      "kind": "self-contained Python adaptation",
+      "license": "GPL-3.0-only AND MIT",
+      "upstream_attribution": "satan53x / SExtractor contributors; morkt",
+      "sources": [
+        {
+          "repository": "SExtractor",
+          "path": "tools/Xuse/gd_scr_decrypt.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/Xuse/README.md",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "GARbro-Mod",
+          "path": "ArcFormats/Xuse/ArcGD.cs",
+          "role": "implementation and documentation",
+          "copyright": "Copyright (C) 2016 by morkt",
+          "license": "MIT",
+          "commit": "bc26d991ef5cdc0e1ecb32122ee9a48c3375750c"
+        }
+      ],
+      "source_symbols": [],
+      "implemented_scope": [
+        "GD plus companion DLL DATA index",
+        "member offsets/lengths rebuilt with gap preservation",
+        "explicit four-byte script XOR key"
+      ],
+      "not_implemented": [
+        "script grammar",
+        "name/message extraction",
+        "script writer",
+        "other Xuse archive families",
+        "game deployment"
+      ],
+      "archive_module": "python/archives/xuse.py",
+      "module_api": {
+        "python/engines/xuse.py": [
+          "crypt_script"
+        ],
+        "python/archives/xuse.py": [
+          "parse_gd",
+          "repack_gd"
+        ]
+      },
+      "scope_note": "Historical source/test scope covers both split outputs; module_api records current API ownership. Algorithms and license notices are preserved."
+    },
+    {
+      "path": "engines/xuse.md",
+      "engine_id": "xuse",
+      "kind": "Chinese evidence and scoped workflow reference",
+      "license": "GPL-3.0-only AND MIT",
+      "upstream_attribution": "satan53x / SExtractor contributors; morkt",
+      "sources": [
+        {
+          "repository": "SExtractor",
+          "path": "tools/Xuse/gd_scr_decrypt.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/Xuse/README.md",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "GARbro-Mod",
+          "path": "ArcFormats/Xuse/ArcGD.cs",
+          "role": "implementation and documentation",
+          "copyright": "Copyright (C) 2016 by morkt",
+          "license": "MIT",
+          "commit": "bc26d991ef5cdc0e1ecb32122ee9a48c3375750c"
+        }
+      ],
+      "source_symbols": [],
+      "implemented_scope": [
+        "GD plus companion DLL DATA index",
+        "member offsets/lengths rebuilt with gap preservation",
+        "explicit four-byte script XOR key"
+      ],
+      "not_implemented": [
+        "script grammar",
+        "name/message extraction",
+        "script writer",
+        "other Xuse archive families",
+        "game deployment"
+      ]
+    },
+    {
+      "path": "python/archives/yatagarasu.py",
+      "engine_id": "yatagarasu",
+      "kind": "self-contained Python adaptation",
+      "license": "GPL-3.0-only",
+      "upstream_attribution": "Steins;Gate; SExtractor contributors",
+      "sources": [
+        {
+          "repository": "SExtractor",
+          "path": "tools/Yatagarasu/pkg_pack_v1.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/Yatagarasu/README.md",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        }
+      ],
+      "source_symbols": [],
+      "implemented_scope": [
+        "PKG v1 length-XOR signature",
+        "136-byte encrypted index with embedded key slots",
+        "per-member restarted XOR phase"
+      ],
+      "not_implemented": [
+        "later PKG versions",
+        "script grammar",
+        "name/message extraction",
+        "script writer",
+        "game deployment"
+      ]
+    },
+    {
+      "path": "engines/yatagarasu.md",
+      "engine_id": "yatagarasu",
+      "kind": "Chinese evidence and scoped workflow reference",
+      "license": "GPL-3.0-only",
+      "upstream_attribution": "Steins;Gate; SExtractor contributors",
+      "sources": [
+        {
+          "repository": "SExtractor",
+          "path": "tools/Yatagarasu/pkg_pack_v1.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/Yatagarasu/README.md",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        }
+      ],
+      "source_symbols": [],
+      "implemented_scope": [
+        "PKG v1 length-XOR signature",
+        "136-byte encrypted index with embedded key slots",
+        "per-member restarted XOR phase"
+      ],
+      "not_implemented": [
+        "later PKG versions",
+        "script grammar",
+        "name/message extraction",
+        "script writer",
+        "game deployment"
+      ]
+    },
+    {
+      "path": "python/engines/yuka.py",
+      "engine_id": "yuka",
+      "kind": "self-contained Python adaptation",
+      "license": "GPL-3.0-only",
+      "upstream_attribution": "瑜瑜 & Steins;Gate; SExtractor contributors",
+      "sources": [
+        {
+          "repository": "SExtractor",
+          "path": "tools/Yuka/yks_text_v2.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/Yuka/README.md",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        }
+      ],
+      "source_symbols": [],
+      "implemented_scope": [
+        "canonical YKS002 section validation",
+        "explicit GraphicTextOut PARAM and Select.Text links",
+        "typed T/B pool relocation and binary preservation",
+        "shared-role/control checks"
+      ],
+      "not_implemented": [
+        "YKS001/v1.1",
+        "archive",
+        "PARAM-embedded name variant",
+        "other output commands",
+        "game deployment"
+      ]
+    },
+    {
+      "path": "engines/yuka.md",
+      "engine_id": "yuka",
+      "kind": "Chinese evidence and scoped workflow reference",
+      "license": "GPL-3.0-only",
+      "upstream_attribution": "瑜瑜 & Steins;Gate; SExtractor contributors",
+      "sources": [
+        {
+          "repository": "SExtractor",
+          "path": "tools/Yuka/yks_text_v2.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/Yuka/README.md",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        }
+      ],
+      "source_symbols": [],
+      "implemented_scope": [
+        "canonical YKS002 section validation",
+        "explicit GraphicTextOut PARAM and Select.Text links",
+        "typed T/B pool relocation and binary preservation",
+        "shared-role/control checks"
+      ],
+      "not_implemented": [
+        "YKS001/v1.1",
+        "archive",
+        "PARAM-embedded name variant",
+        "other output commands",
+        "game deployment"
+      ]
+    },
+    {
+      "path": "python/engines/livemaker.py",
+      "engine_id": "livemaker",
+      "kind": "self-contained Python adaptation",
+      "license": "GPL-3.0-only",
+      "upstream_attribution": "satan53x / SExtractor contributors",
+      "sources": [
+        {
+          "repository": "SExtractor",
+          "path": "src/reg.yaml",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "src/extract_CSV.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        }
+      ],
+      "source_symbols": [
+        {
+          "path": "src/reg.yaml",
+          "symbol": "CSV_Livemaker"
+        }
+      ],
+      "implemented_scope": [
+        "exact Original text header",
+        "bracket-name parsing",
+        "adjacent target-column rewrite with proper multiline CSV quoting"
+      ],
+      "not_implemented": [
+        "native LSB",
+        "external CSV exporter/importer",
+        "script control grammar",
+        "archive",
+        "game deployment"
+      ]
+    },
+    {
+      "path": "engines/livemaker.md",
+      "engine_id": "livemaker",
+      "kind": "Chinese evidence and scoped workflow reference",
+      "license": "GPL-3.0-only",
+      "upstream_attribution": "satan53x / SExtractor contributors",
+      "sources": [
+        {
+          "repository": "SExtractor",
+          "path": "src/reg.yaml",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "src/extract_CSV.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        }
+      ],
+      "source_symbols": [
+        {
+          "path": "src/reg.yaml",
+          "symbol": "CSV_Livemaker"
+        }
+      ],
+      "implemented_scope": [
+        "exact Original text header",
+        "bracket-name parsing",
+        "adjacent target-column rewrite with proper multiline CSV quoting"
+      ],
+      "not_implemented": [
+        "native LSB",
+        "external CSV exporter/importer",
+        "script control grammar",
+        "archive",
+        "game deployment"
+      ]
+    },
+    {
+      "path": "python/engines/nsystem.py",
+      "engine_id": "nsystem",
+      "kind": "self-contained Python adaptation",
+      "license": "GPL-3.0-only",
+      "upstream_attribution": "satan53x / SExtractor contributors",
+      "sources": [
+        {
+          "repository": "SExtractor",
+          "path": "src/reg.yaml",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "src/extract_TXT.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "src/extract_BIN.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        }
+      ],
+      "source_symbols": [
+        {
+          "path": "src/reg.yaml",
+          "symbol": "_BIN_NSystem"
+        }
+      ],
+      "implemented_scope": [
+        "fixed 0x458/count-based address table arithmetic without eval",
+        "isolated record preLen-27 relation",
+        "uppercase name identifier preservation"
+      ],
+      "not_implemented": [
+        "archive",
+        "full VM and record boundaries",
+        "whole-script relocation",
+        "display-name mapping",
+        "game deployment"
+      ]
+    },
+    {
+      "path": "engines/nsystem.md",
+      "engine_id": "nsystem",
+      "kind": "Chinese evidence and scoped workflow reference",
+      "license": "GPL-3.0-only",
+      "upstream_attribution": "satan53x / SExtractor contributors",
+      "sources": [
+        {
+          "repository": "SExtractor",
+          "path": "src/reg.yaml",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "src/extract_TXT.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "src/extract_BIN.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        }
+      ],
+      "source_symbols": [
+        {
+          "path": "src/reg.yaml",
+          "symbol": "_BIN_NSystem"
+        }
+      ],
+      "implemented_scope": [
+        "fixed 0x458/count-based address table arithmetic without eval",
+        "isolated record preLen-27 relation",
+        "uppercase name identifier preservation"
+      ],
+      "not_implemented": [
+        "archive",
+        "full VM and record boundaries",
+        "whole-script relocation",
+        "display-name mapping",
+        "game deployment"
+      ]
+    },
+    {
+      "path": "python/engines/system_epsilon.py",
+      "engine_id": "system-epsilon",
+      "kind": "self-contained Python adaptation",
+      "license": "GPL-3.0-only",
+      "upstream_attribution": "satan53x / SExtractor contributors",
+      "sources": [
+        {
+          "repository": "SExtractor",
+          "path": "src/reg.yaml",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "src/extract_BIN.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "src/extract_TXT.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        }
+      ],
+      "source_symbols": [
+        {
+          "path": "src/reg.yaml",
+          "symbol": "_BIN_SYSTEM-ε"
+        }
+      ],
+      "implemented_scope": [
+        "isolated segment name marker and opaque stored-length delta",
+        "bounded exact preset pointer patterns",
+        "control/role preservation"
+      ],
+      "not_implemented": [
+        "archive",
+        "full VM",
+        "verified record directory",
+        "whole-file relocation",
+        "name/message association",
+        "game deployment"
+      ]
+    },
+    {
+      "path": "engines/system-epsilon.md",
+      "engine_id": "system-epsilon",
+      "kind": "Chinese evidence and scoped workflow reference",
+      "license": "GPL-3.0-only",
+      "upstream_attribution": "satan53x / SExtractor contributors",
+      "sources": [
+        {
+          "repository": "SExtractor",
+          "path": "src/reg.yaml",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "src/extract_BIN.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "src/extract_TXT.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        }
+      ],
+      "source_symbols": [
+        {
+          "path": "src/reg.yaml",
+          "symbol": "_BIN_SYSTEM-ε"
+        }
+      ],
+      "implemented_scope": [
+        "isolated segment name marker and opaque stored-length delta",
+        "bounded exact preset pointer patterns",
+        "control/role preservation"
+      ],
+      "not_implemented": [
+        "archive",
+        "full VM",
+        "verified record directory",
+        "whole-file relocation",
+        "name/message association",
+        "game deployment"
+      ]
+    },
+    {
+      "path": "python/engines/violent.py",
+      "engine_id": "violent",
+      "kind": "self-contained Python adaptation",
+      "license": "GPL-3.0-only",
+      "upstream_attribution": "satan53x / SExtractor contributors",
+      "sources": [
+        {
+          "repository": "SExtractor",
+          "path": "src/reg.yaml",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "src/common.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        }
+      ],
+      "source_symbols": [
+        {
+          "path": "src/reg.yaml",
+          "symbol": "_BIN_Violent"
+        },
+        {
+          "path": "src/common.py",
+          "symbol": "isShiftJis/checkJIS"
+        }
+      ],
+      "implemented_scope": [
+        "historical restricted JIS byte-pair validator",
+        "explicit-region NUL candidate scan",
+        "unknown-role evidence only"
+      ],
+      "not_implemented": [
+        "engine identification",
+        "archive/decryption",
+        "name/message semantics",
+        "any writer",
+        "relocation",
+        "game deployment"
+      ]
+    },
+    {
+      "path": "engines/violent.md",
+      "engine_id": "violent",
+      "kind": "Chinese evidence and scoped workflow reference",
+      "license": "GPL-3.0-only",
+      "upstream_attribution": "satan53x / SExtractor contributors",
+      "sources": [
+        {
+          "repository": "SExtractor",
+          "path": "src/reg.yaml",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "src/common.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        }
+      ],
+      "source_symbols": [
+        {
+          "path": "src/reg.yaml",
+          "symbol": "_BIN_Violent"
+        },
+        {
+          "path": "src/common.py",
+          "symbol": "isShiftJis/checkJIS"
+        }
+      ],
+      "implemented_scope": [
+        "historical restricted JIS byte-pair validator",
+        "explicit-region NUL candidate scan",
+        "unknown-role evidence only"
+      ],
+      "not_implemented": [
+        "engine identification",
+        "archive/decryption",
+        "name/message semantics",
+        "any writer",
+        "relocation",
+        "game deployment"
+      ]
+    },
+    {
+      "path": "tests/test_engines_tools_b.py",
+      "kind": "locally authored synthetic unittest fixtures",
+      "license": "GPL-3.0-only (retain MIT notices for identified reference sources)",
+      "sources": [
+        {
+          "repository": "SExtractor",
+          "path": "tools/Overflow/MISS EACH OTHER/script_xml_text.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/Overflow/README.md",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/Overflow/サマー ラディッシュ バケーション 2/srv2_xml_text.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "documentation context only"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/Patisserie/bin_pack.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/Patisserie/README.md",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "GARbro-Mod",
+          "path": "ArcFormats/Patisserie/ArcBIN.cs",
+          "role": "documentation corroboration only",
+          "copyright": "Copyright (C) 2016 by morkt",
+          "license": "MIT",
+          "commit": "bc26d991ef5cdc0e1ecb32122ee9a48c3375750c"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/PureMail/obj_processor.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/PureMail/obj_processor_v2.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/PureMail/README.md",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/Ransel/pack_bcd.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/SFA/fga_pack.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/SFA/README.md",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "src/reg.yaml",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/SLGSystem/szs_tool.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/SLGSystem/README.md",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/SakanaGL/sxstorage_pack.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/SakanaGL/README.md",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/ScenePlayer/pmx_pack.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/ScenePlayer/README.md",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "GARbro-Mod",
+          "path": "ArcFormats/ScenePlayer/ArcPMX.cs",
+          "role": "documentation corroboration only",
+          "copyright": "Copyright (C) 2017 by morkt",
+          "license": "MIT",
+          "commit": "bc26d991ef5cdc0e1ecb32122ee9a48c3375750c"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/Selene/sff_dump.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "GARbro-Mod",
+          "path": "ArcFormats/Selene/ArcKCAP.cs",
+          "role": "archive/encryption context only; not implemented",
+          "copyright": "Copyright (C) 2015 by morkt",
+          "license": "MIT",
+          "commit": "bc26d991ef5cdc0e1ecb32122ee9a48c3375750c"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/StudioMiris/skm_to_txt.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/StudioMiris/txt_to_skm.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/StudioMiris/README.md",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/StudioPolaris/opcode.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/StudioPolaris/disassembler.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/StudioPolaris/assembler.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/StudioPolaris/README.md",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/Succubus/VFA包处理工具/extract.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/Succubus/VFA包处理工具/repack.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/Succubus/README.md",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/Succubus/arc_DATA_pack.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "documentation context only"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/SystemC/fpk_pack_SystemB3.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/SystemC/README.md",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/Tanaka/SCB1_unpack.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/Tanaka/SCB1_pack.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/Tanaka/README.md",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "src/extract_BIN.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/Triangle/mop_sd.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/Triangle/text_extract.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/Triangle/text_inject.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/Triangle/README.md",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/U-GOS/o_tool.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/U-GOS/README.md",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/U-MeSoft/PK_pack.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/Unison/lazy_common.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/Unison/val_extract.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/Unison/README.md",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/Valkyria/README.md",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/Valkyria/bmp_compress.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/Winters/ifp_pack.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/Winters/bytes_pad.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/Winters/README.md",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/Winters/dat_pack.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "documentation context only"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/Xuse/gd_scr_decrypt.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/Xuse/README.md",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "GARbro-Mod",
+          "path": "ArcFormats/Xuse/ArcGD.cs",
+          "role": "implementation and documentation",
+          "copyright": "Copyright (C) 2016 by morkt",
+          "license": "MIT",
+          "commit": "bc26d991ef5cdc0e1ecb32122ee9a48c3375750c"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/Yatagarasu/pkg_pack_v1.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/Yatagarasu/README.md",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/Yuka/yks_text_v2.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/Yuka/README.md",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "src/extract_CSV.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "src/extract_TXT.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "src/common.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        }
+      ],
+      "scope": "Authored for tools-b; no copied game data, no reference-repository execution"
+    },
+    {
+      "path": "catalog/tools-b.json",
+      "kind": "source coverage catalog",
+      "license": "GPL-3.0-only (retain MIT notices for identified reference sources)",
+      "sources": [
+        {
+          "repository": "SExtractor",
+          "path": "tools/Overflow/MISS EACH OTHER/script_xml_text.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/Overflow/README.md",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/Overflow/サマー ラディッシュ バケーション 2/srv2_xml_text.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "documentation context only"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/Patisserie/bin_pack.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/Patisserie/README.md",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "GARbro-Mod",
+          "path": "ArcFormats/Patisserie/ArcBIN.cs",
+          "role": "documentation corroboration only",
+          "copyright": "Copyright (C) 2016 by morkt",
+          "license": "MIT",
+          "commit": "bc26d991ef5cdc0e1ecb32122ee9a48c3375750c"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/PureMail/obj_processor.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/PureMail/obj_processor_v2.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/PureMail/README.md",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/Ransel/pack_bcd.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/SFA/fga_pack.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/SFA/README.md",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "src/reg.yaml",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/SLGSystem/szs_tool.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/SLGSystem/README.md",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/SakanaGL/sxstorage_pack.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/SakanaGL/README.md",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/ScenePlayer/pmx_pack.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/ScenePlayer/README.md",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "GARbro-Mod",
+          "path": "ArcFormats/ScenePlayer/ArcPMX.cs",
+          "role": "documentation corroboration only",
+          "copyright": "Copyright (C) 2017 by morkt",
+          "license": "MIT",
+          "commit": "bc26d991ef5cdc0e1ecb32122ee9a48c3375750c"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/Selene/sff_dump.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "GARbro-Mod",
+          "path": "ArcFormats/Selene/ArcKCAP.cs",
+          "role": "archive/encryption context only; not implemented",
+          "copyright": "Copyright (C) 2015 by morkt",
+          "license": "MIT",
+          "commit": "bc26d991ef5cdc0e1ecb32122ee9a48c3375750c"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/StudioMiris/skm_to_txt.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/StudioMiris/txt_to_skm.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/StudioMiris/README.md",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/StudioPolaris/opcode.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/StudioPolaris/disassembler.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/StudioPolaris/assembler.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/StudioPolaris/README.md",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/Succubus/VFA包处理工具/extract.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/Succubus/VFA包处理工具/repack.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/Succubus/README.md",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/Succubus/arc_DATA_pack.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "documentation context only"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/SystemC/fpk_pack_SystemB3.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/SystemC/README.md",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/Tanaka/SCB1_unpack.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/Tanaka/SCB1_pack.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/Tanaka/README.md",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "src/extract_BIN.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/Triangle/mop_sd.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/Triangle/text_extract.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/Triangle/text_inject.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/Triangle/README.md",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/U-GOS/o_tool.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/U-GOS/README.md",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/U-MeSoft/PK_pack.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/Unison/lazy_common.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/Unison/val_extract.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/Unison/README.md",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/Valkyria/README.md",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/Valkyria/bmp_compress.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/Winters/ifp_pack.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/Winters/bytes_pad.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/Winters/README.md",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/Winters/dat_pack.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "documentation context only"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/Xuse/gd_scr_decrypt.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/Xuse/README.md",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "GARbro-Mod",
+          "path": "ArcFormats/Xuse/ArcGD.cs",
+          "role": "implementation and documentation",
+          "copyright": "Copyright (C) 2016 by morkt",
+          "license": "MIT",
+          "commit": "bc26d991ef5cdc0e1ecb32122ee9a48c3375750c"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/Yatagarasu/pkg_pack_v1.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/Yatagarasu/README.md",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/Yuka/yks_text_v2.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/Yuka/README.md",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "src/extract_CSV.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "src/extract_TXT.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "src/common.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        }
+      ],
+      "scope": "Authored for tools-b; no copied game data, no reference-repository execution"
+    },
+    {
+      "path": "provenance/tools-b.json",
+      "kind": "per-file source and test manifest",
+      "license": "GPL-3.0-only (retain MIT notices for identified reference sources)",
+      "sources": [
+        {
+          "repository": "SExtractor",
+          "path": "tools/Overflow/MISS EACH OTHER/script_xml_text.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/Overflow/README.md",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/Overflow/サマー ラディッシュ バケーション 2/srv2_xml_text.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "documentation context only"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/Patisserie/bin_pack.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/Patisserie/README.md",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "GARbro-Mod",
+          "path": "ArcFormats/Patisserie/ArcBIN.cs",
+          "role": "documentation corroboration only",
+          "copyright": "Copyright (C) 2016 by morkt",
+          "license": "MIT",
+          "commit": "bc26d991ef5cdc0e1ecb32122ee9a48c3375750c"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/PureMail/obj_processor.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/PureMail/obj_processor_v2.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/PureMail/README.md",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/Ransel/pack_bcd.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/SFA/fga_pack.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/SFA/README.md",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "src/reg.yaml",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/SLGSystem/szs_tool.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/SLGSystem/README.md",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/SakanaGL/sxstorage_pack.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/SakanaGL/README.md",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/ScenePlayer/pmx_pack.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/ScenePlayer/README.md",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "GARbro-Mod",
+          "path": "ArcFormats/ScenePlayer/ArcPMX.cs",
+          "role": "documentation corroboration only",
+          "copyright": "Copyright (C) 2017 by morkt",
+          "license": "MIT",
+          "commit": "bc26d991ef5cdc0e1ecb32122ee9a48c3375750c"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/Selene/sff_dump.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "GARbro-Mod",
+          "path": "ArcFormats/Selene/ArcKCAP.cs",
+          "role": "archive/encryption context only; not implemented",
+          "copyright": "Copyright (C) 2015 by morkt",
+          "license": "MIT",
+          "commit": "bc26d991ef5cdc0e1ecb32122ee9a48c3375750c"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/StudioMiris/skm_to_txt.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/StudioMiris/txt_to_skm.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/StudioMiris/README.md",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/StudioPolaris/opcode.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/StudioPolaris/disassembler.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/StudioPolaris/assembler.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/StudioPolaris/README.md",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/Succubus/VFA包处理工具/extract.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/Succubus/VFA包处理工具/repack.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/Succubus/README.md",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/Succubus/arc_DATA_pack.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "documentation context only"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/SystemC/fpk_pack_SystemB3.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/SystemC/README.md",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/Tanaka/SCB1_unpack.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/Tanaka/SCB1_pack.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/Tanaka/README.md",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "src/extract_BIN.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/Triangle/mop_sd.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/Triangle/text_extract.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/Triangle/text_inject.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/Triangle/README.md",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/U-GOS/o_tool.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/U-GOS/README.md",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/U-MeSoft/PK_pack.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/Unison/lazy_common.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/Unison/val_extract.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/Unison/README.md",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/Valkyria/README.md",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/Valkyria/bmp_compress.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/Winters/ifp_pack.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/Winters/bytes_pad.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/Winters/README.md",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/Winters/dat_pack.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "documentation context only"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/Xuse/gd_scr_decrypt.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/Xuse/README.md",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "GARbro-Mod",
+          "path": "ArcFormats/Xuse/ArcGD.cs",
+          "role": "implementation and documentation",
+          "copyright": "Copyright (C) 2016 by morkt",
+          "license": "MIT",
+          "commit": "bc26d991ef5cdc0e1ecb32122ee9a48c3375750c"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/Yatagarasu/pkg_pack_v1.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/Yatagarasu/README.md",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/Yuka/yks_text_v2.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "tools/Yuka/README.md",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "src/extract_CSV.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "src/extract_TXT.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        },
+        {
+          "repository": "SExtractor",
+          "path": "src/common.py",
+          "commit": "8d8d976fd04ae54e7c677705af937273d04a376a",
+          "license": "GPL-3.0-only",
+          "role": "algorithm/rule/credit source"
+        }
+      ],
+      "scope": "Authored for tools-b; no copied game data, no reference-repository execution"
+    }
+  ]
+}

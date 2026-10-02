@@ -1,0 +1,394 @@
+{
+  "schema": "kirikiri-filter-coverage/1",
+  "source_repository": "GARbro-Mod",
+  "commit": "bc26d991ef5cdc0e1ecb32122ee9a48c3375750c",
+  "license": "MIT",
+  "scope": "All transitive ICrypt subclasses declared in KiriKiri/*.cs at source revision; inventory, not supported-game claims",
+  "filters": [
+    {
+      "class": "AkabeiCrypt",
+      "base": "ICrypt",
+      "source": "CryptAlgorithms.cs",
+      "implementation": "akabei",
+      "status": "ported-byte-filter"
+    },
+    {
+      "class": "AlteredPinkCrypt",
+      "base": "ICrypt",
+      "source": "CryptAlgorithms.cs",
+      "implementation": null,
+      "status": "not-ported"
+    },
+    {
+      "class": "AppliqueCrypt",
+      "base": "ICrypt",
+      "source": "CryptAlgorithms.cs",
+      "implementation": null,
+      "status": "not-ported"
+    },
+    {
+      "class": "CabbageCxCrypt",
+      "base": "SenrenCxCrypt",
+      "source": "YuzCrypt.cs",
+      "implementation": null,
+      "status": "not-ported"
+    },
+    {
+      "class": "ChainReactionCrypt",
+      "base": "ICrypt",
+      "source": "ChainReactionCrypt.cs",
+      "implementation": null,
+      "status": "not-ported"
+    },
+    {
+      "class": "ChocolatCrypt",
+      "base": "ChainReactionCrypt",
+      "source": "ChainReactionCrypt.cs",
+      "implementation": null,
+      "status": "not-ported"
+    },
+    {
+      "class": "CroixCrypt",
+      "base": "ICrypt",
+      "source": "CroixCrypt.cs",
+      "implementation": null,
+      "status": "not-ported"
+    },
+    {
+      "class": "CxEncryption",
+      "base": "ICrypt",
+      "source": "KiriKiriCx.cs",
+      "implementation": null,
+      "status": "specialized-senren-profile-only"
+    },
+    {
+      "class": "CzCrypt",
+      "base": "ICrypt",
+      "source": "CzCrypt.cs",
+      "implementation": null,
+      "status": "not-ported"
+    },
+    {
+      "class": "DameganeCrypt",
+      "base": "ICrypt",
+      "source": "CryptAlgorithms.cs",
+      "implementation": null,
+      "status": "not-ported"
+    },
+    {
+      "class": "DieselmineCrypt",
+      "base": "ICrypt",
+      "source": "CryptAlgorithms.cs",
+      "implementation": null,
+      "status": "not-ported"
+    },
+    {
+      "class": "ExaCrypt",
+      "base": "ICrypt",
+      "source": "CryptAlgorithms.cs",
+      "implementation": "exa",
+      "status": "ported-byte-filter"
+    },
+    {
+      "class": "FateCrypt",
+      "base": "ICrypt",
+      "source": "CryptAlgorithms.cs",
+      "implementation": null,
+      "status": "not-ported"
+    },
+    {
+      "class": "FestivalCrypt",
+      "base": "ICrypt",
+      "source": "CryptAlgorithms.cs",
+      "implementation": null,
+      "status": "not-ported"
+    },
+    {
+      "class": "FlyingShineCrypt",
+      "base": "ICrypt",
+      "source": "CryptAlgorithms.cs",
+      "implementation": null,
+      "status": "not-ported"
+    },
+    {
+      "class": "GensouCrypt",
+      "base": "ICrypt",
+      "source": "CryptAlgorithms.cs",
+      "implementation": null,
+      "status": "not-ported"
+    },
+    {
+      "class": "HachukanoCrypt",
+      "base": "ChainReactionCrypt",
+      "source": "ChainReactionCrypt.cs",
+      "implementation": null,
+      "status": "not-ported"
+    },
+    {
+      "class": "HaikuoCrypt",
+      "base": "ICrypt",
+      "source": "CryptAlgorithms.cs",
+      "implementation": "haikuo",
+      "status": "ported-byte-filter"
+    },
+    {
+      "class": "HashCrypt",
+      "base": "ICrypt",
+      "source": "CryptAlgorithms.cs",
+      "implementation": "hash",
+      "status": "ported-byte-filter"
+    },
+    {
+      "class": "HibikiCrypt",
+      "base": "ICrypt",
+      "source": "CryptAlgorithms.cs",
+      "implementation": null,
+      "status": "not-ported"
+    },
+    {
+      "class": "HighRunningCrypt",
+      "base": "ICrypt",
+      "source": "CryptAlgorithms.cs",
+      "implementation": null,
+      "status": "not-ported"
+    },
+    {
+      "class": "HoneyCombCrypt",
+      "base": "ICrypt",
+      "source": "CryptAlgorithms.cs",
+      "implementation": null,
+      "status": "not-ported"
+    },
+    {
+      "class": "HxCrypt",
+      "base": "CxEncryption",
+      "source": "HxCrypt.cs",
+      "implementation": "python/archives/kirikiri_hxv4.py",
+      "status": "static-index-payload-identity-preserving-rebuild"
+    },
+    {
+      "class": "HxCryptLite",
+      "base": "CxEncryption",
+      "source": "HxCryptLite.cs",
+      "implementation": null,
+      "status": "not-ported"
+    },
+    {
+      "class": "HybridCrypt",
+      "base": "ICrypt",
+      "source": "CryptAlgorithms.cs",
+      "implementation": null,
+      "status": "not-ported"
+    },
+    {
+      "class": "Kano2Crypt",
+      "base": "ICrypt",
+      "source": "CryptAlgorithms.cs",
+      "implementation": null,
+      "status": "not-ported"
+    },
+    {
+      "class": "KissCrypt",
+      "base": "CzCrypt",
+      "source": "CryptAlgorithms.cs",
+      "implementation": null,
+      "status": "not-ported"
+    },
+    {
+      "class": "MadoCrypt",
+      "base": "AkabeiCrypt",
+      "source": "CryptAlgorithms.cs",
+      "implementation": null,
+      "status": "not-ported"
+    },
+    {
+      "class": "MiburoCrypt",
+      "base": "ICrypt",
+      "source": "CryptAlgorithms.cs",
+      "implementation": null,
+      "status": "not-ported"
+    },
+    {
+      "class": "MizukakeCrypt",
+      "base": "ICrypt",
+      "source": "CryptAlgorithms.cs",
+      "implementation": null,
+      "status": "not-ported"
+    },
+    {
+      "class": "NanaCxCrypt",
+      "base": "CabbageCxCrypt",
+      "source": "YuzCrypt.cs",
+      "implementation": null,
+      "status": "not-ported"
+    },
+    {
+      "class": "NatsupochiCrypt",
+      "base": "ICrypt",
+      "source": "CryptAlgorithms.cs",
+      "implementation": null,
+      "status": "not-ported"
+    },
+    {
+      "class": "NekoWorksCrypt",
+      "base": "ICrypt",
+      "source": "CryptAlgorithms.cs",
+      "implementation": null,
+      "status": "not-ported"
+    },
+    {
+      "class": "NephriteCrypt",
+      "base": "ICrypt",
+      "source": "CryptAlgorithms.cs",
+      "implementation": null,
+      "status": "not-ported"
+    },
+    {
+      "class": "NinkiSeiyuuCrypt",
+      "base": "ICrypt",
+      "source": "CryptAlgorithms.cs",
+      "implementation": null,
+      "status": "not-ported"
+    },
+    {
+      "class": "NoCrypt",
+      "base": "ICrypt",
+      "source": "CryptAlgorithms.cs",
+      "implementation": "none",
+      "status": "ported-byte-filter"
+    },
+    {
+      "class": "OkibaCrypt",
+      "base": "ICrypt",
+      "source": "CryptAlgorithms.cs",
+      "implementation": null,
+      "status": "not-ported"
+    },
+    {
+      "class": "PinPointCrypt",
+      "base": "ICrypt",
+      "source": "CryptAlgorithms.cs",
+      "implementation": null,
+      "status": "not-ported"
+    },
+    {
+      "class": "PoringSoftCrypt",
+      "base": "ICrypt",
+      "source": "CryptAlgorithms.cs",
+      "implementation": null,
+      "status": "not-ported"
+    },
+    {
+      "class": "PuCaCrypt",
+      "base": "ICrypt",
+      "source": "CryptAlgorithms.cs",
+      "implementation": null,
+      "status": "not-ported"
+    },
+    {
+      "class": "PureMoreCrypt",
+      "base": "NoCrypt",
+      "source": "MoreCrypt.cs",
+      "implementation": null,
+      "status": "not-ported"
+    },
+    {
+      "class": "RhapsodyCrypt",
+      "base": "ICrypt",
+      "source": "CryptAlgorithms.cs",
+      "implementation": null,
+      "status": "not-ported"
+    },
+    {
+      "class": "RiddleCxCrypt",
+      "base": "NanaCxCrypt",
+      "source": "YuzCrypt.cs",
+      "implementation": null,
+      "status": "not-ported"
+    },
+    {
+      "class": "SeitenCrypt",
+      "base": "ICrypt",
+      "source": "CryptAlgorithms.cs",
+      "implementation": null,
+      "status": "not-ported"
+    },
+    {
+      "class": "SenrenCxCrypt",
+      "base": "CxEncryption",
+      "source": "YuzCrypt.cs",
+      "implementation": null,
+      "status": "not-ported"
+    },
+    {
+      "class": "SisMikoCrypt",
+      "base": "XanaduCrypt",
+      "source": "ChainReactionCrypt.cs",
+      "implementation": null,
+      "status": "not-ported"
+    },
+    {
+      "class": "SmileCrypt",
+      "base": "ICrypt",
+      "source": "CryptAlgorithms.cs",
+      "implementation": null,
+      "status": "not-ported"
+    },
+    {
+      "class": "SmxCrypt",
+      "base": "ICrypt",
+      "source": "CryptAlgorithms.cs",
+      "implementation": null,
+      "status": "not-ported"
+    },
+    {
+      "class": "SourireCrypt",
+      "base": "ICrypt",
+      "source": "CryptAlgorithms.cs",
+      "implementation": null,
+      "status": "not-ported"
+    },
+    {
+      "class": "StripeCrypt",
+      "base": "ICrypt",
+      "source": "CryptAlgorithms.cs",
+      "implementation": "stripe",
+      "status": "ported-byte-filter"
+    },
+    {
+      "class": "SyangrilaSmartCrypt",
+      "base": "ICrypt",
+      "source": "CryptAlgorithms.cs",
+      "implementation": null,
+      "status": "not-ported"
+    },
+    {
+      "class": "TokidokiCrypt",
+      "base": "ICrypt",
+      "source": "CryptAlgorithms.cs",
+      "implementation": null,
+      "status": "not-ported"
+    },
+    {
+      "class": "XanaduCrypt",
+      "base": "ChainReactionCrypt",
+      "source": "ChainReactionCrypt.cs",
+      "implementation": null,
+      "status": "not-ported"
+    },
+    {
+      "class": "XorCrypt",
+      "base": "ICrypt",
+      "source": "CryptAlgorithms.cs",
+      "implementation": "xor",
+      "status": "ported-byte-filter"
+    },
+    {
+      "class": "YuzuCrypt",
+      "base": "ICrypt",
+      "source": "CryptAlgorithms.cs",
+      "implementation": "yuzu",
+      "status": "ported-byte-filter"
+    }
+  ]
+}

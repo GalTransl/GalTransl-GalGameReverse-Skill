@@ -1,0 +1,168 @@
+{
+  "schema": "galgame-archive-adaptations/1",
+  "date": "2026-10-01",
+  "scope": "YU-RIS, WillPlus/AdvHD and Softpal archive readers added after the archive coverage audit",
+  "source": {
+    "repository": "GARbro-Mod",
+    "url": "https://github.com/nanami5270/GARbro-Mod",
+    "commit": "bc26d991ef5cdc0e1ecb32122ee9a48c3375750c",
+    "file_license": "MIT; complete original notices retained in each adapted module",
+    "license_file": "provenance/licenses/MIT-GARbro.txt",
+    "runtime_dependency": false
+  },
+  "adaptations": [
+    {
+      "engine": "yuris",
+      "document": "engines/yuris.md",
+      "module": "python/archives/yuris.py",
+      "source_files": [
+        {
+          "path": "ArcFormats/YuRis/ArcYPF.cs",
+          "copyright": "Copyright (C) 2014-2018 by morkt",
+          "symbols": [
+            "Parser.ScanDir",
+            "Parser.DecryptLength",
+            "GuessSwapTable",
+            "QueryEncryptionScheme",
+            "SwapTable00",
+            "SwapTable04",
+            "SwapTable10",
+            "Create",
+            "OpenEntry"
+          ]
+        }
+      ],
+      "algorithms": [
+        "explicit-version YPF directory scan",
+        "paired length substitution and filename XOR",
+        "raw and bounded zlib member decode",
+        "optional name CRC32 and stored Adler32 checks"
+      ],
+      "changes": [
+        "require version and filename key; no heuristic key guessing",
+        "0x1F4 requires explicit swap table",
+        "preserve extra directory bytes",
+        "scan count records without reading directory_bound slack into payload",
+        "separate index/stored/decode budgets",
+        "reject invalid names, ranges and flags instead of silently dropping entries"
+      ],
+      "versions_hex": [
+        "DE",
+        "F7",
+        "122",
+        "12C",
+        "196",
+        "1D9",
+        "1F4"
+      ],
+      "limitations": [
+        "not every game-specific scheme for those versions",
+        "no Snappy",
+        "no EXE/YSER overlay",
+        "no YPF writer",
+        "does not apply YSTB ScriptKey; script processing remains separate",
+        "upstream reader ignores checksum fields; strict verification is opt-in"
+      ]
+    },
+    {
+      "engine": "willplus",
+      "document": "engines/willplus.md",
+      "module": "python/archives/willplus.py",
+      "source_files": [
+        {
+          "path": "ArcFormats/Will/ArcWILL.cs",
+          "copyright": "Copyright (C) 2014-2017 by morkt",
+          "symbols": [
+            "TryOpen",
+            "ReadFileList",
+            "DecodeScript",
+            "IsScriptFile"
+          ]
+        },
+        {
+          "path": "ArcFormats/Will/ArcPulltop.cs",
+          "copyright": "Copyright (C) 2015 by morkt",
+          "symbols": [
+            "Arc2Opener.TryOpen",
+            "OpenEntry",
+            "OpenPsp",
+            "IsScriptFile"
+          ]
+        }
+      ],
+      "algorithms": [
+        "v1 grouped directory with 9/13-byte names and absolute offsets",
+        "v2 UTF-16LE directory and relative offsets",
+        "explicit per-byte ROR2 member decode",
+        "bounded PSP ring-buffer LZSS including overlapping matches"
+      ],
+      "changes": [
+        "explicit layout instead of exception-swallowing fallback",
+        "retain filename case",
+        "reject unsafe base names before extension replacement",
+        "do not auto-decrypt by suffix; caller selects codec and handles Model archive exception",
+        "PSP length, truncation and trailing-data checks",
+        "bounded index-only streaming"
+      ],
+      "limitations": [
+        "no signature-based automatic identification",
+        "no ARC writer",
+        "archive version does not establish WS2 opcode version",
+        "no full WS2 file/footer handling",
+        "only raw, script-ror2 and psp codecs"
+      ]
+    },
+    {
+      "engine": "softpal",
+      "document": "engines/softpal.md",
+      "module": "python/archives/softpal.py",
+      "source_files": [
+        {
+          "path": "ArcFormats/Softpal/ArcPAC.cs",
+          "copyright": "Copyright (C) 2016 by morkt",
+          "symbols": [
+            "PacOpener.TryOpen",
+            "ReadIndex",
+            "OpenEntry",
+            "Pac2Opener.TryOpen"
+          ]
+        }
+      ],
+      "algorithms": [
+        "v1 PAC directory at 0x3FE with explicit 16/32-byte names",
+        "v2 PAC-space signature and directory at 0x804",
+        "first-member/index-end consistency",
+        "explicit script-dollar byte rotation and LE word XOR"
+      ],
+      "changes": [
+        "explicit layout/codec instead of guessing width or media type",
+        "bounded index-only streaming",
+        "preserve first 16 bytes and incomplete word tail",
+        "never rewrite TEXT.DAT marker to claim plaintext"
+      ],
+      "limitations": [
+        "no VAFS",
+        "no PAC writer",
+        "script-dollar requires independently identified non-media member",
+        "existing script interface still requires proven plaintext TEXT and independently located Sv20 operands"
+      ]
+    }
+  ],
+  "shared_implementation": {
+    "module": "python/archives/_bounded.py",
+    "origin": "new standard-library-only I/O for these three readers",
+    "operations": [
+      "preserve stream position",
+      "bounded exact reads supporting short reads",
+      "index/member range checks",
+      "entry identity and unchanged file-size checks",
+      "reuse common path/collision validation"
+    ],
+    "limits": [
+      "index objects are not authentication",
+      "same-size archive edits are not detected",
+      "batch callers must enforce aggregate output budgets",
+      "no disk writes or import-time I/O"
+    ]
+  }
+}
