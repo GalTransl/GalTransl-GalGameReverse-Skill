@@ -7,7 +7,7 @@ import unittest
 from test_kirikiri_senren import fixture_tree
 from python.archives import xp3
 from python.engines.kirikiri_psb import Psb
-from python.engines.kirikiri_scn import records, patch, fingerprint, save_message, controls
+from python.engines.kirikiri_scn import records, patch, fingerprint, save_message, controls, visible_length
 from python.engines.kirikiri_extract import extract, pack
 
 
@@ -25,6 +25,47 @@ def fixture(slot=1):
 
 
 class MultilingualTests(unittest.TestCase):
+    def test_color_reset_and_variable_cache_length_roundtrip(self):
+        text = '前#00ff80c0;文#;$f.actor;後'
+        cached = '前文${f.actor}後'
+        self.assertEqual(controls(text), ['#00ff80c0;', '#;', '$f.actor;'])
+        self.assertEqual(save_message(text, True), cached)
+        self.assertEqual(save_message(text, False), cached)
+        self.assertEqual(visible_length(text), 4)
+        self.assertEqual(visible_length('$f.actor;$f.other;'), 2)
+        local = ['人物', text, 4, cached, cached]
+        def source():
+            return fixture_tree({'scenes': [{'texts': [['actor', [local], None, 1, {}]]}],
+                                 'untouched': text}, share_nodes=True)
+        raw = source(); p = Psb(raw); recs = records(p)
+        self.assertEqual(patch(p, recs, [recs[0]['row']])[0], raw)
+        rows = [dict(name='译名', message='变长中文' + text)]
+        rebuilt, paths = patch(p, recs, rows); q = Psb(rebuilt)
+        self.assertEqual(records(q)[0]['row'], rows[0])
+        self.assertEqual(fingerprint(p, paths), fingerprint(q, paths))
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root/'script.xp3').write_bytes(xp3.build([('main.scn', raw)], filter_name='none'))
+            work = root/'work'
+            extract(root, work, archives=('script.xp3',), verify_edits=True)
+            meta = json.loads((work/'metadata/main.json').read_bytes())
+            self.assertIn('$f.actor;', str(meta))
+            (work/'gt_output/main.json').write_text(json.dumps(rows), encoding='utf-8')
+            self.assertEqual(pack(work, root/'packed')['changed_files'], 1)
+        for bad in (text.replace('#;', ''), text.replace('$f.actor;', '$f.other;'),
+                    text + '$f.actor;', text.replace('$f.actor;', '${f.actor}')):
+            with self.subTest(bad=bad), self.assertRaises(ValueError):
+                patch(p, recs, [dict(name='人物', message=bad)])
+        local[2] = 12
+        with self.assertRaisesRegex(ValueError, 'visible length'):
+            records(Psb(source()))
+        local[2] = 4; local[3] = '前文$f.actor;後'
+        with self.assertRaisesRegex(ValueError, 'derived text'):
+            records(Psb(source()))
+        for bad in ('#12345;', '#gggggg;', '$f.actor', '$f..actor;', '$f.call();', '$f.actor+1;',
+                    r'\[$f.actor;]'):
+            with self.subTest(bad=bad), self.assertRaises(ValueError): controls(bad)
+
     def test_literal_brackets_are_not_ruby_and_remain_editable(self):
         text = r'前文\[表示]後文[よみ,1]漢字'
         self.assertEqual(controls(text), [r'\[', ']', '[よみ,1]'])

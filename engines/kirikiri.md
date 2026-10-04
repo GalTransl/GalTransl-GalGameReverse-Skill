@@ -56,13 +56,26 @@ python -m python.engines.kirikiri_extract pack "提取目录" "新的打包目�
 
 新输出目录必须不存在。正文按成员预算读取，原包哈希按流核对；不要为提取剧情把整个媒体包载入内存。平铺 JSON 的重名映射、来源、覆盖关系与选择的语言槽保存在报告中，`pack` 沿用原提取配置。
 
+### 文本定位与回写规则
+
+默认先尝试严格方言，不通过时自动退回类型化前缀定位，两者都直接回写，不需要单独的模式开关。
+
+- 类型化前缀：`[角色ID, 显示名, 正文, ...]`、`[角色ID, 语言数组, ...]` 或 `[角色ID, 显示名, 语言数组, ...]`；语言槽以 `[显示名, 正文, ...]` 开头。尾字段不参与定位，其原字节保留在 `original`。
+- 派生字段只在**存储值与已知规则精确匹配**时登记为可重写：可见长度、speech/search 缓存各自验证；未匹配的字段路径记入该记录的 `opaque`，原样保留，不按位置猜测写入规则。
+- 严格方言指已知的 5/6/9 槽布局、长度与缓存规则；任一项不通过即回退，原因写入 `exports[].verified_dialect_issue`，该成员仍照常导出。
+- 正文控制码无法词法化（未知 `#`/`$`/`%` 等）时仍导出该行，但标记 `non_writable`：`pack` 拒绝改写该行而不是猜测；其他可写字段不受影响。
+
+仍须通过有界 PSB 解析；不是对字符串池做全文搜索，也不把资源路径当对白。缺语言槽、错误类型或含糊结构报错，不静默漏行或退到另一种语言。
+
+`opaque` 与 `non_writable` 只表示“已定位但写入依赖未验证”，不等于支持。报告在 `exports[]` 与 `limitations` 中列出，`pack` 保留这些字段原字节，并在译文改动 `non_writable` 行时报错。需要完整回写时先补齐对应写入规则，再重新提取；不得手改报告或元数据绕过校验。该流程不宣称拥有图像文字、任意 TJS、未知 PSB 或未识别 SCN 结构的支持。
+
 ### 支持的 SCN 结构与约束
 
 - [PSB parser/writer](../python/engines/kirikiri_psb.py) 支持未加密、无二进制 resource 区段的 PSB v2/v3。检查名称 trie、字符串索引、节点边界和区段顺序；未知版本、节点、重叠或循环引用拒绝。v2 不含 v3 的头校验字段，回写必须按原版本布局处理。
-- [SCN 语义层](../python/engines/kirikiri_scn.py) 从 `scenes[].texts` 和 `scenes[].selects` 识别正文、显示名与选项。支持单语言 6/9 槽，以及按字段类型识别的已知多语言 5/6 槽；不能只凭数组长度接受新结构。
+- [SCN 语义层](../python/engines/kirikiri_scn.py) 从 `scenes[].texts` 和 `scenes[].selects` 识别正文、显示名与选项。严格方言覆盖单语言 6/9 槽与已知多语言 5/6 槽；其他形状按类型化前缀定位，只对可验证的派生字段回写。
 - 显式显示名槽可写；内部角色 ID、voice、场景状态、源行号与跳转目标保留。没有可写显示名时，导出的 `name` 只是只读上下文。
 - 多语言只修改所选槽，其他语言不混入 JSON。选项优先读取 `language[index].text`；仅槽 0 为 null 时允许使用选项自身的 `text`，其他缺失槽拒绝，不自动新增或回退。
-- 正文的可见长度、读音及搜索缓存必须同步重建。长度不等于带控制码字符串的长度；ruby、百分号/颜色控制与转义需保留。原缓存必须与已知转换规则一致，已识别的去中点/空格变体保存到 manifest 后沿用，未知差异不能关闭校验放行。
+- 正文的可见长度、读音及搜索缓存按已知规则同步重建。长度不等于带控制码字符串的长度；ruby、百分号/颜色控制与转义需保留。已识别的去中点/空格变体保存到 manifest 后沿用；与已知规则不一致的派生字段不按位置猜测，保留原字节并记入 `opaque`。
 - 已知图片消息的替代文本单独导出为 `image-alt`，不能误当语音缓存。无显示字段的选项仅在符合严格结构规则时保留并记入 `skipped_structural_choices`；具体字段规则见通用工作流。图像文字及 `phonechat` 历史快照不因此自动获得翻译支持。
 - 字符串池和树节点可能共享；按完整树路径定位每次引用，不能全局替换字符串 ID 或只按物理节点地址写入。writer 重建相关偏移、索引宽度、区段地址与校验，并比较非文本语义。
 
@@ -112,6 +125,6 @@ assert patched == '#Alice\r\n你好[r]world[l]\r\n'
 
 ## 验证与维护
 
-- 批处理回归：[test_kirikiri_extract.py](../tests/test_kirikiri_extract.py)、[多语言 SCN](../tests/test_kirikiri_multilang.py)、[Hxv4 文本](../tests/test_kirikiri_hxv4_text.py)。有限 KS 回归位于 `tests/test_engines_primary.py`。
+- 批处理回归：[test_kirikiri_extract.py](../tests/test_kirikiri_extract.py)、[多语言 SCN](../tests/test_kirikiri_multilang.py)、[类型化定位回写](../tests/test_kirikiri_structural.py)、[Hxv4 文本](../tests/test_kirikiri_hxv4_text.py)。有限 KS 回归位于 `tests/test_engines_primary.py`。
 - 新索引变体放归档适配器，密码放过滤器，KAG 标签放语义方言，SCN tuple 放共享 parser/writer；复用 manifest、导出和回填流程，不按游戏名新建脚本。
 - 出处与许可见 [Kirikiri 算法来源](../provenance/kirikiri-sources.json)；有限 KS 接口改编自 VNTextPatch-net8 的 MIT 实现，SCN 语义参考 msg-tool 的 GPL-3.0-or-later 实现。使用本 Skill 不需要访问这些外部仓库。

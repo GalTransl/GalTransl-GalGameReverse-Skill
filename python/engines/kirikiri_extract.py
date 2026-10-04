@@ -18,7 +18,7 @@ from python.archives import kirikiri_xp3 as xp3
 from python.common.contract import make_manifest, validate_translation, dump_rows, load_json
 from python.common.safety import Limits, validate_names, write_new_tree
 from .kirikiri_psb import Psb
-from .kirikiri_scn import records, patch, controls, fingerprint
+from .kirikiri_scn import writable_records, patch, controls, fingerprint
 
 PROFILE='kirikiri-psb-scn/1'
 # Read compatibility for workspaces already delivered before entrypoint unification.
@@ -53,9 +53,9 @@ def manifest_for(name,data,recs,profile=PROFILE):
     variant=LEGACY[profile][0] if profile in LEGACY else 'psb-scn-single-language'
     return make_manifest(engine='kirikiri',variant=variant,reference=profile,
                          sources={'original/'+name:data},rows=[r['row'] for r in recs],encoding='utf-8',
-                         locators=[{k:r[k] for k in ('message','name','caches','kind','scene','index','length','strip_ruby_dot','trim_ruby_space') if k in r} for r in recs],
+                         locators=[{k:r[k] for k in ('message','name','caches','kind','scene','index','length','strip_ruby_dot','trim_ruby_space','opaque','non_writable') if k in r} for r in recs],
                          name_policies=['writable' if r['name'] else 'context' if 'name' in r['row'] else 'absent' for r in recs],
-                         protected_tokens=[list(dict.fromkeys(controls(r['row']['message']))) for r in recs])
+                         protected_tokens=[[] if r.get('non_writable') else list(dict.fromkeys(controls(r['row']['message']))) for r in recs])
 
 
 def verify_archive(data,files,profile,filter_spec=None):
@@ -123,12 +123,18 @@ def extract(game,output,*,archives=('data.xp3',),overlay='path',archive_profile=
             non_target.append(dict(name=name,member=e.name,role='system-index',sha256=digest(data)));continue
         skipped=[]
         try:
-            recs=records(psb,language_index,skipped=skipped);rows=[r['row'] for r in recs];original,_=patch(psb,recs,rows)
+            recs,strict_issue=writable_records(psb,language_index,skipped=skipped)
+            rows=[r['row'] for r in recs];original,_=patch(psb,recs,rows)
         except ValueError as exc:
             raise ValueError(f"SCN {item['archive']}:{e.name}: {exc}") from exc
         if original!=data:raise ValueError('original PSB writer differs')
         structure=dict(skipped_structural_choices=skipped) if skipped else {}
-        totals.update(structural_choices=len(skipped))
+        opaque=sum(len(r['opaque']) for r in recs if r.get('opaque'))
+        non_writable=[dict(scene=r['scene'],index=r['index'],reason=r['non_writable']) for r in recs if r.get('non_writable')]
+        if strict_issue is not None:structure['verified_dialect_issue']=strict_issue
+        if opaque:structure['opaque_fields']=opaque
+        if non_writable:structure['non_writable']=non_writable
+        totals.update(structural_choices=len(skipped),opaque_fields=opaque,non_writable_records=len(non_writable))
         payloads.append(('original/'+name,data));files.append((e.name,original))
         if not rows:
             non_target.append(dict(name=name,member=e.name,archive=item['archive'],role='empty-story',sha256=digest(data),**structure))
@@ -143,13 +149,15 @@ def extract(game,output,*,archives=('data.xp3',),overlay='path',archive_profile=
                       named=sum('name' in r['row'] for r in recs),writable_names=sum(r['name'] is not None for r in recs),
                       derived_cache_rows=sum(bool(r['caches']) for r in recs))
         if verify_edits:
-            translated=[dict(row,message='验证'+row['message']) for row in rows]
+            translated=[dict(row,message=row['message'] if rec.get('non_writable') else '验证'+row['message'])
+                        for rec,row in zip(recs,rows)]
             changed,paths=patch(psb,recs,translated);check=Psb(changed)
-            if [r['row'] for r in records(check,language_index)]!=translated or fingerprint(psb,paths)!=fingerprint(check,paths):
+            if [r['row'] for r in writable_records(check,language_index)[0]]!=translated or fingerprint(psb,paths)!=fingerprint(check,paths):
                 raise ValueError('changed PSB text/nontext mismatch')
             smokes.append((e.name,changed));del check
         if i%25==0:print(f'verified {i+1}/{len(selected)} SCN, {totals["rows"]} rows',flush=True)
         del psb
+    rebuilt_info=None
     roundtrip=xp3.build(files,output_format,filter_spec);verify_archive(roundtrip,files,output_format,filter_spec)
     payloads.append(('rebuilt/roundtrip/scenario.xp3',roundtrip))
     rebuilt_info=dict(members=len(files),original_psb_byte_identical=True,roundtrip_sha256=digest(roundtrip),roundtrip_bytes=len(roundtrip))
@@ -167,6 +175,8 @@ def extract(game,output,*,archives=('data.xp3',),overlay='path',archive_profile=
                              'New script-only XP3; no .sig signing, game load or font validation.',
                              'Scene-state phonechat history snapshots are preserved; their UI text is not automatically rebound to dialogue rows.',
                              'Select records without a display field (link/storage shape) are preserved but not exported; their key sets are listed in skipped_structural_choices.'])
+    if any(e.get('opaque_fields') or e.get('non_writable') for e in exports):
+        report['limitations'].append('Records with unverified derived fields keep their original length/cache bytes; records with unrecognized control syntax are exported but cannot be rewritten. See per-export opaque_fields and non_writable, and re-extract after extending the writer rules.')
     payloads.extend([('reports/extraction.json',js(report)),('gt_output/.keep',b'')])
     write_new_tree(output,payloads,Limits(max_file_bytes=256<<20,max_total_bytes=512<<20))
     return report
@@ -204,7 +214,7 @@ def pack(workspace,output):
         if digest(data)!=e['sha256']:raise ValueError('source SCN changed')
         psb=Psb(data)
         if profile in LEGACY and psb.version!=LEGACY[profile][2]:raise ValueError('legacy PSB version mismatch')
-        recs=records(psb,language_index);rows=[r['row'] for r in recs];manifest=manifest_for(e['name'],data,recs,profile)
+        recs,_=writable_records(psb,language_index);rows=[r['row'] for r in recs];manifest=manifest_for(e['name'],data,recs,profile)
         if load_json(read_file(workspace/'metadata'/e['json']))!=load_json(js(manifest)):raise ValueError('manifest changed')
         if load_json(read_file(workspace/'gt_input'/e['json']))!=rows:raise ValueError('original JSON changed')
         translated=translations.get(e['json'],rows)
@@ -212,7 +222,7 @@ def pack(workspace,output):
         rebuilt,paths=patch(psb,recs,translated)
         if rebuilt!=data:
             check=Psb(rebuilt)
-            if [r['row'] for r in records(check,language_index)]!=translated or fingerprint(psb,paths)!=fingerprint(check,paths):raise ValueError('PSB roundtrip mismatch')
+            if [r['row'] for r in writable_records(check,language_index)[0]]!=translated or fingerprint(psb,paths)!=fingerprint(check,paths):raise ValueError('PSB roundtrip mismatch')
             changed+=1
         files.append((e['member'],rebuilt))
     for e in report.get('non_target',[]):
@@ -220,7 +230,7 @@ def pack(workspace,output):
         validate_names([e['name']]);validate_names([e['member']])
         if Path(e['name']).name!=e['name']:raise ValueError('invalid empty SCN source slot')
         data=read_file(workspace/'original'/e['name'])
-        if digest(data)!=e['sha256'] or records(Psb(data),language_index):raise ValueError('empty SCN changed')
+        if digest(data)!=e['sha256'] or writable_records(Psb(data),language_index)[0]:raise ValueError('empty SCN changed')
         files.append((e['member'],data))
     # Keep extraction order even when empty scripts were interleaved.
     if profile==PROFILE:

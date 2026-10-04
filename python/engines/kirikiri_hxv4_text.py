@@ -120,7 +120,8 @@ def extract(archive, exe, output, *, paths=('', 'scn/', 'scenario/'), language_i
         base = Path(tmp); source = base/'source'; source.mkdir()
         (source/'scripts.xp3').write_bytes(xp3.build(files, filter_name='none', compress_contents=True))
         work = base/'work'
-        result = shared.extract(source, work, archives=('scripts.xp3',), verify_edits=True, language_index=language_index)
+        result = shared.extract(source, work, archives=('scripts.xp3',), verify_edits=True,
+                                language_index=language_index)
         payloads = [(p.relative_to(work).as_posix(), p.read_bytes()) for p in work.rglob('*') if p.is_file()]
         # Keep explicitly named plain intermediate evidence, plus encrypted deliverables.
         for stage in ('roundtrip', 'smoke-test'):

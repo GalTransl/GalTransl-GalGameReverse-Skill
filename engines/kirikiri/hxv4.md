@@ -30,6 +30,8 @@ python -m python.engines.kirikiri_hxv4_text pack "提取目录" "新的打包目
 
 默认目录候选为根目录、`scn/`、`scenario/`；其他目录用 `--paths` 明确提供。`--language-index` 选择已有语言槽。当前文本入口只处理直接 PSB 的已知 SCN 方言，不自动把 MDF、TJS 或图像 PSB 当作对白。
 
+正文定位与回写沿用[统一 SCN 入口](../kirikiri.md#文本定位与回写规则)：已知方言按严格规则回写，未知形状自动退回类型化前缀定位，未验证的派生字段与不可写行在报告中单列。Hx 静态密钥、认证、名称核验和预算检查照常执行。
+
 单资源上限 32 MiB，超限成员在解密前跳过；累计实际读取/解密资源超过 384 MiB 时停止。**大文件不一定是媒体**：有超限、未映射成员或无法解析的 PSB 时，`scan_complete=false`，必须交代未检查范围，不能声称全剧情提取完整。诊断和预算在 `reports/hxv4.json`，回填报告沿用 `source_scan_complete`。
 
 | 结果位置 | 用途 |
