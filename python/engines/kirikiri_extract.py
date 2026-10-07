@@ -53,7 +53,7 @@ def manifest_for(name,data,recs,profile=PROFILE):
     variant=LEGACY[profile][0] if profile in LEGACY else 'psb-scn-single-language'
     return make_manifest(engine='kirikiri',variant=variant,reference=profile,
                          sources={'original/'+name:data},rows=[r['row'] for r in recs],encoding='utf-8',
-                         locators=[{k:r[k] for k in ('message','name','caches','kind','scene','index','length','strip_ruby_dot','trim_ruby_space','opaque','non_writable') if k in r} for r in recs],
+                         locators=[{k:r[k] for k in ('message','name','caches','kind','scene','index','length','strip_ruby_dot','trim_ruby_space','search_only','opaque','non_writable') if k in r} for r in recs],
                          name_policies=['writable' if r['name'] else 'context' if 'name' in r['row'] else 'absent' for r in recs],
                          protected_tokens=[[] if r.get('non_writable') else list(dict.fromkeys(controls(r['row']['message']))) for r in recs])
 
@@ -66,7 +66,8 @@ def verify_archive(data,files,profile,filter_spec=None):
 
 
 def extract(game,output,*,archives=('data.xp3',),overlay='path',archive_profile='auto',
-            output_format='same',verify_edits=False,language_index=0,filter_spec=None):
+            output_format='same',verify_edits=False,language_index=0,filter_spec=None,
+            speaker_name=False):
     """Extract supported SCN from selected archives, later inputs overriding earlier.
 
     'path' overlays exact storage paths. 'basename' is an explicit choice for
@@ -74,6 +75,7 @@ def extract(game,output,*,archives=('data.xp3',),overlay='path',archive_profile=
     basenames under path mode receive deterministic suffixes; never guess merge.
     """
     if type(language_index) is not int or language_index < 0: raise ValueError('invalid language index')
+    if type(speaker_name) is not bool: raise ValueError('invalid speaker_name flag')
     if filter_spec is not None: filter_spec=xp3.validate(filter_spec)
     game,output=Path(game),Path(output)
     if os.path.lexists(output):raise FileExistsError(output)
@@ -123,7 +125,7 @@ def extract(game,output,*,archives=('data.xp3',),overlay='path',archive_profile=
             non_target.append(dict(name=name,member=e.name,role='system-index',sha256=digest(data)));continue
         skipped=[]
         try:
-            recs,strict_issue=writable_records(psb,language_index,skipped=skipped)
+            recs,strict_issue=writable_records(psb,language_index,skipped=skipped,speaker_name=speaker_name)
             rows=[r['row'] for r in recs];original,_=patch(psb,recs,rows)
         except ValueError as exc:
             raise ValueError(f"SCN {item['archive']}:{e.name}: {exc}") from exc
@@ -152,7 +154,7 @@ def extract(game,output,*,archives=('data.xp3',),overlay='path',archive_profile=
             translated=[dict(row,message=row['message'] if rec.get('non_writable') else '验证'+row['message'])
                         for rec,row in zip(recs,rows)]
             changed,paths=patch(psb,recs,translated);check=Psb(changed)
-            if [r['row'] for r in writable_records(check,language_index)[0]]!=translated or fingerprint(psb,paths)!=fingerprint(check,paths):
+            if [r['row'] for r in writable_records(check,language_index,speaker_name=speaker_name)[0]]!=translated or fingerprint(psb,paths)!=fingerprint(check,paths):
                 raise ValueError('changed PSB text/nontext mismatch')
             smokes.append((e.name,changed));del check
         if i%25==0:print(f'verified {i+1}/{len(selected)} SCN, {totals["rows"]} rows',flush=True)
@@ -168,7 +170,7 @@ def extract(game,output,*,archives=('data.xp3',),overlay='path',archive_profile=
     for source in sources:
         with (game/source['name']).open('rb') as stream:
             if hashlib.file_digest(stream,'sha256').hexdigest()!=source['sha256']:raise ValueError('input archive changed')
-    report=dict(profile=PROFILE,filter_spec=filter_spec,language_index=language_index,output_format=output_format,overlay=overlay,sources=sources,inventories=inventories,
+    report=dict(profile=PROFILE,filter_spec=filter_spec,language_index=language_index,speaker_name=speaker_name,output_format=output_format,overlay=overlay,sources=sources,inventories=inventories,
                 overridden=overridden,exports=exports,non_target=non_target,totals=dict(totals),
                 psb_versions=dict(versions),packed_members=[n for n,d in files],rebuilt=rebuilt_info,
                 limitations=['Only explicitly selected archives; no automatic patch language/priority inference.',
@@ -194,6 +196,8 @@ def pack(workspace,output):
     language_index=report.get('language_index',0)
     if type(language_index) is not int or language_index < 0: raise ValueError('invalid language index')
     if profile in LEGACY and language_index != 0: raise ValueError('legacy workspace language changed')
+    speaker_name=report.get('speaker_name',False)
+    if type(speaker_name) is not bool: raise ValueError('invalid speaker_name flag')
     output_format=LEGACY[profile][1] if profile in LEGACY else report['output_format']
     exports=report['exports'];filenames=[e['json'] for e in exports]
     validate_names(filenames);validate_names([e['name'] for e in exports]);validate_names([e['member'] for e in exports])
@@ -214,7 +218,7 @@ def pack(workspace,output):
         if digest(data)!=e['sha256']:raise ValueError('source SCN changed')
         psb=Psb(data)
         if profile in LEGACY and psb.version!=LEGACY[profile][2]:raise ValueError('legacy PSB version mismatch')
-        recs,_=writable_records(psb,language_index);rows=[r['row'] for r in recs];manifest=manifest_for(e['name'],data,recs,profile)
+        recs,_=writable_records(psb,language_index,speaker_name=speaker_name);rows=[r['row'] for r in recs];manifest=manifest_for(e['name'],data,recs,profile)
         if load_json(read_file(workspace/'metadata'/e['json']))!=load_json(js(manifest)):raise ValueError('manifest changed')
         if load_json(read_file(workspace/'gt_input'/e['json']))!=rows:raise ValueError('original JSON changed')
         translated=translations.get(e['json'],rows)
@@ -222,7 +226,7 @@ def pack(workspace,output):
         rebuilt,paths=patch(psb,recs,translated)
         if rebuilt!=data:
             check=Psb(rebuilt)
-            if [r['row'] for r in writable_records(check,language_index)[0]]!=translated or fingerprint(psb,paths)!=fingerprint(check,paths):raise ValueError('PSB roundtrip mismatch')
+            if [r['row'] for r in writable_records(check,language_index,speaker_name=speaker_name)[0]]!=translated or fingerprint(psb,paths)!=fingerprint(check,paths):raise ValueError('PSB roundtrip mismatch')
             changed+=1
         files.append((e['member'],rebuilt))
     for e in report.get('non_target',[]):
@@ -230,7 +234,7 @@ def pack(workspace,output):
         validate_names([e['name']]);validate_names([e['member']])
         if Path(e['name']).name!=e['name']:raise ValueError('invalid empty SCN source slot')
         data=read_file(workspace/'original'/e['name'])
-        if digest(data)!=e['sha256'] or writable_records(Psb(data),language_index)[0]:raise ValueError('empty SCN changed')
+        if digest(data)!=e['sha256'] or writable_records(Psb(data),language_index,speaker_name=speaker_name)[0]:raise ValueError('empty SCN changed')
         files.append((e['member'],data))
     # Keep extraction order even when empty scripts were interleaved.
     if profile==PROFILE:
@@ -255,10 +259,13 @@ def main():
     extract_parser.add_argument('--filter-spec',type=Path,help='JSON algorithm and parameters for supported XP3 byte filter')
     extract_parser.add_argument('--language-index',type=int,default=0,help='zero-based existing SCN language slot; never inserts a language')
     extract_parser.add_argument('--verify-edits',action='store_true')
+    extract_parser.add_argument('--speaker-name',action='store_true',
+                                help='treat a string speaker field as the writable display name when the display slot is empty')
     pack_parser=subs.add_parser('pack');pack_parser.add_argument('source',type=Path);pack_parser.add_argument('output',type=Path)
     args=parser.parse_args()
     report=(extract(args.source,args.output,archives=args.archives,overlay=args.overlay,archive_profile=args.archive_profile,
-                    output_format=args.output_format,verify_edits=args.verify_edits,language_index=args.language_index,filter_spec=load_json(read_file(args.filter_spec)) if args.filter_spec else None) if args.command=='extract' else pack(args.source,args.output))
+                    output_format=args.output_format,verify_edits=args.verify_edits,language_index=args.language_index,filter_spec=load_json(read_file(args.filter_spec)) if args.filter_spec else None,
+                    speaker_name=args.speaker_name) if args.command=='extract' else pack(args.source,args.output))
     print(json.dumps(report.get('totals',report),ensure_ascii=True,indent=2))
 
 

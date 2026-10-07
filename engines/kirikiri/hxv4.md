@@ -64,15 +64,51 @@ python -m python.archives.kirikiri_hxv4_archive "游戏/scn.xp3" --exe "游戏/�
 
 ## Hxv4 扁平 patch.xp3
 
+**补丁内所有成员一律平铺存放在根目录（`path_hash("")`），只使用 basename 加完整扩展名。脚本、字体、配置、图片、音频等一切资源都没有例外，也不以该资源在原包中的目录为转移**：原来在 `font/` 下的字体、在 `scenario/` 下的剧本，进补丁后同样是根目录下的 basename 成员。原目录哈希只描述它在原包里的位置；补丁是独立归档，把原目录哈希带进来会让成员落空。
+
+这是最容易出错的一条，落地时要逐成员核对，而不是按资源类型分别处理：
+
+| 资源在原包中的位置 | 补丁成员名的写法 | 常见错误 |
+|---|---|---|
+| 包根目录（如剧本包里的 `*.txt.scn`） | `foo.txt.scn` | 无 |
+| 子目录（如 `font/…`、`scenario/…`、`data/…`） | 同样只用 basename：`font.otf`、`history.ks` | 按原结构放进 `font/`、`scenario/`，实际覆盖不到 |
+
 通用挂载与变化筛选见 [补丁工作流](workflow.md#译文回注优先使用-patchxp3-增量补丁)。Hxv4 还需核对 EXE 是否通过 `CompoundStorageMedia` 接管存储，追踪 `parseArchiveIndex/mount/entryDomain/pathHash/assignFiles` 的引用与失败分支；可用 [TJS 静态检查器](../../python/engines/kirikiri_tjs_inspect.py)。
 
 1. 校验译文并重建脚本，只选择相对原文实际变化的资源。
 2. 使用经哈希核验的原 basename 和完整扩展名，拒绝同名冲突；JSON 文件名与内部 ID 不能代替真实资源名。
-3. 调用 [build_flat_patch](../../python/archives/kirikiri_hxv4_payload.py)，保留成员 ID、key、文件名哈希，将目录哈希改为 `path_hash("")`。
+3. 调用 [build_flat_patch](../../python/archives/kirikiri_hxv4_payload.py)，保留成员 ID、key 与文件名哈希。该函数强制 basename 输入（名字含 `/` 或 `\` 直接拒绝），并在写入时把每个成员的目录哈希统一改成 `path_hash("")`；不要绕过它手工改 `path_hash`。
 4. 生成加密正文、名称表和有效 Poly1305 标签，在新目录保存 `patch.xp3`。
-5. 重读索引认证、根目录哈希与所有身份，核对明文、译文及非文本结构，再测试实际加载。
+5. 重读索引认证，**确认全部成员的 `path_hash` 都等于 `path_hash("")`**，再核对身份、明文、译文及非文本结构，最后测试实际加载。
 
-“扁平”指 **Hx 名称表映射到根目录**；标准 File 索引仍保留内部 ID。不能仅改文件名、保留原 `scn/` 哈希，或改成普通明文 XP3。
+“扁平”指 **Hx 名称表映射到根目录**；标准 File 索引仍保留内部 ID。不能仅改文件名、保留原 `scn/`（或 `font/`、`scenario/`）哈希，或改成普通明文 XP3。只有“整体替换整个原包”的做法才保留原包目录结构，那是另一种产物，不是本节的增量补丁。
+
+### 确认挂载目录、文件名与优先级
+
+补丁的文件名、放置目录和编号规则由作品自己的启动脚本决定，不能照搬示例或套用其它作品的编号。静态确认顺序：
+
+1. **EXE 内嵌启动脚本**：`TEXT/127` 给出 BRES 根，`STARTUP.TJS` 与 `BOOTSTRAP` 解密后取 TJS 常量（`kirikiri_hxv4_static` 的 `PE` / `bres` / `tjs_strings`）。这一步通常只看到默认路径与 `addAutoPath` 的调用形式，很少直接列出游戏自己的包名。
+2. **入口包内的加载脚本**：由默认路径找到入口归档，按常量/正则定位其加载逻辑，读出实际使用的文件名模式、扫描目录、排序方式与覆盖顺序。
+3. `--candidate-archive` / 名称恢复只给出可能的资源名，不能代替上面两步。
+
+记录时至少覆盖：
+
+| 需要确认 | 常见形态（举例，非固定约定） |
+|---|---|
+| 文件名与编号 | 固定名，或按编号排序取用；同名补丁不能并存时编号决定谁生效 |
+| 扫描目录 | 程序目录，或脚本里显式拼出的路径；必须读到拼接用的变量来源 |
+| 覆盖顺序 | 后挂载者优先，或显式比较版本号/编号 |
+| 门槛与中断 | 存在“当前版本”文件时可能只加载高于它的补丁；也存在遇到缺号即停止探测的循环 |
+
+只有全部确认后才决定补丁文件名与放置位置；部署后完全退出再启动，从修改过的段落验证。
+
+### 非脚本资源一并进补丁
+
+字体、配置、图片、音频等非脚本资源的路径处理与脚本**完全相同**：平铺到根目录、只用 basename，**不继承原包的目录哈希**（字体不要写回 `font/`，剧本不要写回 `scenario/`）。按资源类型区别对待是错的。
+
+- 只需核验两件事：basename 与完整扩展名通过名称哈希校验（`name_hash(name) == entry['name_hash']`），以及正文确实是要替换的那个资源。
+- 目录哈希**不要**从原 entry 继承。`build_flat_patch` 会拒绝带目录分隔符的名字，并把目录哈希统一改为 `path_hash("")`。
+- 打包后逐个重读，确认每个成员的 `path_hash` 均为 `path_hash("")` 且明文与输入一致。
 
 `changed_members` 是 `(original_entry, rebuilt_resource_bytes, verified_basename)` 列表；`key_package` 必须来自已验证配置：
 

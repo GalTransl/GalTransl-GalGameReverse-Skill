@@ -15,6 +15,29 @@ from python.engines.kirikiri_scn import records
 
 
 class HxTextTests(unittest.TestCase):
+    def test_speaker_flag_survives_encrypted_workspace_roundtrip(self):
+        package = dict(bootStrap='test', warning='test', archiveUniqueKey='{test}',
+                       params='000102030405060700010203040500010280ff010001')
+        keys = derive(package)
+        raw = fixture_tree(dict(name='main.txt', scenes=[dict(texts=[['人物', None, '本文', None, 1, {}]])]))
+        identity = dict(id=1, key=789, name_hash=name_hash('main.txt.scn'), path_hash=path_hash('scn/'))
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp); source = root/'data.xp3'; work = root/'work'
+            source.write_bytes(build([(identity, raw)], keys))
+            evidence = dict(key_package=package, source_sha256=hashlib.sha256(source.read_bytes()).hexdigest(), exe_sha256='test')
+            with patch('python.engines.kirikiri_hxv4_text.inspect', return_value=evidence):
+                extract(source, root/'not-executed.exe', work, speaker_name=True)
+            self.assertTrue(json.loads((work/'reports/extraction.json').read_bytes())['speaker_name'])
+            self.assertEqual(pack(work, root/'noop')['changed_files'], 0)
+            rows = [dict(name='变长中文姓名', message='变长中文正文')]
+            (work/'gt_output/main.txt.json').write_text(json.dumps(rows), encoding='utf-8')
+            self.assertEqual(pack(work, root/'translated')['changed_files'], 1)
+            stream = io.BytesIO((root/'translated/scenario.xp3').read_bytes())
+            entry = read_index(stream, keys)['files'][0]
+            self.assertTrue(all(entry[k] == v for k, v in identity.items()))
+            decoded = read_member(stream, entry, Cipher(keys))
+            self.assertEqual([r['row'] for r in records(Psb(decoded), speaker_name=True)], rows)
+
     def test_extract_pack_translations_and_identity_tampering(self):
         package=dict(bootStrap='test',warning='test',archiveUniqueKey='{test}',
                      params='000102030405060700010203040500010280ff010001')

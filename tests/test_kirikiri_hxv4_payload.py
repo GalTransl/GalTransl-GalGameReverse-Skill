@@ -19,6 +19,21 @@ def entry(ident=1):
 
 
 class PayloadTests(unittest.TestCase):
+    def test_flat_patch_applies_to_scripts_fonts_and_configs(self):
+        k = keys(); members = []
+        for ident, (directory, name) in enumerate((('scenario/', 'main.ks.scn'),
+                                                  ('font/', 'font.otf'), ('data/', 'settings.tjs')), 1):
+            e = dict(id=ident, key=ident + 100, name_hash=name_hash(name), path_hash=path_hash(directory))
+            members.append((e, b'synthetic resource ' + bytes([ident]), name))
+        stream = io.BytesIO(build_flat_patch(members, k))
+        entries = read_index(stream, k)['files']
+        self.assertEqual(len(entries), len(members))
+        for actual, (original, raw, _) in zip(entries, members):
+            self.assertEqual(actual['path_hash'], path_hash(''))
+            for field in ('id', 'key', 'name_hash'): self.assertEqual(actual[field], original[field])
+            self.assertEqual(read_member(stream, actual, Cipher(k)), raw)
+        with self.assertRaises(ValueError): build_flat_patch([members[0], members[0]], k)
+
     def test_flat_patch_relocates_hash_directory_and_preserves_filter_identity(self):
         k = keys(); e = dict(entry(), path_hash=path_hash('scn/'))
         raw = b'edited resource'

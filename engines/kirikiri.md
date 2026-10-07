@@ -11,12 +11,29 @@
 | 已确认的证据 | 处理路线 |
 |---|---|
 | 带 BOM 的 KAG 文本，宏语义符合 `nm/np/exlink` 方言 | [KAG 文本工作流](kirikiri/kag-text.md)，使用 `kirikiri_kag_extract` |
+| 成员头为 `fe fe <mode> ff fe` 或 `mdf\0` | 先解[脚本源码包装层](#脚本源码包装层simplecrypt-与-mdf)，再按内部内容分流 |
 | 已解码的简单 KS 文本，使用 `#名字`、`[r]`、`[ns/nse]` 等有限语法 | 本页的 [有限 KS 接口](#有限-ks-接口)，需要调用层完成编码、分组和封包 |
 | 完整解析后属于已支持的 PSB v2/v3 SCN | [统一 SCN 入口](#统一-scn-入口)，使用 `kirikiri_extract` |
 | XP3 含 `Hxv4` 扩展及哈希/内部 ID 名称 | [Hxv4 静态处理](kirikiri/hxv4.md)；已支持的 SCN 使用 `kirikiri_hxv4_text` |
 | TJS 字节码、加密内层 PSB、未知 KAG 宏或 SCN 结构 | 保留诊断，按 [新方言适配方法](kirikiri/workflow.md#适配新文本方言的方法) 补齐证据与读写规则 |
 
 `.ks` 不保证是文本，`.scn` 不保证属于已支持的 SCN 方言；XP3 签名只证明容器格式。`kirikiri_kag.py` 的词法分析也不等于完整对白提取，不能直接把 token 当作翻译 JSON。
+
+## 脚本源码包装层：SimpleCrypt 与 MDF
+
+归档成员可能是**包装后的文本**，而不是纯文本。顺序是先确认归档与过滤器，再解包装层，最后按解出的内容判断它是 KAG 文本、TJS 源码还是 PSB。
+
+| 包装 | 识别 | 处理 |
+|---|---|---|
+| SimpleCrypt | 头 `fe fe <mode> ff fe`，mode 为 0/1/2 | [kirikiri_simple_crypt.py](../python/engines/kirikiri_simple_crypt.py) 的 `detect` / `unpack` / `pack` |
+| MDF | 头 `mdf\0` 后跟 u32 解压长度 | `kirikiri_hxv4_recover.script_names` 有界解压后从 PSB/TJS 收集候选名；不是包装文本的自动提取/回写入口 |
+
+- SimpleCrypt 明文固定为 UTF-16LE：`unpack` 补回一层 BOM，`pack` 去掉一层 BOM；拒绝大端输入、奇数字节和无效 UTF-16，不静默转换端序。
+- mode 0 按 u16 处理：`c >= 0x20` 时计算 `c ^ (((c & 0xfe) << 8) ^ 1)`。旧算法有不可逆码元，writer 遇到无法重读为原文的输入直接拒绝。mode 1 交换相邻位，变换自逆。
+- mode 2 的两个小端 u64 分别是 **zlib 流本身的字节数**和 **不含 BOM 的解压字节数**；压缩长度不含 16 字节长度区。拒绝截断、尾随流、声明长度不符和超预算；`unpack(max_output_size=...)` 的输出预算包含补回的 BOM，输入另有 64 MiB 上限。
+- 解开后再判断内容：SimpleCrypt 中的 KAG 文本按 [KAG 工作流](kirikiri/kag-text.md) 的语义 API 处理，TJS 源码仅静态读取；MDF 中的 PSB/TJS 按对应格式解析。包装头不能证明存在对白，不能把带 UTF-16 BOM 的文本交给 PSB parser。
+- 当前 CLI 不自动解开或恢复 SimpleCrypt。调用层必须保存原始包装字节及 mode，完成内部文本的 parser/writer 往返后，用同一 mode 重新包装，再解包复核文本和非文本结构；mode 2 重压缩不保证压缩字节完全一致。来源与算法差异见[出处记录](../provenance/kirikiri-sources.json)。
+- 这两种包装与 XP3 索引、独立过滤器、Hx 载荷过滤互不相干，不能互相代替；每一层的参数都要分别确认。
 
 ## XP3 索引与正文过滤
 
@@ -79,6 +96,17 @@ python -m python.engines.kirikiri_extract pack "提取目录" "新的打包目�
 - 已知图片消息的替代文本单独导出为 `image-alt`，不能误当语音缓存。无显示字段的选项仅在符合严格结构规则时保留并记入 `skipped_structural_choices`；具体字段规则见通用工作流。图像文字及 `phonechat` 历史快照不因此自动获得翻译支持。
 - 字符串池和树节点可能共享；按完整树路径定位每次引用，不能全局替换字符串 ID 或只按物理节点地址写入。writer 重建相关偏移、索引宽度、区段地址与校验，并比较非文本语义。
 
+### 说话者字段作为显示名（`--speaker-name`）
+
+单语言元组是 `[who, display, message, ...]`；多语言元组的语言槽内是 `[display, message, ...]`。`display` 是显式显示名槽，`who` 是外层说话者字段。
+
+- `who` 为 null 时沿用旁白规则，不导出姓名；`who` 和 `display` 都是字符串时回写 `display`，这是默认路径。
+- `display` 为 null 而 `who` 是字符串时，**含义因方言而异**：可能直接显示 `who`，也可能是内部标识符。默认将其导出为只读 `name`（`name_policy=context`），改动会被回写端拒绝。空字符串仍是显式显示名，不等同于 null。
+- 需要把这类作品的人名一并汉化时，用 `--speaker-name` 显式开启：`who` 按可写显示名槽导出，回写改 `who` 自身（对话元组第 0 项）。`kirikiri_extract` 与 `kirikiri_hxv4_text` 的 `extract` 都接受该参数，取值随 `reports/extraction.json` 保存，`pack` 沿用同一规则。
+- 开启前要有证据：查同作品既有汉化版本的用法，或先只改一个易触发的脚本试注，确认对话窗显示的名字确实来自 `who`。
+- 多语言结构的 `who` 由各语言共享；改写会影响其他依赖该字段的语言，其他语言自己的显示名与正文槽仍保持原样。仅需改某一语言的姓名时，不应把共享 `who` 当局部显示名。
+- `who` 是整数或其他类型时不猜，直接拒绝解析。
+
 ### Hxv4 中的 SCN
 
 ```text
@@ -115,13 +143,13 @@ assert patched == '#Alice\r\n你好[r]world[l]\r\n'
 
 普通 SCN 流程的 `rebuilt/roundtrip/scenario.xp3` 是经真实 parser/writer 生成的剧情包；可选 `smoke-test` 是变长验证产物。它们不包含完整媒体资源，不能覆盖整个原资源包。原文脚本逐字节往返与新归档逐成员解包一致是两个验证层次，需分别报告。
 
-回注优先检查 [patch.xp3 增量补丁流程](kirikiri/workflow.md#译文回注优先使用-patchxp3-增量补丁)：确认挂载位置、编号、优先级及成员路径，只选实际变化的资源。扁平化必须符合目标加载规则，不能把任意 `scenario.xp3` 改名就当作正确补丁；Hxv4 还需核对根目录哈希和 Poly1305 认证。外部 `.sig` 是否参与加载另行确认，不把归档认证和外部签名混为一谈。
+回注优先检查 [patch.xp3 增量补丁流程](kirikiri/workflow.md#译文回注优先使用-patchxp3-增量补丁)：确认挂载位置、编号、优先级及成员路径，只选实际变化的资源。**增量补丁内所有成员一律平铺在根目录、只用 basename 加完整扩展名；脚本与字体、配置、图片等非脚本资源都一样，都不保留原包的目录结构。**不能把任意 `scenario.xp3` 改名就当作正确补丁；Hxv4 还需核对根目录哈希和 Poly1305 认证。外部 `.sig` 是否参与加载另行确认，不把归档认证和外部签名混为一谈。
 
 交付说明原文往返、中文变长、重封包读回和游戏显示各自的实际状态。建议先测试容易触发的少量正文与选项，再验证存档恢复。缺字或方框时提醒用户检查、必要时替换 `data.xp3` 中实际使用的字体，具体做法见通用工作流。
 
 默认由 agent 接收同名 `gt_output` 后执行回写和打包，不只提供命令让用户自行操作。所有产物写入新目录，原游戏文件保持只读；部署与启动沿用主流程授权边界。
 
-中文缺字、字体选择与覆盖关系见[字体排查流程](kirikiri/workflow.md#中文缺字与字体选择)。
+中文缺字、字体选择与覆盖关系见[字体排查流程](kirikiri/workflow.md#中文缺字与字体选择)。使用 `appconfig.tjs` / `ENV_GameName` 的加载链，另见[窗口标题与配置文字](kirikiri/workflow.md#窗口标题与配置文字appconfigtjs)。
 
 ## 验证与维护
 

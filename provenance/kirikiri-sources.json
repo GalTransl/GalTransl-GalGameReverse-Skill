@@ -86,6 +86,30 @@
       "commit": "388e75f96bdc066786b12e3df0432429a26bf186",
       "license": "AGPL-3.0",
       "use": "CxdecKeyStatic read-only comparison; no native game code executed or code copied"
+    },
+    {
+      "repository": "msg-tool",
+      "commit": "f72716cee88554d40c1cdface2812493b14ca653",
+      "license": "GPL-3.0-or-later",
+      "files": [
+        "src/scripts/kirikiri/simple_crypt.rs",
+        "src/utils/encoding.rs",
+        "src/scripts/kirikiri/scn.rs"
+      ],
+      "use": "SimpleCrypt header/BOM detection and SCN single-language speaker-slot writeback. Compared against the local checkout. Its bytewise mode 0 (decimal threshold 20), mode 2 size assertion and raw-deflate selection differ from the engine implementation; these differences are not adopted as engine format rules."
+    },
+    {
+      "repository": "krkrz/krkrz",
+      "url": "https://github.com/krkrz/krkrz",
+      "commit": "fd5c4baa6a2ef5978db1bd043634351f48667daf",
+      "license": "BSD-3-Clause",
+      "copyright": "Copyright (C) 2000 W.Dee and contributors",
+      "files": [
+        "base/TextStream.cpp",
+        "LICENSE"
+      ],
+      "notice": "kirikiri-textstream-BSD.txt",
+      "use": "SimpleCrypt u16 mode 0 decode, mode 1 bit transform, little-endian BOM, zlib framing and compressed/uncompressed stream lengths. Bounded Python codec and synthetic known-byte vectors; mode 0 writing rejects code units without an inverse."
     }
   ]
 }

@@ -82,6 +82,7 @@ def _derived_caches(psb, nodes, paths, message, locate_only, context):
             opaque.append(loc); continue
         if index >= 2: opaque.append(loc); continue
         if stored == save_message(message, index == 0):
+            if index == 1 and not caches: variants['search_only'] = True
             caches.append(loc); continue
         match = next((v for v in CACHE_VARIANTS if index == 0 and stored == save_message(message, True, **v)), None)
         if match is not None:
@@ -92,12 +93,13 @@ def _derived_caches(psb, nodes, paths, message, locate_only, context):
     return caches, variants, opaque
 
 
-def records(psb, language_index=0, *, skipped=None):
+def records(psb, language_index=0, *, skipped=None, speaker_name=False):
     """Export scene texts and choices; collect non-display select keys in skipped."""
-    return _records(psb, language_index, skipped=skipped, locate_only=False)
+    return _records(psb, language_index, skipped=skipped, locate_only=False,
+                    speaker_name=speaker_name)
 
 
-def locate_records(psb, language_index=0, *, skipped=None):
+def locate_records(psb, language_index=0, *, skipped=None, speaker_name=False):
     """Locate scene text by typed field prefixes and record its write plan.
 
     Trailing tuple fields are opaque: a derived field (visible length,
@@ -107,10 +109,11 @@ def locate_records(psb, language_index=0, *, skipped=None):
     marked 'non_writable' so pack refuses to change it instead of guessing.
     Missing language slots and ambiguous text types still fail, not disappear.
     """
-    return _records(psb, language_index, skipped=skipped, locate_only=True)
+    return _records(psb, language_index, skipped=skipped, locate_only=True,
+                    speaker_name=speaker_name)
 
 
-def writable_records(psb, language_index=0, *, skipped=None):
+def writable_records(psb, language_index=0, *, skipped=None, speaker_name=False):
     """Prefer the exact verified dialect, else fall back to typed location.
 
     Returns (records, strict_issue). strict_issue is None only when the whole
@@ -118,15 +121,18 @@ def writable_records(psb, language_index=0, *, skipped=None):
     """
     exact = []
     try:
-        found = _records(psb, language_index, skipped=exact, locate_only=False)
+        found = _records(psb, language_index, skipped=exact, locate_only=False,
+                         speaker_name=speaker_name)
         for rec in found: controls(rec['row']['message'])
     except ValueError as exc:
-        return _records(psb, language_index, skipped=skipped, locate_only=True), str(exc)
+        return _records(psb, language_index, skipped=skipped, locate_only=True,
+                        speaker_name=speaker_name), str(exc)
     if skipped is not None: skipped.extend(exact)
     return found, None
 
 
-def _text_record(psb, text, path, scene_id, text_id, language_index, locate_only):
+def _text_record(psb, text, path, scene_id, text_id, language_index, locate_only,
+                 speaker_name=False):
     values = text.value
     zero_tail = bool(values) and (values[-1].tag == 4 or 5 <= values[-1].tag <= 12 and values[-1].value == 0)
     if len(values) >= 2 and values[1].tag == 32 and (locate_only or len(values) == 5 or len(values) == 6 and zero_tail):
@@ -188,19 +194,30 @@ def _text_record(psb, text, path, scene_id, text_id, language_index, locate_only
             opaque = [path+(i,) for i in range(6, len(values))]
     if who.tag != 1 and not 21 <= who.tag <= 24: raise ValueError('unknown name ID')
     if display.tag != 1 and not 21 <= display.tag <= 24: raise ValueError('unknown display name')
-    name = None if who.tag == 1 else psb.text(display if display.tag != 1 else who)
+    # An explicit display slot wins. A null display permits writing the speaker
+    # string only after the caller opts into this dialect; otherwise it is an ID.
+    if who.tag == 1:
+        name, writable_name = None, None
+    elif display.tag != 1:
+        name, writable_name = psb.text(display), name_path
+    elif who.tag != 1 and speaker_name:
+        name, writable_name = psb.text(who), path + (0,)
+    elif who.tag != 1:
+        name, writable_name = psb.text(who), None
+    else:
+        name, writable_name = None, None
     row = {'name': name} if name is not None else {}
     row['message'] = psb.text(message).replace('\\n', '\n')
     rec = dict(row=row, message=message_path, caches=cache_paths,
-               name=name_path if name is not None and display.tag != 1 else None,
-               kind=kind, scene=scene_id, index=text_id, **variants)
+               name=writable_name, kind=kind, scene=scene_id, index=text_id, **variants)
     if length_path is not None: rec['length'] = length_path
     if opaque: rec['opaque'] = sorted(set(opaque))
     return rec
 
 
-def _records(psb, language_index, *, skipped, locate_only):
+def _records(psb, language_index, *, skipped, locate_only, speaker_name=False):
     if type(language_index) is not int or language_index < 0: raise ValueError('invalid language index')
+    if type(speaker_name) is not bool: raise ValueError('invalid speaker_name flag')
     root = fields(psb, psb.root, ())
     self_name = psb.strings[root['name'][0].value] if 'name' in root and 21 <= root['name'][0].tag <= 24 else None
     result = []
@@ -209,7 +226,8 @@ def _records(psb, language_index, *, skipped, locate_only):
         if 'texts' in scene:
             for text_id, (text, path) in enumerate(list_nodes(scene['texts'])):
                 if text.tag != 32: raise ValueError('unknown SCN text tuple')
-                result.append(_text_record(psb, text, path, scene_id, text_id, language_index, locate_only))
+                result.append(_text_record(psb, text, path, scene_id, text_id, language_index,
+                                           locate_only, speaker_name))
         if 'selects' in scene:
             for choice_id, (choice, path) in enumerate(list_nodes(scene['selects'])):
                 choice = fields(psb, choice, path)
@@ -244,6 +262,7 @@ def _records(psb, language_index, *, skipped, locate_only):
                 if derived: rec['opaque'] = sorted(set(rec.get('opaque', []) + derived))
                 rec['caches'] = []; rec.pop('length', None)
                 rec.pop('strip_ruby_dot', None); rec.pop('trim_ruby_space', None)
+                rec.pop('search_only', None)
     return result
 
 
@@ -326,7 +345,7 @@ def patch(psb, exported, rows):
             raise ValueError('SCN controls changed')
         else:
             edits[rec['message']] = row['message'].replace('\n', '\\n')
-            for loc, ruby in zip(rec['caches'], (True, False)):
+            for loc, ruby in zip(rec['caches'], (False,) if rec.get('search_only') else (True, False)):
                 edits[loc] = save_message(row['message'], ruby, strip_ruby_dot=rec.get('strip_ruby_dot',False),
                                          trim_ruby_space=rec.get('trim_ruby_space',False))
             if 'length' in rec:

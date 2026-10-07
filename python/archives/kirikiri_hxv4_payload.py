@@ -18,9 +18,14 @@ U64 = (1 << 64) - 1
 def build_flat_patch(members, keys, *, hx_flags=0):
     """Build (original identity, plaintext, basename) triples at the Hx root.
 
-    Explicit patch operation: keeps file ID/key/name hash, replaces only the
-    directory hash. Caller selects changed resources and verifies loader policy.
-    The standard File index still contains internal aliases, not literal names.
+    Explicit patch operation: keeps file ID/key/name hash and replaces the
+    directory hash with the root domain, so EVERY member ends up flat no matter
+    where it sits in the source archive - scripts, fonts, configs, images and
+    audio alike. Basenames are mandatory (a name with a directory separator is
+    rejected): a patch is a separate archive, and inheriting the original
+    directory hash would leave the member unreachable. Caller selects changed
+    resources and verifies loader policy. The standard File index still
+    contains internal aliases, not literal names.
     """
     members = list(members)
     names = validate_names([name for _, _, name in members])

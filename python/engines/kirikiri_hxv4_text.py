@@ -46,7 +46,7 @@ def plain_members(raw):
 
 
 def extract(archive, exe, output, *, paths=('', 'scn/', 'scenario/'), language_index=0,
-            max_member_bytes=32 << 20, max_scan_bytes=384 << 20):
+            speaker_name=False, max_member_bytes=32 << 20, max_scan_bytes=384 << 20):
     """Select hash-verified PSB SCN from one Hx archive into a shared workspace.
 
     Oversized members remain uninspected, not classified as media or non-script.
@@ -121,7 +121,7 @@ def extract(archive, exe, output, *, paths=('', 'scn/', 'scenario/'), language_i
         (source/'scripts.xp3').write_bytes(xp3.build(files, filter_name='none', compress_contents=True))
         work = base/'work'
         result = shared.extract(source, work, archives=('scripts.xp3',), verify_edits=True,
-                                language_index=language_index)
+                                language_index=language_index, speaker_name=speaker_name)
         payloads = [(p.relative_to(work).as_posix(), p.read_bytes()) for p in work.rglob('*') if p.is_file()]
         # Keep explicitly named plain intermediate evidence, plus encrypted deliverables.
         for stage in ('roundtrip', 'smoke-test'):
@@ -177,9 +177,11 @@ def main():
     ex = sub.add_parser('extract'); ex.add_argument('archive',type=Path); ex.add_argument('output',type=Path)
     ex.add_argument('--exe',required=True,type=Path); ex.add_argument('--paths',nargs='+',default=['','scn/','scenario/'])
     ex.add_argument('--language-index',type=int,default=0)
+    ex.add_argument('--speaker-name',action='store_true',
+                    help='treat a string speaker field as the writable display name when the display slot is empty')
     pk = sub.add_parser('pack'); pk.add_argument('workspace',type=Path); pk.add_argument('output',type=Path)
     args = parser.parse_args()
-    result = extract(args.archive,args.exe,args.output,paths=args.paths,language_index=args.language_index) if args.command=='extract' else pack(args.workspace,args.output)
+    result = extract(args.archive,args.exe,args.output,paths=args.paths,language_index=args.language_index,speaker_name=args.speaker_name) if args.command=='extract' else pack(args.workspace,args.output)
     summary = dict(totals=result['totals'], scan_complete=result['scan_complete'],
                    skipped_oversize_members=result['skipped_oversize_members'],
                    decrypted_bytes=result['decrypted_bytes'], diagnostic_count=len(result['diagnostics'])) if args.command=='extract' else result

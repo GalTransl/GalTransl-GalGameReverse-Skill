@@ -34,6 +34,21 @@ OPAQUE_ROWS = [dict(name='表示名', message='本文'),
 
 
 class TypedLocationTests(unittest.TestCase):
+    def test_search_cache_keeps_its_role_when_speech_cache_is_opaque(self):
+        text = '[よみ,1]漢字'
+        raw = script([['id', [[None, text, 2, {'opaque': 1}, '漢字']], None, 1, {}]])
+        p = Psb(raw); found, issue = writable_records(p)
+        self.assertTrue(issue)
+        self.assertTrue(found[0]['search_only'])
+        self.assertEqual(patch(p, found, [r['row'] for r in found])[0], raw)
+        rows = [dict(found[0]['row'], message='中文前缀' + text)]
+        rebuilt, paths = patch(p, found, rows); q = Psb(rebuilt)
+        new = writable_records(q)[0]
+        self.assertEqual([r['row'] for r in new], rows)
+        self.assertEqual(new[0]['caches'], found[0]['caches'])
+        self.assertTrue(new[0]['search_only'])
+        self.assertEqual(fingerprint(p, paths), fingerprint(q, paths))
+
     def test_opaque_tail_fields_are_located_and_still_writable(self):
         raw = script(OPAQUE_TEXTS); p = Psb(raw)
         located = locate_records(p)
