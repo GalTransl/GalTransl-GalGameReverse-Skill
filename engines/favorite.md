@@ -25,6 +25,18 @@
 - 因此内容最多 254 个编码字节，不是 254 个汉字。
 - 长度零、提前 NUL、越界及未知 opcode 全部拒绝。
 
+## BIN/FVP 与 ACPXPK 归档格式资料
+
+以下为容器资料，未增加随包实现；来源和许可见 [记录](../provenance/garbro-archive-notes.json)。整数小端，名称 CP932。外置 HCB 不必经过这些容器。
+
+`BIN/FVP` 没有固定 magic：`+0 i32 count`，`+4 u32 name_table_size`，从 8 开始每条 12 字节，依次 `u32 name_relative_offset, absolute_offset, size`。名称区基址 `8+count*12`，名字相对于该区，必须在 name_table_size 内找到 NUL。数据范围独立核对。来源可能按资源 signature 增补导出后缀，重封研究应保留真实包内名称，不能把猜出的后缀当原名。
+
+`BIN/ACPXPK` 头为 `ACPXPK01` 或 `ACP_PK.1`，`+8 i32 count`，目录从 `0x0C` 开始，每条 `0x28`：`0x20` 字节名称、u32 绝对偏移、u32 size。成员未带 `acp\0` 时原样读取；带该标记时 `+4` 是**大端**解压长度，`+8` 开始是 MSB 位流的变宽 LZW。
+
+LZW 初始宽度 9 位、字典位置 p=0，字典最多 `0x8900` 个输出位置。token `0x100` 结束，`0x101` 增加 1 位（不超过 24），`0x102` 清空字典并恢复 9 位。其余 token 先记 `dict[p++]=dst`；小于 256 时输出 literal，否则 j=token-0x103，从 `dict[j]` 复制到输出，长度 `dict[j+1]-dict[j]+1`，允许重叠。j 必须对应已有有效位置，长度和读写范围需严格验证；不能继承提前结束后零填充或超长截断行为。
+
+来源未使用外部解密 key，两个 opener 均 `CanWrite=false`；LZW 是压缩而不是字符编码。完成解包后再单独确认 HCB 版本与文本引用。
+
 ## 容器到剧本路线
 1. 先核查 HCB 是外置文件还是具体容器成员。
 2. GARbro-Mod `ArcFormats/Favorite/ArcBIN.cs`、`ArcFVP.cs` 是资源层参考。

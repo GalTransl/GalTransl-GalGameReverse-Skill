@@ -98,6 +98,7 @@ JIS 交付可将随包 [UIF x86 winmm.dll](assets/uif/README.md) 与配置一并
 - [通用集成步骤：导出 JSON、保存 manifest、回填新脚本](guides/worked-roundtrip.md)
 - [增补未知引擎或游戏变体](guides/extending-engines.md)
 - [完整归档/脚本格式 catalog](catalog/formats.json)：资料目录，不是 Python 支持列表。
+- [归档布局与解密资料](catalog/archive-notes.md)：按格式查阅索引、key 派生和成员解码规则；资料不代表已实现。
 - [上游实际注册清单](catalog/source-registries.json)：含预设、工具线索及禁用/不完整实现的区分。
 - [来源与许可证](provenance/NOTICE.md)
 

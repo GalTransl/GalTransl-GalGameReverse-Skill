@@ -11,6 +11,12 @@
 - SNN 的 Inx 每条 `0x48` 字节：`0x40` 名称、offset、size。
 - 它与 BDT 的 16 字节标签索引完全不同，不能混用。
 
+## SNN/Inx 归档格式资料
+
+来源 [记录](../provenance/garbro-archive-notes.json) 中的 SNN reader 不要求固定 magic，而要求 `.snn` 和同名 `.Inx` 成对存在。Inx 从 `+0 i32` 读取条目数，从 `+4` 开始有 `count*0x48` 字节索引；每条为 `0x40` 字节 CP932 NUL 名称、`+0x40 u32` 偏移、`+0x44 u32` 尺寸，均小端。偏移是 SNN 文件绝对位置，不是相对 Inx 或索引末尾。
+
+索引与成员提取本身没有附加密码/压缩；取得 BDT 后仍需按下面的 BDT 规则独立决定是否 XOR FF。必须限制条目数和名称长度，校验两文件完整、跨度不越界和安全输出路径；保留原始名称，不以资源类型猜测补后缀。来源 `CanWrite=false`，当前 Skill 未实现这对文件的 reader/writer。
+
 ## 容器 → BDT
 - 先按实测容器版本提取 BDT，保留原名字和相对位置。
 - 本 leaf 不读取 SNN/Inx，也不实现它们的 writer。

@@ -9,6 +9,20 @@
 - 文本扫描从该标记起点加 16 字节开始。
 - 本页明确保留来源的两字节扫描启发式，不冒称完整 VM 解析。
 
+## ARCC/ODIO/WAG 归档格式资料
+
+出处和许可见 [记录](../provenance/garbro-archive-notes.json)。这些是独立容器方言；均无随包 reader/writer、无实际解包验证，来源 `CanWrite=false`。默认小端，文本名称 CP932。
+
+ARCC：magic `ARCC`，`+0x14 i32 count`。`0x2A` 要求 `NAME`，其 `+4 i64` 给 ADDR 块位置；随后跳 `0x0E` 到 `NIDX`，读取 count 个 8 字节记录，其中 `+2 u32` 为名称偏移线索。接着要求 `EIDX` 并跳 `4+8*count`，再要求 `CINF`。每个 CINF 项先跳 6 字节，读 u16 名称长度，名字在此位置 `+4`，下一项在此位置 `+6+name_length`；名字逐字节 XOR `0x69`。
+
+ADDR 块 `+4` 开始每条 12 字节，`+2 i64` 给绝对 FILE 块起点。该处需为 `FILE`，`FILE+0x18 u32` 是尺寸，payload 从 `FILE+0x22` 开始。源 reader 跳过非 FILE/零尺寸项且缺少完整 placement 检查；独立实现必须验证块标记、整个索引链与所有跨度，并记录未识别记录，不能把未解释条目悄悄删除。
+
+ODIO：magic `ODIO`，`+4 u32=0`，`+0xA u32=0xCCAE01FF`；`+0x12 u32 first_offset`，count=`(first_offset-0x12)/6`，索引自 `0x12` 起每条 6 字节，前 4 字节为偏移，其余保持不透明。尺寸按相邻偏移差分，最后至 EOF；要求 first_offset 合理且余数为零。成员为 `ONCE` 且至少 `0x2C` 字节时跳过 `0x2C` 外壳，对余下每字节 ROR4（交换高低半字节），否则原样。此路线是音频，不证明存在 NORI 剧本。
+
+WAG：原头 magic `IAF_`，`+4 u16 type`，`+6 i32 count`；解密视图对每字节 ROR4，原头和解密块标记不能混用。在解密视图 `0x4A` 读 count 个 u32 绝对偏移，各处需 `DATA`，随后 i32 section_count、2 字节保留。块 `IMGD` 后 u32 size，导出跨度从 IMGD 标记开始，长度 `size+0x10`，流在读取 size 后再跳 `size+2`；`FNNE` 后 i32 length，跳 2 字节、读取 `length-2` 字节名称，再跳 2 字节。其他块读取 u32 size 后跳 `size+2`，必须验证范围并保留未知块。
+
+WAG 来源只把具有 FNNE 名称与 IMGD 内容的项列为输出，OpenEntry 再施加 ROR4。这是图像容器读取路线，不可升级成对任意 DATA 子块的通用提取，更不能混用 NORI 的 XOR53 解密。
+
 ## 容器与剧本
 - 来源把归档处理放在 `src/scripts/hexen_haus/archive/`。
 - ARCC/ODIO/WAG 分支不等于本页的 NORI 字符串布局。

@@ -1,0 +1,16 @@
+{
+  "source": "GARbro-Mod",
+  "repository": "https://github.com/nanami5270/GARbro-Mod",
+  "commit": "bc26d991ef5cdc0e1ecb32122ee9a48c3375750c",
+  "kind": "archive algorithm documentation; not a runtime implementation",
+  "license": "MIT; see licenses/MIT-GARbro.txt; copyright and notices remain applicable",
+  "attribution": "morkt and GARbro contributors; MersenneTwister algorithm credits Makoto Matsumoto and Takuji Nishimura",
+  "documents": {
+    "engines/fc01/archives.md": ["ArcFormats/FC01/ArcMRG.cs", "ArcFormats/FC01/ArcMRG0.cs"],
+    "engines/agsi.md": ["ArcFormats/FC01/ArcPAK.cs", "ArcFormats/MersenneTwister.cs", "ArcFormats/LzssStream.cs"],
+    "engines/bluegale.md": ["ArcFormats/BlueGale/ArcSNN.cs"],
+    "engines/circus.md": ["ArcFormats/Circus/ArcCircus.cs", "ArcFormats/Circus/ArcPCK.cs", "ArcFormats/Circus/ArcCRM.cs"],
+    "engines/favorite.md": ["ArcFormats/Favorite/ArcBIN.cs", "ArcFormats/Favorite/ArcFVP.cs"],
+    "engines/hexenhaus.md": ["ArcFormats/Hexenhaus/ArcARCC.cs", "ArcFormats/Hexenhaus/ArcODIO.cs", "ArcFormats/Hexenhaus/ArcWAG.cs"]
+  }
+}

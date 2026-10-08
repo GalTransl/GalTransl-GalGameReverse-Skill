@@ -1,0 +1,232 @@
+# Cherry / ArcCherry：归档读取与解码
+
+算法资料，未执行验证；不改变随包支持声明。API、边界和外部参数见 [读取约定](../../reading.md)。
+
+## 格式入口
+
+| 标识/API | 扩展名 | 文件头候选（u32 小端字节） | 来源写入声明 |
+|---|---|---|---|
+| `PAK/CHERRY2` / `GameRes.Formats.Cherry.Pak2Opener` | `pak` | `43484552` | `False` |
+| `PAK/CHERRY` / `GameRes.Formats.Cherry.PakOpener` | `pak` | 无固定签名或来源表达式未解析 | `False` |
+
+## 字段与结构读取
+
+以下保留源码的偏移表达式。`entry.Offset` 为最终成员跨度；`base_offset + offset` 等表达式中的基址以算法摘录为准。表中重复读取可属于不同版本或分支，不能拼成一个假定的统一头部。
+
+| 算法位置 | 读取表达式 |
+|---|---|
+| `PakOpener.TryOpen` | `int count = file.View.ReadInt32 (0);` |
+| `PakOpener.TryOpen` | `long base_offset = file.View.ReadUInt32 (4);` |
+| `PakOpener.ReadIndex` | `string name = index.View.ReadString (index_offset, 0x10);` |
+| `PakOpener.ReadIndex` | `var offset = base_offset + index.View.ReadUInt32 (index_offset+0x10);` |
+| `PakOpener.ReadIndex` | `entry.Size = index.View.ReadUInt32 (index_offset+0x14);` |
+| `PakOpener.OpenEntry` | `if (!arc.File.View.AsciiEqual (entry.Offset, "GsWIN SC File"))` |
+| `PakOpener.OpenEntry` | `var text_offset = 0x68 + arc.File.View.ReadUInt32 (entry.Offset+0x5C);` |
+| `PakOpener.OpenEntry` | `var text_size = arc.File.View.ReadUInt32 (entry.Offset+0x60);` |
+| `PakOpener.OpenEntry` | `var data = arc.File.View.ReadBytes (entry.Offset, entry.Size);` |
+| `Pak2Opener.TryOpen` | `if (!file.View.AsciiEqual (0, "CHERRY PACK 2.0\0") &&` |
+| `Pak2Opener.TryOpen` | `!file.View.AsciiEqual (0, "CHERRY PACK 3.0\0"))` |
+| `Pak2Opener.TryOpen` | `int version = file.View.ReadByte (0xC) - '0';` |
+| `Pak2Opener.TryOpen` | `bool is_compressed = file.View.ReadInt32 (0x10) != 0;` |
+| `Pak2Opener.TryOpen` | `int count = file.View.ReadInt32 (0x14);` |
+| `Pak2Opener.TryOpen` | `long base_offset = file.View.ReadUInt32 (0x18);` |
+| `Pak2Opener.TryOpen` | `var packed = file.View.ReadBytes (0x1C, (uint)base_offset-0x1C);` |
+| `Pak2Opener.OpenEntry` | `var data = arc.File.View.ReadBytes (entry.Offset, entry.Size);` |
+
+## 读取、解密与解压步骤
+
+按所属类和入口选择分支，固定常量只用于引用它们的方言。外部方案库需要显式参数；摘录省略 writer、GUI 和资源注册。
+
+### GameRes.Formats.Cherry.PakOpener
+
+继承/接口：`ArchiveFormat`。
+
+#### PakOpener
+
+```csharp
+public PakOpener () {
+    Extensions = new string[] { "pak" };
+}
+```
+
+#### TryOpen
+
+```csharp
+public override ArcFile TryOpen (ArcView file) {
+    int count = file.View.ReadInt32 (0);
+    if (!IsSaneCount (count))
+        return null;
+    long base_offset = file.View.ReadUInt32 (4);
+    if (base_offset >= file.MaxOffset || base_offset != (8 + count*0x18))
+        return null;
+    var dir = ReadIndex (file, 8, count, base_offset, file);
+    return dir != null ? new ArcFile (file, this, dir) : null;
+}
+```
+
+#### ReadIndex
+
+```csharp
+protected List<Entry> ReadIndex (ArcView index, int index_offset, int count, long base_offset, ArcView file) {
+    uint index_size = (uint)count * 0x18u;
+    if (index_size > index.View.Reserve (index_offset, index_size))
+        return null;
+    string arc_name = Path.GetFileNameWithoutExtension (file.Name);
+    bool is_grp = arc_name.EndsWith ("GRP", StringComparison.InvariantCultureIgnoreCase);
+    var dir = new List<Entry> (count);
+    for (int i = 0; i < count; ++i)
+    {
+        string name = index.View.ReadString (index_offset, 0x10);
+        if (0 == name.Length)
+            return null;
+        var offset = base_offset + index.View.ReadUInt32 (index_offset+0x10);
+        Entry entry;
+        if (is_grp)
+        {
+            entry = new Entry {
+                Name = Path.ChangeExtension (name, "grp"),
+                Type = "image",
+                Offset = offset
+            };
+        }
+        else
+        {
+            entry = AutoEntry.Create (file, offset, name);
+        }
+        entry.Size = index.View.ReadUInt32 (index_offset+0x14);
+        if (!entry.CheckPlacement (file.MaxOffset))
+            return null;
+        dir.Add (entry);
+        index_offset += 0x18;
+    }
+    return dir;
+}
+```
+
+#### OpenEntry
+
+```csharp
+public override Stream OpenEntry (ArcFile arc, Entry entry) {
+    if (!arc.File.View.AsciiEqual (entry.Offset, "GsWIN SC File"))
+        return arc.File.CreateStream (entry.Offset, entry.Size);
+    var text_offset = 0x68 + arc.File.View.ReadUInt32 (entry.Offset+0x5C);
+    var text_size = arc.File.View.ReadUInt32 (entry.Offset+0x60);
+    if (0 == text_size || text_offset+text_size > entry.Size)
+        return arc.File.CreateStream (entry.Offset, entry.Size);
+
+    var data = arc.File.View.ReadBytes (entry.Offset, entry.Size);
+    for (uint i = 0; i < text_size; ++i)
+    {
+        data[text_offset+i] ^= (byte)i;
+    }
+    return new BinMemoryStream (data, entry.Name);
+}
+```
+
+### GameRes.Formats.Cherry.CherryPak
+
+继承/接口：`ArcFile`。
+
+### GameRes.Formats.Cherry.Pak2Opener
+
+继承/接口：`PakOpener`。
+
+#### Pak2Opener
+
+```csharp
+public Pak2Opener () {
+    Extensions = new string[] { "pak" };
+}
+```
+
+#### TryOpen
+
+```csharp
+public override ArcFile TryOpen (ArcView file) {
+    if (!file.View.AsciiEqual (0, "CHERRY PACK 2.0\0") &&
+        !file.View.AsciiEqual (0, "CHERRY PACK 3.0\0"))
+        return null;
+    int version = file.View.ReadByte (0xC) - '0';
+    bool is_compressed = file.View.ReadInt32 (0x10) != 0;
+    int count = file.View.ReadInt32 (0x14);
+    long base_offset = file.View.ReadUInt32 (0x18);
+    bool is_encrypted = false;
+    while (!IsSaneCount (count) || base_offset >= file.MaxOffset
+           || (2 == version && !is_compressed && base_offset != (0x1C + count * 0x18)))
+    {
+        if (is_encrypted)
+            return null;
+
+        count       ^= unchecked((int)0xBC138744);
+        base_offset ^= 0x64E0BA23;
+        is_encrypted = true;
+    }
+    List<Entry> dir;
+    if (is_compressed)
+    {
+        var packed = file.View.ReadBytes (0x1C, (uint)base_offset-0x1C);
+        Decrypt (packed, 0, packed.Length);
+        using (var mem = new MemoryStream (packed))
+        using (var lzss = new LzssStream (mem))
+        using (var index = new ArcView (lzss, file.Name, (uint)count * 0x18))
+            dir = ReadIndex (index, 0, count, base_offset, file);
+    }
+    else
+    {
+        dir = ReadIndex (file, 0x1C, count, base_offset, file);
+    }
+    if (null == dir)
+        return null;
+    if (is_encrypted && is_compressed)
+        return new CherryPak (file, this, dir);
+    else
+        return new ArcFile (file, this, dir);
+}
+```
+
+#### Decrypt
+
+```csharp
+internal static void Decrypt (byte[] data, int index, int length)
+    for (int i = 0; i+1 < length; i += 2)
+    {
+        byte lo = (byte)(data[index+i  ] ^ 0x33);
+        byte hi = (byte)(data[index+i+1] ^ 0xCC);
+        data[index+i  ] = hi;
+        data[index+i+1] = lo;
+    }
+}
+```
+
+#### OpenEntry
+
+```csharp
+public override Stream OpenEntry (ArcFile arc, Entry entry) {
+    if (!(arc is CherryPak) || entry.Size < 0x18)
+        return base.OpenEntry (arc, entry);
+    var data = arc.File.View.ReadBytes (entry.Offset, entry.Size);
+    if (data.Length >= 0x18)
+    {
+        unsafe
+        {
+            fixed (byte* raw = data)
+            {
+                uint* raw32 = (uint*)raw;
+                raw32[0] ^= 0xA53CC35Au;
+                raw32[1] ^= 0x35421005u;
+                raw32[4] ^= 0xCF42355Du;
+            }
+        }
+        Decrypt (data, 0x18, (int)(data.Length - 0x18));
+    }
+    return new BinMemoryStream (data, entry.Name);
+}
+```
+
+## 配套算法与外部条件
+
+- [ArcFormats/LzssStream.cs](../LzssStream.md)：本页引用的随包算法资料。
+
+## 出处与许可
+
+来源文件标识 `ArcFormats/Cherry/ArcCherry.cs`；版本、UTF-8 解码内容哈希与版权/许可通知见 [出处清单](../../../../provenance/garbro-archive-excerpts.json)和 [原通知](../../../../provenance/garbro-archive-notices.md)。路径是出处，不是使用时需要访问的外部文件。
