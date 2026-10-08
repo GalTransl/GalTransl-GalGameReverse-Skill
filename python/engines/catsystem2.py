@@ -39,7 +39,7 @@ class DialogueExport:
     name_command_crossings: tuple[tuple[int, tuple[int, ...]], ...]
 
 
-_CONTROL_TOKEN = re.compile(r"\\(?:[@p]|[A-Za-z][A-Za-z0-9]*(?:\[[^\]\r\n]*\])?)")
+_CONTROL_TOKEN = re.compile(r"\\(?:[@pn]|[A-Za-z][A-Za-z0-9]*(?:\[[^\]\r\n]*\])?)")
 _CHOICE = re.compile(r"^\d+\s+\w+\s+(.+)")
 _DYNAMIC_NAME = re.compile(r"^\$[A-Za-z_][A-Za-z0-9_]*(?:\[[^\]\r\n]+\])?$")
 
@@ -94,8 +94,8 @@ def export_cst(value, encoding: str = "cp932") -> DialogueExport:
     """Map raw 0x21/0x20 records to ordered translation rows without merging slots.
 
     A character record is consumed by the next non-empty message. Dynamic names such as
-    ``$str20`` remain context-only. Choice-like 0x30 records are reported but excluded
-    because :func:`patch_cst` deliberately cannot rewrite command syntax.
+    ``$str20`` remain context-only. Recognized 0x30 choice captions are separate
+    rows; command prefixes are never translated.
     """
     scene = value if isinstance(value, Scene) else read_cst(value, encoding)
     if not isinstance(scene, Scene):
@@ -119,17 +119,25 @@ def export_cst(value, encoding: str = "cp932") -> DialogueExport:
         if record.kind == 0x30:
             if pending_name is not None:
                 intervening_commands.append(record.index)
-            if _CHOICE.match(record.text):
-                excluded_choices.append(record.index)
+            choice = _CHOICE.fullmatch(record.text)
+            if choice is None:
+                continue
+            text = choice.group(1)
+        elif record.kind == 0x20 and record.text:
+            choice = None
+            text = record.text
+        else:
             continue
-        if record.kind != 0x20 or not record.text:
-            continue
-        if "\r" in record.text or "\n" in record.text:
+        if "\r" in text or "\n" in text:
             raise ValueError(f"CST message record {record.index} contains an ambiguous literal line break")
-        message = record.text.replace(r"\n", "\n")
+        message = text if choice is not None else text.replace(r"\n", "\n")
         row = {"message": message}
         locator = {"message_record": record.index, "newline": "literal-backslash-n"}
-        if pending_name is None:
+        if choice is not None:
+            locator["choice_span"] = (choice.start(1), choice.end(1))
+            locator["newline"] = "raw-caption"
+            policies.append("absent")
+        elif pending_name is None:
             policies.append("absent")
         else:
             row = {"name": pending_name.text, "message": message}
@@ -146,8 +154,9 @@ def export_cst(value, encoding: str = "cp932") -> DialogueExport:
         rows.append(row)
         locators.append(locator)
         protected_tokens.append(tuple(sorted(tokens)))
-        pending_name = None
-        intervening_commands = []
+        if choice is None:
+            pending_name = None
+            intervening_commands = []
     if pending_name is not None:
         orphan_names.append(pending_name.index)
     return DialogueExport(tuple(rows), tuple(locators), tuple(policies),
@@ -157,11 +166,13 @@ def export_cst(value, encoding: str = "cp932") -> DialogueExport:
 
 def patch_dialogue(data: bytes, exported: DialogueExport, translated_rows,
                    encoding: str = "cp932") -> bytes:
-    """Validate ordered translated rows and patch their recorded 0x20/0x21 slots."""
+    """Validate and reparse dialogue and recognized choice-caption replacements."""
     if not isinstance(exported, DialogueExport) or not isinstance(translated_rows, (list, tuple)):
         raise ValueError("invalid CatSystem2 dialogue input")
     if len(translated_rows) != len(exported.rows):
         raise ValueError("CatSystem2 dialogue row count changed")
+    if export_cst(data, encoding) != exported:
+        raise ValueError("CatSystem2 export differs from reparsed source")
     replacements = {}
     for position, (before, after, locator, policy, tokens) in enumerate(zip(
             exported.rows, translated_rows, exported.locators, exported.name_policies,
@@ -171,10 +182,13 @@ def patch_dialogue(data: bytes, exported: DialogueExport, translated_rows,
         message = after.get("message")
         if not isinstance(message, str) or "\0" in message or "\r" in message:
             raise ValueError(f"row {position}: invalid message")
+        if "choice_span" in locator and "\n" in message:
+            raise ValueError(f"row {position}: line break in choice caption")
         for token in tokens:
             if message.count(token) != before["message"].count(token):
                 raise ValueError(f"row {position}: protected token changed")
-        replacements[locator["message_record"]] = message.replace("\n", r"\n")
+        replacements[locator["message_record"]] = (message if "choice_span" in locator
+                                                   else message.replace("\n", r"\n"))
         if policy == "absent":
             if "name" in after:
                 raise ValueError(f"row {position}: unexpected name")
@@ -188,13 +202,16 @@ def patch_dialogue(data: bytes, exported: DialogueExport, translated_rows,
             replacements[locator["name_record"]] = name
         else:
             raise ValueError(f"row {position}: invalid name policy")
-    return patch_cst(data, replacements, encoding)
+    result = patch_cst(data, replacements, encoding)
+    if export_cst(result, encoding).rows != tuple(translated_rows):
+        raise ValueError("CatSystem2 reparsed translation differs")
+    return result
 
 
 def patch_cst(data: bytes, replacements: dict[int, str], encoding: str = "cp932") -> bytes:
-    """Replace raw engine text in 0x20/0x21 slots; append and update their indices.
+    """Replace 0x20/0x21 text or a recognized 0x30 caption; append/repoint.
 
-    No opcode/choice-command editing or semantic tag conversion. Original records,
+    Choice replacements contain only the caption. Original records,
     aliases, screen metadata and non-text types are left byte-for-byte in the pool.
     """
     scene = read_cst(data, encoding)
@@ -206,10 +223,15 @@ def patch_cst(data: bytes, replacements: dict[int, str], encoding: str = "cp932"
     changed = False
     for index, text in sorted(replacements.items()):
         record = scene.records[index]
-        if record.kind not in (0x20, 0x21):
+        choice = _CHOICE.fullmatch(record.text) if record.kind == 0x30 else None
+        if record.kind not in (0x20, 0x21) and choice is None:
             raise ValueError("CST slot is not a plain message/name")
         if not isinstance(text, str) or "\0" in text:
             raise ValueError("CST text contains NUL")
+        if choice is not None:
+            if not text or text != text.lstrip() or any(c in text for c in "\r\n"):
+                raise ValueError("invalid CST choice caption")
+            text = record.text[:choice.start(1)] + text
         encoded = text.encode(encoding, errors="strict")
         if b"\0" in encoded:
             raise ValueError("encoding is not compatible with CST cstrings")

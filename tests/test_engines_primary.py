@@ -127,6 +127,33 @@ class ArtemisTests(unittest.TestCase):
         self.assertEqual(out[-1], tree[-1])
         self.assertEqual(out[3].line_number, 48)
 
+    def test_name_override_preserves_identity_and_numbered_slots(self):
+        for attrs in ((("0", "actor_key"),),
+                      (("1", "Shown"), ("0", "actor_key")),
+                      (("0", "actor_key"), ("1", "alias"), ("2", "Shown"))):
+            tree = (artemis.Command("name", 42, attrs), *self.sample()[2:])
+            raw = artemis.write_asb(tree)
+            field = artemis.text_fields(artemis.read_asb(raw))[0]
+            self.assertEqual(field.attribute, str(len(attrs) - 1))
+            self.assertEqual(artemis.patch_asb(raw, {(0, field.attribute): field.text}), raw)
+            result = artemis.patch_asb(raw, {(0, field.attribute): "更长的显示姓名"})
+            parsed = artemis.read_asb(result)
+            self.assertEqual(dict(parsed[0].attributes)["0"], "actor_key")
+            self.assertEqual(artemis.text_fields(parsed)[0].text, "更长的显示姓名")
+            self.assertEqual(parsed[0].line_number, 42)
+            self.assertEqual(parsed[1:], tree[1:])
+            if len(attrs) > 1:
+                self.assertEqual(tuple(k for k, _ in parsed[0].attributes), tuple(k for k, _ in attrs))
+                with self.assertRaises(ValueError):
+                    artemis.patch_asb(raw, {(0, "0"): "wrong identity"})
+
+    def test_unknown_name_slot_layout_is_refused(self):
+        for attrs in ((), (("1", "name"),), (("0", "key"), ("2", "name")),
+                      (("0", "key"), ("display", "name"))):
+            raw = artemis.write_asb((artemis.Command("name", 1, attrs),))
+            with self.assertRaises(ValueError):
+                artemis.patch_asb(raw, {})
+
     def test_reject_unknown_type_and_trailer(self):
         data = artemis.write_asb((artemis.Label("x"),))
         with self.assertRaises(ValueError):
@@ -595,7 +622,9 @@ class ArtifactContractTests(unittest.TestCase):
                 elif isinstance(node, ast.ImportFrom):
                     if engine == 'bgi' and node.level == 1 and node.module == 'bgi_v1_opcodes':
                         self.assertEqual([(alias.name, alias.asname) for alias in node.names],
-                                         [('OPERAND_TEMPLATES', None)])
+                                         [('OPERAND_TEMPLATES', None), ('operand_template', None),
+                                          ('LAYOUT_STACK', None), ('LAYOUT_EXPLICIT', None),
+                                          ('LAYOUT_EXPLICIT565', None)])
                     else:
                         self.assertIn(node.module, allowed, engine)
             self.assertNotIn('sys.path', source, engine)

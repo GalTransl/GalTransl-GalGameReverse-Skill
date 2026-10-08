@@ -13,7 +13,7 @@
 | 层 | 实现与范围 |
 |---|---|
 | v482 YPF | [yuris_482.py](../python/archives/yuris_482.py)：索引、Murmur2 校验、有界解压、模板重封 |
-| v482 YBN | [yuris_text.py](../python/engines/yuris_text.py)：结构解析、WORD/姓名定义、独立 manifest、追加式回填 |
+| v482 YBN | [yuris_text.py](../python/engines/yuris_text.py)：WORD、单字符串 EVAL、姓名定义与选项、独立 manifest、追加式回填 |
 | 工作区 | [yuris_extract.py](../python/engines/yuris_extract.py)：`extract` / `rebuild` CLI |
 | 验证 | [test_yuris_482.py](../tests/test_yuris_482.py)、[来源记录](../provenance/yuris-482.json) |
 
@@ -29,12 +29,14 @@
 
 ### 对话与显示文字
 
-- raw `WORD` 作为可见文字导出，空 WORD 和空 `_` 不导出。非空 `_`（EVAL）拒绝语义导出，须先补齐表达式与片段组合规则；这些脚本仍可做不改文本的结构往返。
+- raw `WORD` 作为可见文字导出，空 WORD 和空 `_` 不导出。`_`（EVAL）仅支持 YSCM 第一个参数元数据为字符串表达式、且指令只有一个 type=3 参数的完整字符串字面量；空字面量不导出。多参数、动态或组合表达式拒绝，不执行 VM，也不猜片段拼接规则。
 - `【姓名】正文` 分成 `name` 与 `message`，回填恢复括号；正文引号、原有空格与换行保留，不自动排版。
-- `GOSUB ES.CHAR.NAME` 的 PSTR 参数导出为独立姓名定义行（`message` 字段），保留别名槽的每次出现；不靠文字相同合并。`ES.SEL.SET` 的字面量 PSTR 同样有支持，运行时选项显示仍须单独验证。
+- `GOSUB ES.CHAR.NAME` 中第一个参数为调用目标，第二个参数（ID 33）为角色键，第三个参数（ID 34）为显示名；只导出第三个参数作为独立姓名定义行（`message` 字段），角色键及后续参数保持原字节。布局不符时拒绝，不沿用选择参数的遍历规则。`ES.SEL.SET` 导出 ID 33..48 的字面量 PSTR 选项，到空参数停止；运行时显示仍须单独验证。
 - 姓名/选项表达式必须是完整 `4D + u16长度 + 引号包围的字面量`；回填更新内层 u16 长度。未知组合表达式不会当普通文字替换。
 - 已有 UIF `character_substitution` 时，提取正向还原显示文字，回填反向映射并严格 CP932 编码，再验证正向还原一致。无法表示的新字拒绝，须另行准备公共 JIS 方案；已启用的 tunnel decoder 不支持。
 - EF 控制序列转换、保护和回填仍使用下文的规则；译文必须保留换行及 `\p/\c/\u` 的顺序与数量。
+- 单字符串 EVAL 同样可拆分 `【姓名】正文`，回填保留字面量封装并更新内层长度。字段语义来源见 [文本字段来源](../provenance/common-text-fields.json)。
+- 当前 manifest 参考标识为 `yuris_text/2`。旧提取目录须从哈希通过的原始数据重新导出到新目录；新增/修正的字段会改变条数或定位，不能修改旧 manifest 或按条数猜配译文。
 
 ### 可复现命令与产物
 

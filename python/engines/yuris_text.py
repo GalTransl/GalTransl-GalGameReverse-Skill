@@ -44,6 +44,8 @@ class Scenario:
             raise ValueError("expected bounded v482 YSTB")
         self.plain = toggle_ybn_sections(raw, key)
         self.key = key
+        self.literal_eval = any(name == "_" and attrs and attrs[0][1] == b"\x03\0"
+                                for name, attrs in commands)
         self.sizes = struct.unpack_from("<IIII", raw, 12)
         cs, ds, vs, ls = self.sizes
         if ds % 12 or ls != cs:
@@ -125,16 +127,25 @@ def _rows(scenario, profile):
                 raise ValueError("unsupported WORD attribute layout")
             selected = [(attributes[0], "dialogue")]
         elif command == "_":
-            # This game's translated loose scripts consolidate all visible text
-            # into WORD. Other nonempty EVAL variants need a separate grouping
-            # parser; do not silently drop dynamic text between WORD fragments.
             if any(scenario.value(a) for a in attributes):
-                raise ValueError("nonempty EVAL needs expression/grouping support")
+                if (not scenario.literal_eval or len(attributes) != 1
+                        or scenario.attrs[attributes[0]][1] != 3
+                        or literal(scenario.value(attributes[0])) is None):
+                    raise ValueError("dynamic EVAL needs expression/grouping support")
+                selected = [(attributes[0], "literal-dialogue")]
         elif command == "GOSUB" and attributes:
             target = literal(scenario.value(attributes[0]))
             if target and target.lower() in ("es.char.name", "es.sel.set"):
-                role = "name-definition" if target.lower() == "es.char.name" else "choice"
-                for number in attributes[1:]:
+                if scenario.attrs[attributes[0]][:2] != (0, 3):
+                    raise ValueError("unsupported visible GOSUB target layout")
+                if target.lower() == "es.char.name":
+                    if (len(attributes) < 3 or scenario.attrs[attributes[1]][0] != 33
+                            or scenario.attrs[attributes[2]][0] != 34):
+                        raise ValueError("unsupported ES.CHAR.NAME parameter layout")
+                    parameters, role = attributes[2:3], "name-definition"
+                else:
+                    parameters, role = attributes[1:], "choice"
+                for number in parameters:
                     aid, typ, _, _ = scenario.attrs[number]
                     if 33 <= aid <= 48:
                         if typ != 3:
@@ -142,7 +153,7 @@ def _rows(scenario, profile):
                         value = literal(scenario.value(number))
                         if value is None:
                             raise ValueError("dynamic visible GOSUB parameter")
-                        if not value:
+                        if not value and role == "choice":
                             break
                         selected.append((number, role))
         for number, role in selected:
@@ -156,11 +167,13 @@ def _rows(scenario, profile):
                 if value is None or "\\" in value:
                     raise ValueError("unsupported escaped expression literal")
             value = profile.display(value)
+            if not value:
+                continue
             row = {"message": value}
             loc = {"instruction": instruction, "attribute": number, "role": role,
                    "offset": scenario.attrs[number][3], "length": len(raw)}
             match = re.fullmatch(r'【([^】]+)】(.*)', value, re.S)
-            if role == "dialogue" and match:
+            if role in ("dialogue", "literal-dialogue") and match:
                 row = {"name": match[1], "message": match[2]}
                 loc["name_wrapper"] = "【】"
             rows.append(row)
@@ -171,7 +184,7 @@ def _rows(scenario, profile):
 def export_script(raw, ysc, profile=Profile()):
     s = Scenario(raw, commands_from(ysc), profile.key)
     rows, locations = _rows(s, profile)
-    manifest = make_manifest(engine="yuris", variant="482-word-raw", reference="yuris_text/1",
+    manifest = make_manifest(engine="yuris", variant="482-word-raw", reference="yuris_text/2",
                              sources={"member.ybn": raw, "ysc.ybn": ysc}, rows=rows, locators=locations,
                              encoding="utf-8", settings=profile.settings(),
                              name_policies=["writable" if "name" in r else "absent" for r in rows])

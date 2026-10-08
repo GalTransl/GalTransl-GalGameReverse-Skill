@@ -50,7 +50,10 @@ python -B -m python.engines.qlie_extract "GAME" "NEW_EXTRACT" --exe "game.exe" -
 - `[spd,0][pc,文字][spd]` 只导出 `文字`，回填保留外部指令；不能把整段 `pc` 当不可翻译标签，否则会遗漏诗句。当前支持独立 pc 文本行，不支持与普通正文混排的复杂 pc。
 - 同一句的连续物理正文行合并为一个 JSON `message`，用换行分隔；多物理行回填须保持行数。单物理行的显示换行转换为 `[n]`。保留原缩进、CRLF、语音和全部非文本字节。仅含一个全角空格的显示间隔不产生空消息。
 - `^select,` 后每个选项各一条，空选项也保留；不把 `^selectset1`、`^selectjmp` 的控制参数当选项。选项/pc 文本不得引入 ASCII 逗号、物理换行或新标签。
+- `^savetext,标题,...` 的第一个简单参数导出独立存档标题行；后续参数、前导缩进及尾部空白原样保留。标题不得新增逗号、换行或标签；嵌套标签参数布局拒绝，不猜逗号归属。
+- 存档标题命令不清空当前句的姓名，也不拆分其前后的正文；正文仍按原空行边界分组，标题独立定位回填。
 - parser 重新从原件生成定位，与 manifest 中的定位对比；不信任任意 sidecar 偏移。回填后重新解析并比对全部 name/message。
+- 当前 parser 标识为 `qlie-imos-multi/2`。旧工作区须从可靠原件重新提取到新目录，保留已有译文并核对新增标题的位置；不改 manifest 或按旧序号直接套用。
 
 ```python
 from python.engines.qlie_imos import rows, patch
@@ -103,6 +106,7 @@ writer 的明确边界：
 - Python 不继承该自动探测，也不默认启用 SJIS tunnel。
 - `[n]` 是本方言的显示换行表示。
 - `^select,` 后的逗号分隔项都保留，包括空选项字段。
+- `^savetext,` 的第一个简单参数作为 `save-title` 字段提取和回填；后续参数保留，标题不能加入逗号、换行或新控制标签。
 - `id,名字,正文` 只把前两处逗号当结构，正文可包含其他逗号。
 - bracket-name 行只提取 `【】` 内部文本。
 - 空白缩进与行尾空白保留，不使用 trim 后的错误原始偏移。
@@ -171,6 +175,7 @@ assert changed.startswith('  【Ann】  \r\n')
 
 - PACK 索引、checksum、名称密码、MT 和 `1PC`：GARbro-Mod 提交 `bc26d991ef5cdc0e1ecb32122ee9a48c3375750c`，`ArcFormats/Qlie/ArcQLIE.cs`、`Encryption.cs`、`QlieMersenneTwister.cs`。静态图标资源定位另参考 `DelphiDeserializer.cs`。保留源作者与 [MIT 通知](../provenance/licenses/MIT-GARbro.txt)。Python 增加边界、循环压缩表拒绝、严格编码与显式密钥模式。
 - HashVer1.3 头结构交叉核对 msg-tool 提交 `f72716cee88554d40c1cdface2812493b14ca653` 的 `src/scripts/qlie/archive/pack/types.rs`；其 `v31.rs` 是另一版本，不直接移植。新增模板 writer/语义提取按本项目 GPL-3.0-or-later 许可。
+- 存档标题语义参考 msg-tool，Python 仅替换第一个参数的原始范围，保留其他参数；来源见 [文本字段来源](../provenance/common-text-fields.json)。
 - [tests/test_qlie.py](../tests/test_qlie.py) 使用纯合成 PE/DFM、key、PACK、脚本，覆盖两种物理顺序、原文/变长重建、加密向量、坏 checksum、错误 key、BPE 循环/预算、查找表错误、显示姓名和 pc、manifest 定位篡改及不覆盖输出。
 
 ```text

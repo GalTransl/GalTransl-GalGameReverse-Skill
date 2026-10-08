@@ -28,12 +28,13 @@ Speaker evidence, strongest first:
 
 1. ``name="..."`` on the command - the display text itself (policy ``writable``).
 2. a voice attribute (``file``/``voice``) and no other attribute keys - the tag
-   name is the character key (policy ``context``); observed as
+   name is the character key; translations add a display ``name`` attribute
+   (policy ``writable``); observed as
    ``[幸枝 file="sachie_t23"]``.
 3. a bare non-ASCII tag that is no declared command - an **unknown** speaker: the
    record keeps no name (policy ``absent``) but the stale speaker is cleared, so a
    later line can never inherit the previous character's name. ``[主人公]`` is
-   this case; pass it in ``speaker_tags`` to expose it as a context name.
+   this case; pass it in ``speaker_tags`` to enable a display-name override.
 
 Anything else is an ordinary command and does not touch the speaker, so a
 ``[背景 ...]`` between two lines does not steal the attribution.
@@ -44,10 +45,9 @@ unchanged. The opening/closing quotes are structural: a translated line that no
 longer starts with an opening quote silently becomes narration, so
 :func:`patch_script` rejects it.
 
-Name policies follow ``guides/roundtrip-contract.md``: ``writable`` when the
-display name is the command's own ``name`` attribute, ``context`` when only the
-tag name is available (the engine resolves it at runtime), ``absent`` for
-narration. No discovery of dialogue beyond this grammar, and no game startup.
+Name policies follow ``guides/roundtrip-contract.md``: recognized speakers are
+``writable`` through an existing or added ``name`` attribute. Variable names
+remain ``context``; narration is ``absent``. No game startup.
 """
 
 from dataclasses import dataclass
@@ -145,9 +145,10 @@ class Script:
         """Minimal GalTransl-compatible rows in document order."""
         result = []
         for record in self.records:
-            row = {"message": record.text}
+            row = {}
             if record.name is not None:
                 row["name"] = record.name
+            row["message"] = record.text
             result.append(row)
         return result
 
@@ -213,7 +214,7 @@ def line_kind(line: str) -> str:
 
 
 def _scan_command(text: str):
-    """Return (tag, attributes) for a command line, or None when malformed.
+    """Return (tag, attributes); reject unclosed tags and duplicate attributes.
 
     A ``]`` inside a quoted attribute value does not end the tag.
     """
@@ -231,8 +232,13 @@ def _scan_command(text: str):
         elif char == COMMAND_CLOSE and not quoted:
             break
         index += 1
-    body = text[text.index(COMMAND_OPEN) + 1:index if index < len(text) else len(text)]
-    return tag, dict(_ATTR_RE.findall(body))
+    if index == len(text):
+        raise ScpError("malformed_command", "unterminated command or quoted attribute")
+    body = text[text.index(COMMAND_OPEN) + 1:index]
+    pairs = _ATTR_RE.findall(body)
+    if len({key for key, _ in pairs}) != len(pairs):
+        raise ScpError("malformed_command", "duplicate command attribute")
+    return tag, dict(pairs)
 
 
 def looks_like_script(data, *, encoding=None, max_lines: int = 40) -> bool:
@@ -259,7 +265,7 @@ def read_script(data, *, encoding=None, tag_schema=None, speaker_tags=frozenset(
 
     ``speaker_tags`` forces the named tags to be speakers, which is how a bare
     character tag whose display name the engine resolves at runtime (``[主人公]``)
-    becomes a context name; it also wins over the built-in command set.
+    gains a writable display-name override; it also wins over the built-in command set.
     ``command_tags`` adds tags that must never be read as speakers.
     ``tag_schema`` supplies the archive's own tag.ini.
     """
@@ -290,17 +296,19 @@ def read_script(data, *, encoding=None, tag_schema=None, speaker_tags=frozenset(
                     if SPEAKER_ATTRIBUTE in attributes:
                         speaker = (tag, attributes[SPEAKER_ATTRIBUTE], "writable", index)
                     else:
-                        speaker = (tag, tag, "context", None)
+                        speaker = (tag, tag, "writable", index)
                 elif tag in excluded:
                     pass
                 elif SPEAKER_ATTRIBUTE in attributes:
                     speaker = (tag, attributes[SPEAKER_ATTRIBUTE], "writable", index)
                 elif keys and not tag.isascii() and keys <= set(VOICE_ATTRIBUTES):
-                    speaker = (tag, tag, "context", None)
+                    speaker = (tag, tag, "writable", index)
                 elif not keys and not tag.isascii():
                     # A bare character tag we cannot name: clear the stale speaker
                     # so a later line never inherits the previous character.
                     speaker = (tag, None, "absent", None)
+                if speaker is not None and speaker[1] is not None and speaker[1].startswith("$"):
+                    speaker = (speaker[0], speaker[1], "context", speaker[3])
             index += 1
             continue
         if kind != "text":
@@ -329,11 +337,22 @@ def read_script(data, *, encoding=None, tag_schema=None, speaker_tags=frozenset(
 
 
 def _replace_attribute(line: str, key: str, value: str) -> str:
-    pattern = re.compile(r'(?<![\w"])' + re.escape(key) + r'\s*=\s*"([^"]*)"')
-    match = pattern.search(line)
+    # Limit edits to the command, not a name= example in a trailing comment.
+    quoted = False
+    end = None
+    for index in range(line.index(COMMAND_OPEN) + 1, len(line)):
+        if line[index] == '"':
+            quoted = not quoted
+        elif line[index] == COMMAND_CLOSE and not quoted:
+            end = index
+            break
+    if end is None:
+        raise ScpError("malformed_command", "unterminated speaker command", "write")
+    match = next((attribute for attribute in _ATTR_RE.finditer(
+        line, line.index(COMMAND_OPEN) + 1, end) if attribute.group(1) == key), None)
     if match is None:
-        raise ScpError("missing_attribute", f"speaker command has no {key} attribute", "write")
-    return line[:match.start(1)] + value + line[match.end(1):]
+        return line[:end] + f' {key}="{value}"' + line[end:]
+    return line[:match.start(2)] + value + line[match.end(2):]
 
 
 def render(script: Script, rows) -> str:
@@ -389,6 +408,9 @@ def render(script: Script, rows) -> str:
                                "write")
             speaker_names[record.speaker_line] = name
     for line_index, name in speaker_names.items():
+        tag, attrs = _scan_command(script.lines[line_index])
+        if name == attrs.get(SPEAKER_ATTRIBUTE, tag):
+            continue
         edits.append((line_index, line_index + 1, [_replace_attribute(script.lines[line_index],
                                                                       SPEAKER_ATTRIBUTE, name)]))
     output = list(script.lines)

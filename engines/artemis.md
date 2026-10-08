@@ -26,6 +26,7 @@
 - 长度不包含 NUL；长度不是 Unicode 字符数。
 - 命令可包含未知属性或未知名字，结构正确时原样保留。
 - 重复属性键拒绝，避免字典覆盖导致静默丢数据。
+- `name` 命令须使用连续编号属性 `0..N`，最后一槽为当前显示名；`0` 保留角色身份。只有 `0` 时，译名新增到 `1`，不覆盖原身份；原文回填不新增属性。非连续编号或混入未知属性的姓名布局拒绝，不猜显示槽。
 - 不接受尾部未知区块，也不自动把损坏长度修成“可解析”。
 
 ## 容器到剧本路线
@@ -47,6 +48,7 @@
 - `GetTextReferences` 对应 `text_fields` 的命令/属性白名单。
 - VN 的 `WriteItem` 会把原行号写成 0；Python 刻意保留原 line_number。
 - 属性顺序也被保留，不依赖字典排序重建。
+- 姓名显示槽与新增别名规则交叉核对 msg-tool；出处与许可见 [文本字段来源](../provenance/common-text-fields.json)。
 - Python 不采用 VN 的整段 print/ruby 合并重写，避免丢失附加属性。
 
 ## Python 接口与示例
@@ -64,7 +66,7 @@ assert read_asb(changed)[1].line_number == 42
 - `patch_asb(bytes, {(item, attribute): text}) -> bytes`。
 
 ## name / message 映射
-- `name` 的属性 `0` 对应 `name`，不覆盖其他同类命令。
+- `name` 的最后一个连续编号属性对应 `name`；仅有 `0` 时读取原名，改名时新增 `1` 显示槽。已有显示槽时不允许翻译身份槽 `0`，其他同类命令各自保留定位。
 - `print.data` 对应独立正文片段 `message`。
 - `ruby.text` 对应 `ruby_reading`，不是第二条正文。
 - `sel_text.text` 对应 `choice`。

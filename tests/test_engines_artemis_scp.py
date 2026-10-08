@@ -25,7 +25,7 @@ TAG_INI = b"""; Pre-Processing Tag.
 """
 
 # Record layout of SCRIPT, by blank-line groups:
-#   0 dialogue "\u5e78\u679d"        (context, from a voice-only attribute)
+#   0 dialogue "\u5e78\u679d"        (writable, from a voice-only attribute)
 #   1 narration
 #   2 dialogue unknown speaker      (\u4e3b\u4eba\u516c, no name attribute)
 #   3 dialogue writable name        (name="\uff1f\uff1f\uff1f", one inline token)
@@ -84,11 +84,11 @@ class LineKindTests(unittest.TestCase):
 
 
 class SpeakerTests(unittest.TestCase):
-    def test_voice_attribute_gives_a_context_name(self):
+    def test_voice_attribute_gives_a_writable_display_name(self):
         record = _read().records[0]
         self.assertEqual((record.kind, record.name, record.name_policy),
-                         ("dialogue", "\u5e78\u679d", "context"))
-        self.assertIsNone(record.speaker_line)
+                         ("dialogue", "\u5e78\u679d", "writable"))
+        self.assertEqual(record.speaker_line, 5)
 
     def test_name_attribute_is_writable(self):
         record = _read().records[3]
@@ -109,12 +109,12 @@ class SpeakerTests(unittest.TestCase):
         self.assertEqual(records[0].name, "\u5e78\u679d")
         self.assertIsNone(records[1].name)
 
-    def test_speaker_tags_expose_a_context_name(self):
+    def test_speaker_tags_enable_a_display_name_override(self):
         text = "[\u4e3b\u4eba\u516c]\r\n\u300c\u3042\u300d\r\n"
         records = scp.read_script(text.encode("utf-8"),
                                   speaker_tags=frozenset({"\u4e3b\u4eba\u516c"})).records
         self.assertEqual((records[0].name, records[0].name_policy),
-                         ("\u4e3b\u4eba\u516c", "context"))
+                         ("\u4e3b\u4eba\u516c", "writable"))
 
     def test_command_tags_are_never_read_as_speakers(self):
         text = "[custom name=\"display\"]\r\n\u300c\u3042\u300d\r\n"
@@ -152,7 +152,8 @@ class GroupingTests(unittest.TestCase):
         self.assertEqual(len(rows), len(script.locators()))
         self.assertEqual(rows[1], {"message": "\u5f7c\u306f\u7b11\u3063\u305f\u3002"})
         self.assertEqual(rows[0]["name"], "\u5e78\u679d")
-        self.assertEqual(script.name_policies(), ["context", "absent", "absent", "writable", "absent"])
+        self.assertEqual(script.name_policies(), ["writable", "absent", "absent", "writable", "absent"])
+        self.assertEqual(list(rows[0]), ["name", "message"])
         self.assertEqual(script.protected_tokens()[3], ["[\u30eb\u30d3 rb=\"\u3055/\u3055\"]"])
 
 
@@ -217,11 +218,6 @@ class RoundtripTests(unittest.TestCase):
     def test_names_that_cannot_be_written_are_refused(self):
         raw = SCRIPT.encode("utf-8")
         base = _read().rows()
-        context = [dict(row) for row in base]
-        context[0]["name"] = "\u6539\u540d"
-        with self.assertRaises(scp.ScpError) as caught:
-            scp.patch_script(raw, context, encoding="utf-8")
-        self.assertEqual(caught.exception.code, "context_name_changed")
         added = [dict(row) for row in base]
         added[1]["name"] = "\u65c1\u767d"
         with self.assertRaises(scp.ScpError) as caught:
@@ -232,6 +228,53 @@ class RoundtripTests(unittest.TestCase):
         with self.assertRaises(scp.ScpError) as caught:
             scp.patch_script(raw, missing, encoding="utf-8")
         self.assertEqual(caught.exception.code, "missing_name")
+
+    def test_add_display_attribute_preserves_tag_voice_and_comments(self):
+        for command, kwargs in (('[人物 voice="voice]01"] // name="comment"', {}),
+                                ('[人物]', {'speaker_tags': {'人物'}}),
+                                ('[人物 alias-name="keep"]', {'speaker_tags': {'人物'}})):
+            raw = (command + '\n「Body」\n\n「Again」\n').encode('utf-8')
+            script = scp.read_script(raw, **kwargs)
+            self.assertEqual(script.patch(script.rows()), raw)
+            rows = script.rows()
+            for row in rows:
+                row['name'] = '更长的显示姓名'
+                row['message'] = '「变长的中文正文」'
+            result = script.patch(rows)
+            parsed = scp.read_script(result, **kwargs)
+            self.assertEqual(parsed.rows(), rows)
+            self.assertEqual(parsed.records[0].speaker_tag, '人物')
+            self.assertIn('name="更长的显示姓名"', result.decode('utf-8'))
+            if 'alias-name' in command:
+                self.assertIn('alias-name="keep"', result.decode('utf-8'))
+            if not kwargs:
+                self.assertIn('voice="voice]01"', result.decode('utf-8'))
+                self.assertTrue(result.decode('utf-8').splitlines()[0].endswith('// name="comment"'))
+            rows[1]['name'] = 'different'
+            with self.assertRaises(scp.ScpError) as caught:
+                script.patch(rows)
+            self.assertEqual(caught.exception.code, 'shared_name_conflict')
+
+    def test_variable_display_name_stays_context_only(self):
+        script = _read('[人物 name="$str20" voice="v"]\n「Body」\n')
+        self.assertEqual(script.name_policies(), ['context'])
+        self.assertEqual(script.patch(script.rows()), script.text.encode('utf-8'))
+        rows = script.rows()
+        rows[0]['name'] = 'changed'
+        with self.assertRaises(scp.ScpError) as caught:
+            script.patch(rows)
+        self.assertEqual(caught.exception.code, 'context_name_changed')
+
+    def test_malformed_speaker_command_and_name_injection_rejected(self):
+        for command in ('[人物 voice="v"', '[人物 name="a" name="b"]', '[人物 voice="v]'):
+            with self.assertRaises(scp.ScpError):
+                _read(command + '\n「Body」\n')
+        script = _read('[人物 voice="v"]\n「Body」\n')
+        for name in ('', 'bad"name', 'bad\nname', 'bad\0name'):
+            rows = script.rows()
+            rows[0]['name'] = name
+            with self.assertRaises(scp.ScpError):
+                script.patch(rows)
 
     def test_patch_method_carries_the_speaker_policy(self):
         raw = "[\u4e3b\u4eba\u516c]\r\n\u300c\u3042\u300d\r\n".encode("utf-8")

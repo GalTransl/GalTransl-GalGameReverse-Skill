@@ -1,8 +1,12 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-FileCopyrightText: 2021 arcusmaximus (MIT-derived portions)
+# SPDX-FileCopyrightText: msg-tool contributors (GPL-3.0-or-later-derived portions)
 """Artemis ASB typed item/attribute tree and conservative field edits.
 Source: VNTextPatch-net8, VNTextPatch.Shared/Scripts/Artemis/ArtemisAsbScript.cs,
 ReadFile/ReadItem/ReadString/WriteItem/WriteString/GetTextReferences.
 Commit d9c0fab7b72fdcf87d674ef12a84d3829c9188be; source license MIT.
 Preserves original line numbers (upstream writer zeroes them) and attribute order.
+Display-name slots: msg-tool src/scripts/artemis/asb.rs (GPL-3.0-or-later).
 """
 from dataclasses import dataclass, replace
 import struct
@@ -122,6 +126,10 @@ def text_fields(items: tuple[Command | Label, ...]) -> tuple[Field, ...]:
             continue
         key, role = schema[item.name]
         attrs = dict(item.attributes)
+        if item.name == "name":
+            if not attrs or set(attrs) != {str(i) for i in range(len(attrs))}:
+                raise ValueError("unsupported ASB name slot layout")
+            key = str(len(attrs) - 1)
         if key not in attrs:
             raise ValueError(f"missing {item.name}.{key}")
         result.append(Field(index, key, role, attrs[key]))
@@ -137,8 +145,14 @@ def patch_asb(data: bytes, replacements: dict[tuple[int, str], str]) -> bytes:
     patched = []
     for index, item in enumerate(items):
         if isinstance(item, Command):
-            item = replace(item, attributes=tuple(
-                (key, replacements.get((index, key), value))
-                for key, value in item.attributes))
+            attrs = item.attributes
+            if item.name == "name" and len(attrs) == 1 and (index, "0") in replacements:
+                name = replacements[(index, "0")]
+                if name != attrs[0][1]:
+                    attrs += (("1", name),)
+            else:
+                attrs = tuple((key, replacements.get((index, key), value))
+                              for key, value in attrs)
+            item = replace(item, attributes=attrs)
         patched.append(item)
     return write_asb(tuple(patched))

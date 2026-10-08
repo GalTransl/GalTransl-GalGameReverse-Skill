@@ -33,6 +33,19 @@ def scenario(text='【花子】「遅い」', shared=True):
     return toggle_ybn_sections(plain + commands + attrs + value + lines, 0x96AC6FD3)
 
 
+def literal_scenario(texts, opcode=3, ids=None):
+    descriptors, pool = bytearray(), bytearray()
+    for aid, text in zip(ids or (0, 33, 34), texts):
+        value = ('"' + text + '"').encode('cp932')
+        value = b'M' + struct.pack('<H', len(value)) + value
+        descriptors.extend(struct.pack('<HHII', aid, 3, len(value), len(pool)))
+        pool.extend(value)
+    plain = b'YSTB' + struct.pack('<7I', 482, len(texts) and 1, 4,
+                                len(descriptors), len(pool), 4, 0)
+    return toggle_ybn_sections(plain + struct.pack('<BBH', opcode, len(texts), 0)
+                               + descriptors + pool + bytes(4), 0x96AC6FD3)
+
+
 def archive(members):
     header_size = 32 + sum(27 + len(n.encode('cp932')) for n in members)
     head = bytearray(b'YPF\0' + struct.pack('<III', 482, len(members), header_size) + bytes(16))
@@ -93,24 +106,59 @@ class Yuris482Tests(unittest.TestCase):
         with self.assertRaises(ValueError):export_script(bad,self.ysc)
 
     def test_name_definition_and_choice_inner_length(self):
-        def lit(text):
-            value = ('"' + text + '"').encode('cp932')
-            return b'M' + struct.pack('<H',len(value)) + value
         for target in ('ES.CHAR.NAME','ES.SEL.SET'):
-            values = [lit(target),lit('花子'),lit('')]
-            descriptors=bytearray();pool=bytearray()
-            for aid,value in zip((0,33,34),values):
-                descriptors.extend(struct.pack('<HHII',aid,3,len(value),len(pool)))
-                pool.extend(value)
-            plain=b'YSTB'+struct.pack('<7I',482,1,4,len(descriptors),len(pool),4,0)
-            raw=toggle_ybn_sections(plain+struct.pack('<BBH',3,3,0)+descriptors+pool+bytes(4),self.profile.key)
+            texts = [target, 'actor_key', '花子'] if target == 'ES.CHAR.NAME' else [target, '花子', '']
+            raw = literal_scenario(texts)
+            before = Scenario(raw, commands_from(self.ysc), self.profile.key)
             rows,meta=export_script(raw,self.ysc)
             self.assertEqual(rows,[{'message':'花子'}])
-            result=rebuild_script(raw,self.ysc,[{'message':'太郎 ABC'}],meta)
+            self.assertEqual(rebuild_script(raw, self.ysc, rows, meta), raw)
+            translated = [{'message': '更长的姓名'}]
+            profile = Profile(source_characters='長', target_characters='长')
+            rows, meta = export_script(raw, self.ysc, profile)
+            result=rebuild_script(raw,self.ysc,translated,meta,profile)
             s=Scenario(result,commands_from(self.ysc),self.profile.key)
-            value=s.value(1)
+            number = 2 if target == 'ES.CHAR.NAME' else 1
+            value=s.value(number)
             self.assertEqual(struct.unpack_from('<H',value,1)[0],len(value)-3)
-            self.assertEqual(s.value(0),values[0])
+            self.assertEqual(export_script(result, self.ysc, profile)[0], translated)
+            for i in set(range(3)) - {number}:
+                self.assertEqual(s.value(i), before.value(i))
+                self.assertEqual(s.attrs[i], before.attrs[i])
+
+    def test_literal_eval_and_name_wrapper_roundtrip(self):
+        empty = literal_scenario([''], opcode=1, ids=(0,))
+        empty_rows, empty_meta = export_script(empty, self.ysc)
+        self.assertEqual(empty_rows, [])
+        self.assertEqual(rebuild_script(empty, self.ysc, empty_rows, empty_meta), empty)
+        raw = literal_scenario(['【花子】「Body」'], opcode=1, ids=(0,))
+        rows, meta = export_script(raw, self.ysc)
+        self.assertEqual(rows, [{'name': '花子', 'message': '「Body」'}])
+        self.assertEqual(rebuild_script(raw, self.ysc, rows, meta), raw)
+        translated = [{'name': '角色姓名', 'message': '「更長的正文」'}]
+        result = rebuild_script(raw, self.ysc, translated, meta)
+        self.assertEqual(export_script(result, self.ysc)[0], translated)
+        before = Scenario(raw, commands_from(self.ysc), self.profile.key)
+        after = Scenario(result, commands_from(self.ysc), self.profile.key)
+        self.assertEqual(after.values[:len(before.values)], before.values)
+        self.assertEqual(after.plain[32:36], before.plain[32:36])
+        self.assertEqual(after.plain[-4:], before.plain[-4:])
+
+    def test_reject_bad_name_definition_and_dynamic_eval(self):
+        for raw in (literal_scenario(['ES.CHAR.NAME', 'key']),
+                    literal_scenario(['ES.CHAR.NAME', 'key', 'name'], ids=(0, 34, 33)),
+                    literal_scenario(['one', 'two'], opcode=1, ids=(0, 1))):
+            with self.assertRaises(ValueError):
+                export_script(raw, self.ysc)
+        raw = literal_scenario(['Body'], opcode=1, ids=(0,))
+        for meta_bytes in (b'\x00\0', b'\x03\x01'):
+            wrong_ysc = self.ysc.replace(b'_\0\x01\0\x03\0', b'_\0\x01\0' + meta_bytes)
+            with self.assertRaises(ValueError):
+                export_script(raw, wrong_ysc)
+        plain = bytearray(toggle_ybn_sections(raw, self.profile.key))
+        plain[48] = ord('X')
+        with self.assertRaises(ValueError):
+            export_script(toggle_ybn_sections(bytes(plain), self.profile.key), self.ysc)
 
     def test_raw_control_sequence_roundtrip(self):
         raw=scenario('A\r\nB',False)

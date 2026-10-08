@@ -1,0 +1,41 @@
+{
+  "source": "msg-tool",
+  "repository": "https://github.com/lifegpc/msg-tool",
+  "commit": "f72716cee88554d40c1cdface2812493b14ca653",
+  "license": "GPL-3.0-or-later",
+  "copyright": "lifegpc/msg-tool contributors; retained MIT-derived portions are attributed in module headers and licenses/MIT-VNTextPatch.txt",
+  "license_file": "licenses/GPL-3.0.txt",
+  "adaptations": [
+    {
+      "source_file": "src/scripts/artemis/asb.rs",
+      "target": "python/engines/artemis.py",
+      "scope": "Last numbered name slot is display text; add slot 1 when translating a single-slot name, retaining slot 0 identity.",
+      "changes": "Require contiguous numbered slots; preserve original line numbers, attribute order and unrelated commands."
+    },
+    {
+      "source_file": "src/scripts/artemis/panmimisoft/txt.rs",
+      "target": "python/engines/artemis_scp.py",
+      "scope": "Set or add a display name attribute on a recognized speaker tag.",
+      "changes": "Preserve tag identity, voice parameters and trailing comments; retain explicit speaker identification, variable protection and shared-command conflict checks."
+    },
+    {
+      "source_file": "src/scripts/yuris/ystb.rs",
+      "target": "python/engines/yuris_text.py",
+      "scope": "Translate ES.CHAR.NAME argument 2, preserve argument 1 identity; support complete single-string EVAL literals.",
+      "changes": "Restrict to verified v482 descriptors; reject dynamic expressions and unexpected name parameter layouts; append changed values without moving the original pool."
+    },
+    {
+      "source_file": "src/scripts/cat_system/cst.rs",
+      "target": "python/engines/catsystem2.py",
+      "scope": "Extract and replace caption text from numbered choice command records.",
+      "changes": "Preserve command prefixes, record identity, non-text pool bytes and pending speaker association; reparse translated rows."
+    },
+    {
+      "source_file": "src/scripts/qlie/script.rs",
+      "target": ["python/engines/qlie.py", "python/engines/qlie_imos.py"],
+      "scope": "Extract and replace the first simple savetext parameter.",
+      "changes": "Replace only the original character span and retain every subsequent argument; reject unsupported nested parameters."
+    }
+  ],
+  "validation": "Synthetic parser/writer roundtrips, variable-length replacements, independent reparsing, and preservation checks; no game execution or display verification."
+}

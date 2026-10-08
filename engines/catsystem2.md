@@ -5,8 +5,8 @@
 - CST 模块：[python/engines/catsystem2.py](../python/engines/catsystem2.py)。
 - INT 模块：[python/archives/catsystem2_int.py](../python/archives/catsystem2_int.py)。
 - 批量入口：[python/engines/catsystem2_extract.py](../python/engines/catsystem2_extract.py)。
-- 支持 KIF/INT 索引、加密成员解密、EXE 口令恢复、CatScene 解析、`name/message` 导出和 0x20/0x21 追加回填。
-- 不支持 CSTL、多语言表、0x30 命令改写、加密 INT 重封包或已证明可用的松散部署。
+- 支持 KIF/INT 索引、加密成员解密、EXE 口令恢复、CatScene 解析、`name/message` 与选择文本导出、追加回填。
+- 0x30 只支持已识别选择命令的文字参数；不支持任意命令改写、CSTL、多语言表、加密 INT 重封包或已证明可用的松散部署。
 
 ## 识别证据
 - INT 文件头为 `KIF\0`。加密包首索引槽名为明文 `__key__.dat`。
@@ -76,9 +76,11 @@ assert patched == data
 - 引擎字面 `\n` 导出为 JSON 换行，回填时还原；`\@`、`\p` 等控制符和换行计数受保护。
 - 连续姓名、末尾悬空姓名、姓名跨命令均写入导出诊断，不静默假装语义确定。
 - 续行条目与字体控制也须按记录和控制语法保留；不能因为正文可读就合并条目或清除字体码。
-- 匹配 `数字 标识符 文本` 的 0x30 选择命令只记入 `excluded_choices`，不进入翻译 JSON。
+- 完整匹配 `数字 标识符 文本` 的 0x30 选择命令导出独立、无姓名的 `message`；locator 的 `choice_span` 标记文字范围。选择不会消耗等待下一条正文的姓名，命令数字、标识符和原分隔空白保留。其他 0x30 指令不进入译文。
+- 选择文字保持原始控制符表示，包括字面 `\n`；不套用 0x20 正文的换行转换。原有控制符数量受保护。
 - `patch_dialogue` 校验条数、字段、context 姓名和控制码，再调用 `patch_cst`。
-- `patch_cst` 只修改 0x20/0x21；新字符串追加到 pool 尾部并改目标索引。全部值未变时直接返回原 bytes。
+- `patch_cst` 修改 0x20/0x21，或已识别 0x30 的选择文字；选择替换值仅含文字，不含命令前缀，禁止空文字、前导空白、物理换行及 NUL。新字符串追加到 pool 尾部并改目标索引。全部值未变时返回原 bytes；`patch_dialogue` 校验来源并重新提取结果比对译文。
+- 原 `excluded_choices` 字段保留兼容，已支持的选择不再排除。旧提取目录含选择命令时须重新导出，不修改 manifest 绕过条数和定位校验。
 
 ## 输出与覆盖规则
 - 有真实文件名时，以规范化成员名作为覆盖身份；数字 `updateNN.int` 中后出现的同名成员覆盖基础包。
@@ -92,9 +94,9 @@ assert patched == data
 - 翻译后先用 `patch_dialogue` 做逐文件重读与字段比对，再研究该版本的补丁包或松散加载优先级。
 - CP932 不能直接编码任意简体中文；需要字体、编码扩展或映射方案，不能使用 `errors="ignore"/"replace"`。
 - 清屏元数据只保留，不声称理解所有版本结构。
-- 选择命令、CSTL、多语言表和游戏内加载仍需版本证据。
+- 其他选择布局、CSTL、多语言表和游戏内加载仍需版本证据。
 
 ## 验证
 - 合成测试：`tests/test_engines_primary.py` 的 `CatSystemTests` 与 `tests/test_catsystem2.py`。
-- 覆盖压缩/未压缩 CST、追加重定向、动态姓名、控制码、选择排除、PE32/PE32+ 三层资源、加密/明文 INT、无密码内容探测、路径/流输入和更新包覆盖。
+- 覆盖压缩/未压缩 CST、追加重定向、动态姓名、控制码、选择文字与命令前缀保留、PE32/PE32+ 三层资源、加密/明文 INT、无密码内容探测、路径/流输入和更新包覆盖。文本字段来源见 [记录](../provenance/common-text-fields.json)。
 - CST 回填通过不代表已验证游戏加载、字体覆盖或 encrypted INT 重封包。

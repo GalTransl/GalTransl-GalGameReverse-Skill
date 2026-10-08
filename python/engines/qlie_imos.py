@@ -3,11 +3,12 @@
 New implementation verified against installed ImoScripter_Format.s,
 Imo_ApplyMessageText and Misc_NameDivide in the 2012 Biman 2 sample.
 No game source/material is distributed. Not a QLIE VM or FormatType=0 reader.
+Save-title semantics: msg-tool src/scripts/qlie/script.rs (GPL-3.0-or-later).
 """
 from dataclasses import dataclass
 import re
 
-REFERENCE = 'qlie-imos-multi/1'
+REFERENCE = 'qlie-imos-multi/2'
 
 
 @dataclass(frozen=True)
@@ -65,6 +66,12 @@ def scan(script: str) -> tuple[Record, ...]:
             for option in trimmed[8:].split(','):
                 records.append(Record((Span(at, at + len(option), option, 'choice'),), None))
                 at += len(option) + 1
+        elif trimmed.startswith('^savetext,'):
+            caption = trimmed[10:].split(',', 1)[0]
+            if '[' in caption or ']' in caption:
+                raise ValueError('unsupported savetext parameter layout')
+            records.append(Record((Span(start + 10, start + 10 + len(caption),
+                                        caption, 'save-title'),), None))
         elif trimmed.startswith(('^', '％')):
             pass
         elif trimmed.startswith(('@', '\\')):
@@ -97,7 +104,8 @@ def scan(script: str) -> tuple[Record, ...]:
                 parts.append(Span(start, end, trimmed, 'message'))
         offset += len(line)
     flush()
-    return tuple(records)
+    # A save-title command does not end the surrounding dialogue sentence.
+    return tuple(sorted(records, key=lambda record: record.parts[0].start))
 
 
 def rows(script: str) -> list[dict]:
@@ -127,7 +135,7 @@ def patch(script: str, translated: list[dict]) -> str:
         if len(pieces) != len(record.parts):
             raise ValueError('physical multiline sentence requires the same line count')
         for span, text in zip(record.parts, pieces):
-            if span.kind in ('pc', 'choice') and any(c in text for c in ',\n'):
+            if span.kind in ('pc', 'choice', 'save-title') and any(c in text for c in ',\n'):
                 raise ValueError('ImoScripter parameter delimiter injection')
             if span.kind == 'message' and (not text.strip(' \t') or text != text.strip(' \t')
                     or text.startswith(('^', '@', '\\', '％', '【', '　'))):

@@ -60,8 +60,8 @@ pf0     记录 = 0x104 字节 ASCII 名 | u32 offset | u32 size                 
 按证据强度排序，`read_script` 就是这样实现的：
 
 1. 命令带 `name="…"` → 该属性的值就是显示文本（`name_policy = "writable"`）。
-2. 命令只有语音属性（`file`/`voice`）→ tag 名作为角色键（`name_policy = "context"`）；不能仅检查 `name=`。
-3. 无属性的非 ASCII tag 且不是已声明指令 → **未知说话人**：清空上一位说话人，本条不给名字（`name_policy = "absent"`）。`[主人公]` 属于这类；它的显示名由引擎在运行时替换（玩家命名），脚本里没有字面量。需要时用 `speaker_tags={"主人公"}` 显式把它作为 `context` 名暴露出来。
+2. 非 ASCII 角色命令只有语音属性（`file`/`voice`）→ tag 名作为原始姓名，默认 `writable`；译名通过新增 `name="…"` 覆盖显示，角色 tag 和语音参数保持不变。
+3. 无属性的非 ASCII tag 且不是已声明指令 → **未知说话人**：清空上一位说话人，本条不给名字（`name_policy = "absent"`）。仅凭裸 tag 无法区分角色、运行时姓名与指令；确认该 tag 支持显示名属性后，用 `speaker_tags={"角色标识"}` 显式启用显示名回注。不能把全部未知 tag 自动视为角色。
 4. 其余命令（`[背景 ...]`、`[イベントCG ...]`、`[画面シェイク ...]`、`[セーブタイトル ...]` 等）**不影响说话人**，否则会把旁白挂到"背景"名下。
 
 说话人会持续到下一个说话人命令或未知说话人 tag。游戏中的 `tag.ini`列出的是**指令**，用来排除 `[var name="…"]` 这类"带 name 属性但不是说话人"的命令；用法是 `TagSchema.parse(...)` 后传给 `tag_schema=`，不传则退回内置的 `{"var", "macro"}`。
@@ -88,7 +88,7 @@ rebuilt = pfs.repack(index, {e.ordinal: pfs.read_member(stream, index, e).data
 ```python
 from python.engines import artemis_scp
 
-script = artemis_scp.read_script(raw, tag_schema=None, speaker_tags={"主人公"})
+script = artemis_scp.read_script(raw, tag_schema=None, speaker_tags={"角色标识"})
 rows = script.rows()                    # [{"name": ..., "message": ...}, {"message": ...}]
 for locator, record in zip(script.locators(), script.records):
     print(locator["line_start"], record.tokens)          # 受保护 token
@@ -105,13 +105,13 @@ patched = script.patch(rows)            # 相同 rows 应得到相同字节
 ## name / message 映射
 
 - 对白：`name` 来自说话人命令；旁白：无 `name`。
-- `name_policy` 三态：`writable`（命令自带 `name=`，可改写）、`context`（只有 tag 名/运行时名，**只作翻译提示，绝不写回**）、`absent`（无名）。
+- `name_policy` 三态：`writable`（已识别角色命令，可修改或新增显示 `name=`）、`context`（`$` 开头的变量姓名，只作提示）、`absent`（旁白或未确认角色）。原文姓名不变时保留原命令字节，不额外添加属性。
 - `speaker_tag` 记录在 locator 里，即使 `name` 为 `absent` 也保留，便于人工核对与后续补表。
 - 同一条说话人命令被多条记录引用时，译文给不同名字 → 拒绝（`shared_name_conflict`），不能默认后者覆盖前者。
 
 ## 回填、长度与控制码
 
-- 只改文本行与 `writable` 的 `name=` 属性值；标签、指令、注释、行标签一律不动。
+- 只改文本行与 `writable` 的显示 `name=`；属性缺失时在角色命令的闭括号前新增，原 tag、其他参数和尾部注释保留。重复属性、未闭合命令或引号拒绝。
 - 禁止在译文中出现行首 `[`/`//`/`;`/`#`/`*`、嵌入 `\r`、尾部换行、空消息——它们会改变记录边界，`patch_script` 逐条拒绝。
 - 回填后重新解析并核对：记录数、每条 kind/行号区间、消息文本、`writable` 人名一致。
 - 重新编码保持原编码与 BOM 状态（`encode_script`）。
@@ -129,6 +129,7 @@ patched = script.patch(rows)            # 相同 rows 应得到相同字节
 - 容器：[pfs.py](../python/archives/pfs.py)，格式来源 GARbro-Mod（MIT）与 msg-tool（GPL-3.0-or-later），许可通知见 [NOTICE](../provenance/NOTICE.md)。
 - 剧本：[artemis_scp.py](../python/engines/artemis_scp.py)，行语法来源 msg-tool（GPL-3.0-or-later）；`;` 整行注释、语音 tag 姓名、未知说话人清空及引号结构按本页规则处理。
 - `tag.ini` 语义：`[tag]` 段 + `0=attr` 属性顺序表，用于区分指令与角色 tag。
+- 显示名新增规则与 msg-tool 的 `set_attr("name", ...)` 一致，来源见 [文本字段来源](../provenance/common-text-fields.json)。
 
 ## 验证与缺口
 

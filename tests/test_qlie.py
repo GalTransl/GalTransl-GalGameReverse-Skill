@@ -12,6 +12,7 @@ from python.archives import qlie
 from python.archives.qlie_keys import game_key_from_pe, icon_key_from_dfm
 from python.archives.qlie_writer import hash13_tail, rebuild
 from python.engines import qlie_imos as imos
+from python.engines import qlie as fields_api
 from python.engines.qlie_extract import extract
 from python.engines.qlie_repack import repack
 
@@ -22,7 +23,8 @@ SCRIPT = ('@@@AVG\\header.s\r\n@@MAIN\r\n\r\n'
           '【Alice】\r\n％voice01％\r\nHello\r\n\r\n'
           'Narration\r\n\r\n'
           '[spd,0][pc,A poem][spd]\r\n\r\n'
-          '^select,Yes,,No\r\n\r\n')
+          '^select,Yes,,No\r\n\r\n'
+          '^savetext,Chapter,opaque\r\n\r\n')
 
 
 def literal(data):
@@ -200,10 +202,35 @@ class QlieArchiveTests(unittest.TestCase):
 
 
 class QlieTextTests(unittest.TestCase):
+    def test_save_title_roundtrip_preserves_other_arguments_and_whitespace(self):
+        script = '  ^savetext,Old title,opaque,7  \r\n\r\nBody\r\n'
+        rows = imos.rows(script)
+        self.assertEqual(rows, [{'message': 'Old title'}, {'message': 'Body'}])
+        self.assertEqual(imos.patch(script, rows), script)
+        rows[0]['message'] = '更長的存档標題'
+        result = imos.patch(script, rows)
+        self.assertEqual(imos.rows(result), rows)
+        self.assertIn('  ^savetext,更長的存档標題,opaque,7  \r\n', result)
+        fields = fields_api.qlie_fields(script)
+        self.assertEqual(fields[0].kind, 'save-title')
+        self.assertEqual(fields_api.patch_qlie(script, {0: 'Title'}),
+                         script.replace('Old title', 'Title'))
+        self.assertEqual(fields_api.patch_qlie(script, {0: '^Title'}),
+                         imos.patch(script, [{'message': '^Title'}, rows[1]]))
+        for bad in ('bad,argument', 'bad\nline', 'bad\0text', '[newtag]'):
+            with self.assertRaises(ValueError):
+                imos.patch(script, [{'message': bad}, rows[1]])
+            with self.assertRaises(ValueError):
+                fields_api.patch_qlie(script, {0: bad})
+        for parse in (imos.rows, fields_api.qlie_fields):
+            with self.assertRaises(ValueError):
+                parse('^savetext,[tag,argument],opaque\n')
+
     def test_name_scope_pc_empty_choice_and_preserving_identity(self):
         rows = imos.rows(SCRIPT)
         self.assertEqual(rows, [{'name': 'Alice', 'message': 'Hello'}, {'message': 'Narration'},
-                               {'message': 'A poem'}, {'message': 'Yes'}, {'message': ''}, {'message': 'No'}])
+                               {'message': 'A poem'}, {'message': 'Yes'}, {'message': ''},
+                               {'message': 'No'}, {'message': 'Chapter'}])
         self.assertEqual(imos.patch(SCRIPT, rows), SCRIPT)
         rows[0] = {'name': 'エリス', 'message': 'Longer\nmessage'}
         rows[2]['message'] = 'New poem'
@@ -212,6 +239,18 @@ class QlieTextTests(unittest.TestCase):
         self.assertIn('[spd,0][pc,New poem][spd]', result)
         self.assertIn('％voice01％', result)
         self.assertEqual(imos.rows(result), rows)
+
+    def test_save_title_does_not_reset_speaker_or_split_sentence(self):
+        script = '【Actor】\nFirst\n^savetext,Title,opaque\nSecond\n\nNarration\n'
+        rows = imos.rows(script)
+        self.assertEqual(rows, [{'name': 'Actor', 'message': 'First\nSecond'},
+                               {'message': 'Title'}, {'message': 'Narration'}])
+        self.assertEqual(imos.patch(script, rows), script)
+        rows[0] = {'name': 'Display', 'message': 'Longer first\nLonger second'}
+        rows[1]['message'] = 'New title'
+        result = imos.patch(script, rows)
+        self.assertEqual(imos.rows(result), rows)
+        self.assertIn('^savetext,New title,opaque\n', result)
 
     def test_alias_and_multiline_spacer(self):
         script = '【Alice＠？？？】\r\nHello\r\nworld\r\n\r\n　\r\n\r\nNarration\r\n'
@@ -251,6 +290,7 @@ class QlieWorkflowTests(unittest.TestCase):
             first = next(i for i in report['members'] if i.get('json') and i['archive'] == 'a.pack')
             rows = json.loads((output / first['json']).read_text(encoding='utf-8'))
             rows[0] = {'name': 'エリス', 'message': 'Longer message'}
+            rows[-1]['message'] = 'Longer save title'
             (output / 'gt_output' / Path(first['json']).name).write_text(json.dumps(rows), encoding='utf-8')
             result = repack(game, output, game / 'rebuilt')
             self.assertEqual(len(result['archives']), 1)

@@ -205,17 +205,40 @@ class CatSystemDialogueTests(unittest.TestCase):
         exported = catsystem2.export_cst(data)
         self.assertEqual(exported.rows, (
             {"name": "$str20", "message": "first\nline\\@"},
+            {"message": "choice"},
             {"name": "Alice", "message": "hello"},
             {"name": "Bob", "message": "bye"},
         ))
-        self.assertEqual(exported.name_policies, ("context", "writable", "writable"))
-        self.assertEqual(exported.excluded_choices, (3,))
+        self.assertEqual(exported.name_policies, ("context", "absent", "writable", "writable"))
+        self.assertEqual(exported.excluded_choices, ())
+        self.assertEqual(exported.locators[1]['choice_span'], (9, 15))
         self.assertEqual(exported.orphan_names, (5, 8))
         self.assertEqual(exported.name_command_crossings, ((2, (3,)),))
         self.assertIn("\n", exported.protected_tokens[0])
         self.assertIn(r"\@", exported.protected_tokens[0])
         self.assertEqual(catsystem2.patch_dialogue(data, exported,
                                                    list(exported.rows)), data)
+
+    def test_choice_caption_growth_preserves_prefix_and_nontext_records(self):
+        for compressed in (True, False):
+            data = make_cst([(0x30, '1\tselect  Old'), (0x30, 'jump label'),
+                             (0x20, 'Body')], compressed=compressed)
+            exported = catsystem2.export_cst(data)
+            translated = [{'message': '更長的選択'}, {'message': '更長的本文'}]
+            result = catsystem2.patch_dialogue(data, exported, translated)
+            before, after = catsystem2.read_cst(data), catsystem2.read_cst(result)
+            self.assertEqual(after.records[0].text, '1\tselect  更長的選択')
+            self.assertEqual(after.records[1], before.records[1])
+            self.assertEqual(after.payload[before.pool_offset:len(before.payload)],
+                             before.payload[before.pool_offset:])
+            self.assertEqual(catsystem2.export_cst(result).rows, tuple(translated))
+            for text in ('', ' leading', 'bad\nline', 'bad\0text'):
+                with self.assertRaises(ValueError):
+                    catsystem2.patch_dialogue(data, exported, [{'message': text}, exported.rows[1]])
+            with self.assertRaises(ValueError):
+                catsystem2.patch_cst(data, {1: 'wrong command'})
+            with self.assertRaises(ValueError):
+                catsystem2.patch_dialogue(result, exported, translated)
 
     def test_patch_dialogue_and_reject_context_or_token_changes(self):
         data = make_cst([(0x21, "$str20"), (0x20, r"old\@"),
@@ -237,6 +260,17 @@ class CatSystemDialogueTests(unittest.TestCase):
         bad_token[0]["message"] = "lost"
         with self.assertRaises(ValueError):
             catsystem2.patch_dialogue(data, exported, bad_token)
+
+    def test_choice_controls_remain_raw_and_protected(self):
+        data = make_cst([(0x30, r'1 select old\ntext\@')])
+        exported = catsystem2.export_cst(data)
+        self.assertEqual(exported.rows, ({'message': r'old\ntext\@'},))
+        self.assertEqual(catsystem2.patch_dialogue(data, exported, exported.rows), data)
+        translated = [{'message': r'new\ncaption\@'}]
+        result = catsystem2.patch_dialogue(data, exported, translated)
+        self.assertEqual(catsystem2.read_cst(result).records[0].text, r'1 select new\ncaption\@')
+        with self.assertRaises(ValueError):
+            catsystem2.patch_dialogue(data, exported, [{'message': 'lost controls'}])
 
     def test_pipeline_uses_update_overlay_and_writes_contract(self):
         base = make_plain_int("scene.cst", make_cst([(0x20, "base")]))
@@ -261,6 +295,20 @@ class CatSystemDialogueTests(unittest.TestCase):
             self.assertEqual(manifest["translation"]["count"], 1)
             self.assertEqual(manifest["records"][0]["locator"]["message_record"], 0)
             self.assertTrue((output / manifest["sources"][0]["path"]).is_file())
+
+    def test_choice_only_script_is_exported_with_caption_locator(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / 'scene.int').write_bytes(make_plain_int('choice.cst', make_cst([
+                (0x30, '1 select Option'), (0x30, 'jump label')])))
+            summary = extract_game(root)
+            output = Path(summary['output'])
+            self.assertEqual(summary['scripts_exported'], 1)
+            rows = json.loads((output / 'gt_input' / 'choice.json').read_text('utf-8'))
+            self.assertEqual(rows, [{'message': 'Option'}])
+            manifest = json.loads(next((output / 'metadata').rglob('*.json')).read_text('utf-8'))
+            self.assertEqual(manifest['records'][0]['locator']['choice_span'], [9, 15])
+            self.assertEqual(manifest['translation']['count'], 1)
 
     def test_pipeline_accepts_relative_root_and_encrypted_archive(self):
         member = make_cst([(0x20, "encrypted")])
