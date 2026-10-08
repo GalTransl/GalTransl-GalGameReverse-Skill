@@ -46,7 +46,7 @@ def plain_members(raw):
 
 
 def extract(archive, exe, output, *, paths=('', 'scn/', 'scenario/'), language_index=0,
-            speaker_name=False, max_member_bytes=32 << 20, max_scan_bytes=384 << 20):
+            speaker_name=True, max_member_bytes=32 << 20, max_scan_bytes=384 << 20):
     """Select hash-verified PSB SCN from one Hx archive into a shared workspace.
 
     Oversized members remain uninspected, not classified as media or non-script.
@@ -177,8 +177,8 @@ def main():
     ex = sub.add_parser('extract'); ex.add_argument('archive',type=Path); ex.add_argument('output',type=Path)
     ex.add_argument('--exe',required=True,type=Path); ex.add_argument('--paths',nargs='+',default=['','scn/','scenario/'])
     ex.add_argument('--language-index',type=int,default=0)
-    ex.add_argument('--speaker-name',action='store_true',
-                    help='treat a string speaker field as the writable display name when the display slot is empty')
+    ex.add_argument('--speaker-name',action=argparse.BooleanOptionalAction,default=True,
+                    help='write string speakers when the display slot is null (default: enabled; --no-speaker-name keeps them read-only)')
     pk = sub.add_parser('pack'); pk.add_argument('workspace',type=Path); pk.add_argument('output',type=Path)
     args = parser.parse_args()
     result = extract(args.archive,args.exe,args.output,paths=args.paths,language_index=args.language_index,speaker_name=args.speaker_name) if args.command=='extract' else pack(args.workspace,args.output)

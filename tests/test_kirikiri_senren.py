@@ -99,7 +99,7 @@ class SenrenTests(unittest.TestCase):
 
     def test_invalid_controls_names_and_psb_header(self):
         for change in ('name','control'):
-            p=Psb(scene_fixture());r=records(p);rows=[dict(v['row']) for v in r]
+            p=Psb(scene_fixture());r=records(p,speaker_name=False);rows=[dict(v['row']) for v in r]
             if change=='name':rows[0]['name']='改名'
             else:rows[1]['message']='missing ruby'
             with self.assertRaises(ValueError):patch(p,r,rows)

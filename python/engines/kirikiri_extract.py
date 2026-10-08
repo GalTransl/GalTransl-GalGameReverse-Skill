@@ -67,7 +67,7 @@ def verify_archive(data,files,profile,filter_spec=None):
 
 def extract(game,output,*,archives=('data.xp3',),overlay='path',archive_profile='auto',
             output_format='same',verify_edits=False,language_index=0,filter_spec=None,
-            speaker_name=False):
+            speaker_name=True):
     """Extract supported SCN from selected archives, later inputs overriding earlier.
 
     'path' overlays exact storage paths. 'basename' is an explicit choice for
@@ -196,6 +196,7 @@ def pack(workspace,output):
     language_index=report.get('language_index',0)
     if type(language_index) is not int or language_index < 0: raise ValueError('invalid language index')
     if profile in LEGACY and language_index != 0: raise ValueError('legacy workspace language changed')
+    # Workspaces created before the flag existed used context-only speakers.
     speaker_name=report.get('speaker_name',False)
     if type(speaker_name) is not bool: raise ValueError('invalid speaker_name flag')
     output_format=LEGACY[profile][1] if profile in LEGACY else report['output_format']
@@ -259,8 +260,8 @@ def main():
     extract_parser.add_argument('--filter-spec',type=Path,help='JSON algorithm and parameters for supported XP3 byte filter')
     extract_parser.add_argument('--language-index',type=int,default=0,help='zero-based existing SCN language slot; never inserts a language')
     extract_parser.add_argument('--verify-edits',action='store_true')
-    extract_parser.add_argument('--speaker-name',action='store_true',
-                                help='treat a string speaker field as the writable display name when the display slot is empty')
+    extract_parser.add_argument('--speaker-name',action=argparse.BooleanOptionalAction,default=True,
+                                help='write string speakers when the display slot is null (default: enabled; --no-speaker-name keeps them read-only)')
     pack_parser=subs.add_parser('pack');pack_parser.add_argument('source',type=Path);pack_parser.add_argument('output',type=Path)
     args=parser.parse_args()
     report=(extract(args.source,args.output,archives=args.archives,overlay=args.overlay,archive_profile=args.archive_profile,

@@ -1,18 +1,19 @@
 """The speaker field doubles as the display name when the display slot is empty.
 
-Default behaviour keeps such a name read-only (it may be an internal id), so the
-opt-in flag is what turns the speaker slot into a writable name slot.
+Speakers are writable by default; dialects using internal IDs can opt out.
 """
 import io
 import json
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch as mock_patch
 
 from test_kirikiri_senren import fixture_tree
 from python.engines.kirikiri_psb import Psb
-from python.engines.kirikiri_scn import records, writable_records, patch, fingerprint
+from python.engines.kirikiri_scn import records, locate_records, writable_records, patch, fingerprint
 from python.engines.kirikiri_extract import extract, pack
+from python.engines import kirikiri_extract, kirikiri_hxv4_text
 from python.archives import kirikiri_xp3 as xp3
 
 SPEAKER = "\u30ca\u30ae"
@@ -26,9 +27,9 @@ def fixture(display=None):
 
 
 class SpeakerNameTests(unittest.TestCase):
-    def test_default_keeps_a_string_speaker_read_only(self):
+    def test_opt_out_keeps_a_string_speaker_read_only(self):
         psb = Psb(fixture())
-        recs = records(psb)
+        recs = records(psb, speaker_name=False)
         self.assertEqual(recs[0]['row']['name'], SPEAKER)
         self.assertIsNone(recs[0]['name'])
         rows = [dict(r['row']) for r in recs]
@@ -37,10 +38,12 @@ class SpeakerNameTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             patch(psb, recs, rows)
 
-    def test_flag_opens_the_speaker_slot(self):
+    def test_default_opens_the_speaker_slot(self):
         psb = Psb(fixture())
-        recs, issue = writable_records(psb, speaker_name=True)
+        recs, issue = writable_records(psb)
         self.assertIsNone(issue)
+        self.assertEqual(records(psb), recs)
+        self.assertEqual(locate_records(psb), recs)
         self.assertEqual(recs[0]['name'], recs[0]['message'][:4] + (0,))
         rows = [dict(r['row']) for r in recs]
         rows[0]['name'] = RENAMED
@@ -55,7 +58,7 @@ class SpeakerNameTests(unittest.TestCase):
     def test_explicit_display_slot_wins_in_both_modes(self):
         for flag in (False, True):
             psb = Psb(fixture(DISPLAY))
-            recs = records(psb) if not flag else writable_records(psb, speaker_name=True)[0]
+            recs = records(psb, speaker_name=flag)
             self.assertEqual(recs[0]['row']['name'], DISPLAY)
             self.assertIsNotNone(recs[0]['name'])
             rows = [dict(r['row']) for r in recs]
@@ -104,16 +107,23 @@ class SpeakerNameTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             (root/'script.xp3').write_bytes(xp3.build([('main.scn', fixture())], 'plain'))
-            for flag in (False, True):
+            for flag in (None, False, True):
                 work = root/str(flag)
-                result = extract(root, work, archives=('script.xp3',), speaker_name=flag, verify_edits=True)
-                self.assertIs(result['speaker_name'], flag)
+                options = {} if flag is None else dict(speaker_name=flag)
+                result = extract(root, work, archives=('script.xp3',), verify_edits=True, **options)
+                enabled = flag is not False
+                self.assertIs(result['speaker_name'], enabled)
                 self.assertEqual(pack(work, root/(str(flag)+'-noop'))['changed_files'], 0)
+                if not enabled:
+                    # A pre-flag workspace must retain its original name policy.
+                    result.pop('speaker_name')
+                    (work/'reports/extraction.json').write_text(json.dumps(result), encoding='utf-8')
+                    self.assertEqual(pack(work, root/'legacy-noop')['changed_files'], 0)
                 rows = json.loads((work/'gt_input/main.json').read_bytes())
                 rows[0]['name'] = RENAMED
                 (work/'gt_output/main.json').write_text(json.dumps(rows), encoding='utf-8')
                 output = root/(str(flag)+'-translated')
-                if not flag:
+                if not enabled:
                     with self.assertRaises(ValueError): pack(work, output)
                     self.assertFalse(output.exists())
                     continue
@@ -128,6 +138,21 @@ class SpeakerNameTests(unittest.TestCase):
                     report.write_text(json.dumps(bad), encoding='utf-8')
                     with self.assertRaises(ValueError): pack(work, root/'rejected')
                     self.assertFalse((root/'rejected').exists())
+
+    def test_cli_default_and_explicit_name_policies(self):
+        for module in (kirikiri_extract, kirikiri_hxv4_text):
+            for flags, expected in (([], True), (['--speaker-name'], True), (['--no-speaker-name'], False)):
+                args = ['extract', 'source', 'output', *flags]
+                if module is kirikiri_hxv4_text:
+                    args += ['--exe', 'not-executed.exe']
+                result = dict(totals={}, scan_complete=True, skipped_oversize_members=0,
+                              decrypted_bytes=0, diagnostics=[])
+                with self.subTest(module=module.__name__, flags=flags), \
+                        mock_patch('sys.argv', [module.__name__, *args]), \
+                        mock_patch.object(module, 'extract', return_value=result) as run, \
+                        mock_patch('sys.stdout', new_callable=io.StringIO):
+                    module.main()
+                    self.assertIs(run.call_args.kwargs['speaker_name'], expected)
 
     def test_flag_requires_bool(self):
         for flag in (1, 'true', None):

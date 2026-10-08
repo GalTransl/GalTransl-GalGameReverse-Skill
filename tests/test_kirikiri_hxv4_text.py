@@ -15,7 +15,7 @@ from python.engines.kirikiri_scn import records
 
 
 class HxTextTests(unittest.TestCase):
-    def test_speaker_flag_survives_encrypted_workspace_roundtrip(self):
+    def test_default_speaker_policy_survives_encrypted_workspace_roundtrip(self):
         package = dict(bootStrap='test', warning='test', archiveUniqueKey='{test}',
                        params='000102030405060700010203040500010280ff010001')
         keys = derive(package)
@@ -26,7 +26,7 @@ class HxTextTests(unittest.TestCase):
             source.write_bytes(build([(identity, raw)], keys))
             evidence = dict(key_package=package, source_sha256=hashlib.sha256(source.read_bytes()).hexdigest(), exe_sha256='test')
             with patch('python.engines.kirikiri_hxv4_text.inspect', return_value=evidence):
-                extract(source, root/'not-executed.exe', work, speaker_name=True)
+                extract(source, root/'not-executed.exe', work)
             self.assertTrue(json.loads((work/'reports/extraction.json').read_bytes())['speaker_name'])
             self.assertEqual(pack(work, root/'noop')['changed_files'], 0)
             rows = [dict(name='变长中文姓名', message='变长中文正文')]

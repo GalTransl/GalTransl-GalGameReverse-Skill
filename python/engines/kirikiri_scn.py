@@ -1,7 +1,7 @@
 """Kirikiri single/multilingual SCN: scene texts and choices, reference-local edits.
 
-Semantics follow msg-tool kirikiri/scn.rs, GPL-3.0-or-later. Internal name IDs
-remain context; display-name slots are writable. The default reader prefers the
+Semantics follow msg-tool kirikiri/scn.rs, GPL-3.0-or-later. Display-name slots
+are writable, falling back to string speakers by default. The reader prefers the
 exact verified dialect and otherwise locates text by typed field prefixes: a
 derived field is rewritten only when its stored value matches a known rule, and
 everything else stays verbatim and is reported.
@@ -93,13 +93,13 @@ def _derived_caches(psb, nodes, paths, message, locate_only, context):
     return caches, variants, opaque
 
 
-def records(psb, language_index=0, *, skipped=None, speaker_name=False):
+def records(psb, language_index=0, *, skipped=None, speaker_name=True):
     """Export scene texts and choices; collect non-display select keys in skipped."""
     return _records(psb, language_index, skipped=skipped, locate_only=False,
                     speaker_name=speaker_name)
 
 
-def locate_records(psb, language_index=0, *, skipped=None, speaker_name=False):
+def locate_records(psb, language_index=0, *, skipped=None, speaker_name=True):
     """Locate scene text by typed field prefixes and record its write plan.
 
     Trailing tuple fields are opaque: a derived field (visible length,
@@ -113,7 +113,7 @@ def locate_records(psb, language_index=0, *, skipped=None, speaker_name=False):
                     speaker_name=speaker_name)
 
 
-def writable_records(psb, language_index=0, *, skipped=None, speaker_name=False):
+def writable_records(psb, language_index=0, *, skipped=None, speaker_name=True):
     """Prefer the exact verified dialect, else fall back to typed location.
 
     Returns (records, strict_issue). strict_issue is None only when the whole
@@ -132,7 +132,7 @@ def writable_records(psb, language_index=0, *, skipped=None, speaker_name=False)
 
 
 def _text_record(psb, text, path, scene_id, text_id, language_index, locate_only,
-                 speaker_name=False):
+                 speaker_name=True):
     values = text.value
     zero_tail = bool(values) and (values[-1].tag == 4 or 5 <= values[-1].tag <= 12 and values[-1].value == 0)
     if len(values) >= 2 and values[1].tag == 32 and (locate_only or len(values) == 5 or len(values) == 6 and zero_tail):
@@ -194,8 +194,8 @@ def _text_record(psb, text, path, scene_id, text_id, language_index, locate_only
             opaque = [path+(i,) for i in range(6, len(values))]
     if who.tag != 1 and not 21 <= who.tag <= 24: raise ValueError('unknown name ID')
     if display.tag != 1 and not 21 <= display.tag <= 24: raise ValueError('unknown display name')
-    # An explicit display slot wins. A null display permits writing the speaker
-    # string only after the caller opts into this dialect; otherwise it is an ID.
+    # An explicit display slot wins. A null display falls back to the speaker
+    # string unless the caller marks it as a context-only internal ID.
     if who.tag == 1:
         name, writable_name = None, None
     elif display.tag != 1:
@@ -215,7 +215,7 @@ def _text_record(psb, text, path, scene_id, text_id, language_index, locate_only
     return rec
 
 
-def _records(psb, language_index, *, skipped, locate_only, speaker_name=False):
+def _records(psb, language_index, *, skipped, locate_only, speaker_name=True):
     if type(language_index) is not int or language_index < 0: raise ValueError('invalid language index')
     if type(speaker_name) is not bool: raise ValueError('invalid speaker_name flag')
     root = fields(psb, psb.root, ())

@@ -90,21 +90,22 @@ python -m python.engines.kirikiri_extract pack "提取目录" "新的打包目�
 
 - [PSB parser/writer](../python/engines/kirikiri_psb.py) 支持未加密、无二进制 resource 区段的 PSB v2/v3。检查名称 trie、字符串索引、节点边界和区段顺序；未知版本、节点、重叠或循环引用拒绝。v2 不含 v3 的头校验字段，回写必须按原版本布局处理。
 - [SCN 语义层](../python/engines/kirikiri_scn.py) 从 `scenes[].texts` 和 `scenes[].selects` 识别正文、显示名与选项。严格方言覆盖单语言 6/9 槽与已知多语言 5/6 槽；其他形状按类型化前缀定位，只对可验证的派生字段回写。
-- 显式显示名槽可写；内部角色 ID、voice、场景状态、源行号与跳转目标保留。没有可写显示名时，导出的 `name` 只是只读上下文。
+- 显式显示名槽可写；显示名为 null 时默认回写字符串说话者字段，见下文姓名策略。具有显式显示名的记录仍保留内部角色 ID；voice、场景状态、源行号与跳转目标保留。
 - 多语言只修改所选槽，其他语言不混入 JSON。选项优先读取 `language[index].text`；仅槽 0 为 null 时允许使用选项自身的 `text`，其他缺失槽拒绝，不自动新增或回退。
 - 正文的可见长度、读音及搜索缓存按已知规则同步重建。长度不等于带控制码字符串的长度；ruby、百分号/颜色控制与转义需保留。已识别的去中点/空格变体保存到 manifest 后沿用；与已知规则不一致的派生字段不按位置猜测，保留原字节并记入 `opaque`。
 - 已知图片消息的替代文本单独导出为 `image-alt`，不能误当语音缓存。无显示字段的选项仅在符合严格结构规则时保留并记入 `skipped_structural_choices`；具体字段规则见通用工作流。图像文字及 `phonechat` 历史快照不因此自动获得翻译支持。
 - 字符串池和树节点可能共享；按完整树路径定位每次引用，不能全局替换字符串 ID 或只按物理节点地址写入。writer 重建相关偏移、索引宽度、区段地址与校验，并比较非文本语义。
 
-### 说话者字段作为显示名（`--speaker-name`）
+### 说话者字段作为显示名（默认开启）
 
 单语言元组是 `[who, display, message, ...]`；多语言元组的语言槽内是 `[display, message, ...]`。`display` 是显式显示名槽，`who` 是外层说话者字段。
 
 - `who` 为 null 时沿用旁白规则，不导出姓名；`who` 和 `display` 都是字符串时回写 `display`，这是默认路径。
-- `display` 为 null 而 `who` 是字符串时，**含义因方言而异**：可能直接显示 `who`，也可能是内部标识符。默认将其导出为只读 `name`（`name_policy=context`），改动会被回写端拒绝。空字符串仍是显式显示名，不等同于 null。
-- 需要把这类作品的人名一并汉化时，用 `--speaker-name` 显式开启：`who` 按可写显示名槽导出，回写改 `who` 自身（对话元组第 0 项）。`kirikiri_extract` 与 `kirikiri_hxv4_text` 的 `extract` 都接受该参数，取值随 `reports/extraction.json` 保存，`pack` 沿用同一规则。
-- 开启前要有证据：查同作品既有汉化版本的用法，或先只改一个易触发的脚本试注，确认对话窗显示的名字确实来自 `who`。
-- 多语言结构的 `who` 由各语言共享；改写会影响其他依赖该字段的语言，其他语言自己的显示名与正文槽仍保持原样。仅需改某一语言的姓名时，不应把共享 `who` 当局部显示名。
+- `display` 为 null 而 `who` 是字符串时，新提取默认将 `who` 按可写显示名槽导出，回写改 `who` 自身（对话元组第 0 项）。空字符串仍是显式显示名，不等同于 null。
+- `who` 的含义因方言而异：可能直接显示姓名，也可能是内部标识符。确认其用于内部标识时，提取使用 `--no-speaker-name`（API：`speaker_name=False`），将这类姓名保持为只读上下文（`name_policy=context`）。先只改一个易触发的脚本试注，核对显示及角色相关行为。
+- `kirikiri_extract`、`kirikiri_hxv4_text` 的 `extract` 及共享 SCN 语义 API 默认开启；`--speaker-name` 保留为显式开启参数。取值随 `reports/extraction.json` 保存，`pack` 沿用同一规则。
+- 旧提取目录缺少 `speaker_name` 时，回填仍按原来的只读策略处理；要启用姓名回注，应从原始归档重新提取到新目录，再配对同名译文。不得改报告或 manifest 绕过校验。
+- 多语言结构的 `who` 由各语言共享；改写会影响其他依赖该字段的语言，其他语言自己的显示名与正文槽仍保持原样。仅需改某一语言的姓名时，使用 `--no-speaker-name`，不把共享 `who` 当局部显示名。
 - `who` 是整数或其他类型时不猜，直接拒绝解析。
 
 ### Hxv4 中的 SCN
