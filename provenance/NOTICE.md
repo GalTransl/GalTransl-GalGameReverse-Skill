@@ -30,6 +30,8 @@ GARbro 的根 MIT **不代表所有内嵌代码**。必须区分已经明确的�
 
 ## 改编方式
 
+用户提供的 `galgame-translation` 工程备忘录按格式整理为研究说明、VM 建模与验证规则；文件身份、采用范围和纠错见[来源记录](translation-engineering-notes.json)。未原样分发案例、游戏资源、私有密钥或备忘录所称的工具实现，新增研究页没有据此声明运行支持。已有引擎算法的许可证和来源保持各自适用范围。
+
 归档布局与解密资料另见 [算法出处清单](garbro-archive-excerpts.json)及[逐文件原通知](garbro-archive-notices.md)。Markdown 中的 C# 片段是独立的算法资料，保留来源的字段和变换表达式，不编译、链接或导入为本包运行代码；界面、writer、案例注释和内置逐游戏名称列表已省去。Kogado Cocotte 原片段仍依其 GNU GPL Version 2 声明分发，附 [GPLv2 原文](licenses/GPL-2.0.txt)，不改标 GPLv3；LZ4 的 BSD 条款和其他文件原通知同时保留。没有文件级通知的组件不据此认定为无版权，亦不以根 MIT 覆盖另有声明的片段。
 
 公共 JIS 替换及固定字表参考 SExtractor，详见 [版本、许可与改动记录](jis-substitution.json)。`python/common/jis_cn_jp.json` 为上游字表原样副本；配套公共模块重构为显式编码会话并增加失败检查，保留 GPL 通知。另随包保存用户指定的 UIF x86 DLL，来源、哈希和独立许可状态见 [UIF 说明](../assets/uif/README.md)，不将其重新标为 GPL；未分发字体。

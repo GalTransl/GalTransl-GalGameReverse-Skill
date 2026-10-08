@@ -1,0 +1,89 @@
+{
+  "schema": "translation-engineering-notes/1",
+  "source": "User-provided galgame-translation engineering notes",
+  "source_access": "Development reference only; users of this skill do not need the external directory",
+  "source_license": "No explicit license notice supplied in the source directory; the user requested synthesis of their provided notes. Format facts and operational constraints were rewritten; original prose, case logs and tool implementations are not redistributed",
+  "adaptation_license": "New documentation and template follow the repository GPL-3.0-or-later notice; existing third-party material retains its own notices",
+  "files": [
+    {
+      "path": "SKILL.md",
+      "sha256": "e3878b1cb58789068128f39ad8916270d107ea098052655e0a629c553ea7fcf6",
+      "used_for": "State recovery and phase-specific evidence"
+    },
+    {
+      "path": "references/general-workflow.md",
+      "sha256": "4e05fad286fa6d50f0dbe2b91b4470bf545241e033dccf9a2ba8b4cc727e3ed2",
+      "used_for": "Persistent state and evidence boundaries"
+    },
+    {
+      "path": "references/format-and-qa.md",
+      "sha256": "8e8f6ef901f90cd92a30eab6b3d005ebaee5704512d318185e490a0925f0a96d",
+      "used_for": "Encoding, line layout and validation constraints; conflicting policies replaced by existing skill contract"
+    },
+    {
+      "path": "references/CLAUDE.md",
+      "sha256": "91ef93523e8b63dd60377ddc5ed52bb4eb4e338be232798e2c6dbe05a4726d3e",
+      "used_for": "VM instruction schemas, semantic views, shared references, alignment and relocation"
+    },
+    {
+      "path": "references/engine-routing.md",
+      "sha256": "222915652206d76318f392aadf3fdda64b49c3fbf9dba64c876c9f23d48a0e68",
+      "used_for": "Candidate format routing, narrowed to the current candidate rather than mandatory all-case loading"
+    },
+    {
+      "path": "references/original-memo.md",
+      "sha256": "a1c7e3ac0ccff43b2d7da43b4c37bf4a9058bff5e9d757b715e4cfd3100bac18",
+      "used_for": "Extraction coverage, observable edits, reference-site audit and engine-specific format research"
+    },
+    {
+      "path": "templates/translation-state.md",
+      "sha256": "2046da91b009b0c7bba98f7280db1790f985cde6fab0cce3aa96f2adbb6d172f",
+      "used_for": "Rewritten result-directory state template"
+    }
+  ],
+  "documents": [
+    "catalog/format-research.md",
+    "guides/vm-analysis.md",
+    "guides/validation-and-deployment.md",
+    "guides/encoding-and-control-codes.md",
+    "guides/extending-engines.md",
+    "templates/translation-state.md",
+    "engines/glib/formats.md",
+    "engines/fc01/archives.md",
+    "engines/ism/formats.md",
+    "engines/kogado/in10.md",
+    "engines/tuitui/spt60.md",
+    "engines/kaas/id.md",
+    "engines/xuse/cd.md",
+    "engines/xuse.md",
+    "engines/triangle.md",
+    "engines/ice.md",
+    "engines/med.md",
+    "engines/med/encrypted-members.md",
+    "engines/malie.md",
+    "engines/malie/exec-research.md"
+  ],
+  "cross_references": [
+    {
+      "source": "GARbro-Mod",
+      "commit": "bc26d991ef5cdc0e1ecb32122ee9a48c3375750c",
+      "paths": ["ArcFormats/GLib/ArcG.cs", "ArcFormats/Ism/ArcISA.cs", "ArcFormats/DxLib/ArcMED.cs"],
+      "notices": "Copyright (C) by morkt; file-specific notices and MIT text already retained in garbro-archive-notices.md and licenses/MIT-GARbro.txt",
+      "used_for": "GML archive and LZSS formula checks, ISA conflicting record widths and uncalled decrypt helper, Fudegaki additive decryption and absolute key phase"
+    }
+  ],
+  "corrections_and_limits": [
+    "KAAS CP932 example corrected: bytes 83 49 encode the character; the same bytes interpreted as little-endian u16 have value 0x4983, not 0x8349. Actual file packing still requires evidence",
+    "ISA memo 0x30-byte records kept distinct from GARbro 0x60 and 0x20 record paths; decrypt helper existence does not establish invocation",
+    "Fudegaki additive decryption implies key = plaintext - ciphertext modulo 256, with absolute member offset phase",
+    "Malie numbered parts 0 through 6 treated as seven logical parts rather than a six-part universal layout",
+    "FDT2 bitwise-complemented code values do not preserve numeric sort order; comparator and packing must be checked",
+    "Absolute references do not require truncation if proven relocation is available; variable lengths still require capacity and loader checks",
+    "No implicit empty-translation fallback, first-wins shared-name writes, approximate control restoration, automatic Ruby removal or wait rewriting",
+    "CP932 includes single-byte characters; even line width is format-dependent. Kinsoku, indentation and line limits are explicit layout parameters",
+    "No blanket all-opcode default width, heuristic resynchronization or declaration of unsupported raw regions as fully parsed code",
+    "Thresholds, bitmap dimensions and protected-region coordinates remain diagnostic or dialect candidates, not universal engine properties",
+    "Translation JSON retains the existing name/names/message contract with identity and original bytes in metadata; id/pre_jp are not added as mandatory fields",
+    "No new runtime parser, writer, engine registration, private keys, fonts, binaries or game-specific execution reports"
+  ]
+}

@@ -5,6 +5,7 @@
 - [med_extract.py](../python/engines/med_extract.py) 提供 `extract` / `pack` 工作区流程；[归档实现](../python/archives/med.py) 与[脚本实现](../python/engines/med_script.py) 分层。
 - 当前完整路线是 **明文 `MDN0` + `med-framed-ordinal-v1`**：CP932 字符串池、带长度的指令帧、u16 字符串序号。常见剧情来源是 `md_scr.med`，必须同时通过归档及脚本结构校验，不能仅按后缀判断。
 - 不覆盖其他 `MDN*` 媒体包、加密脚本、未知 opcode/参数形状或不同字符串引用方式。错误中包含成员名、opcode 和代码偏移；先研究当前成员，不放宽校验强行导出。
+- 加密成员与不同容器 magic 的[研究资料](med/encrypted-members.md)单独记录，未改变明文 MDN0 工作流的支持范围。
 - [旧 med.py](../python/engines/med.py) 仍保留无指令语义的 NUL 表定位和等字节长替换 API。旧 leaf 的变长限制不适用于已通过新 profile 的成员，也不能反过来用新 writer 处理仅通过旧边界公式的文件。
 
 ## Agent 操作流程

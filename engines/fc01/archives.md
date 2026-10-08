@@ -59,3 +59,5 @@ MRG/2 的 method 1 为 LZSS，method 2 为 range，method 3 为 range 后 LZSS�
 ## 回封与文本边界
 
 两种 F&C reader 和 MRG/2 都明确 `CanWrite=false`。上述规则足以研究读取算法，不是已验证的封包器。回封须保留索引未知字段、终止偏移、版本、原名及加密种子；压缩策略和运行时能否接受 stored 成员还需证据。解包后仍须独立识别剧情成员的编码与语义，不能把任意资源字符串导出为对白。
+
+[工程备忘录](../../provenance/translation-engineering-notes.json)补充的 manifest 思路可用于未来 writer：保存原索引顺序、名称槽原始 bytes、头/版本、method、存储/解码长度、未知中间字段、哨兵和残留区。未改成员保留原压缩流；已改成员必须用其 method 对应的真实 encoder 重建，不能把 method1 的数据偷换为别的 LZSS 布局，或未改 method 就写 stored bytes。全 literal 只有在 token 布局、声明大小、运行时输入预算和实际加载均验证后才可用，不自动等价于合法重封。整包重建仍需经过真实 reader/writer，重新列索引、逐成员解码，核对预期译文及未改 payload；复用原压缩流不等于整包直接复制。资料未提供 range encoder 或完整 writer，不宣称此 manifest 已实现封包能力。

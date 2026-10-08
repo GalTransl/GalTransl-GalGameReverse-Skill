@@ -42,6 +42,7 @@
 - 图片、音频等其他成员不能因为在同包内就被当作加密剧本。
 
 ## name / message 与控制码
+- 另有[CD/RIO、XOR53 与 sub_block 研究资料](xuse/cd.md)，尚未实现，也未确认与 GD/DLL 属于同一引擎版本；不能共用本页周期 XOR 或归档 writer。
 - 当前没有 name/message 提取 API。
 - 解密结果仍需单独识别指令、文本池及控制码。
 - 可读日文或 NUL 字符串不是自动回填证据。

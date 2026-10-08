@@ -19,6 +19,7 @@
 
 - LIBP等外包/加密EXEC → 已由可靠路径得到EXEC明文 → parse(fmt) → 消息池。
 - Camellia、外包key、DLL加速和EXE操作均未移植；无合法key则停在外壳。
+- PE 内 EXEC、消息 token 和常量池引用升级的[研究资料](malie/exec-research.md)另列，不能用本页仅重建消息池的 writer 修改 CODE/seg3 或直接重写 EXE。
 - String长度高位80000000是flag，真正字节长需去掉高位；VarType按链读至tag=0。
 
 ## 对白与 name / message 映射

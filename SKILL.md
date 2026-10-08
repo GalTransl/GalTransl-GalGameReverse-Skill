@@ -10,6 +10,7 @@ description: 识别 galgame/visual novel 引擎与资源格式，解包并提取
 ## 如何开始
 
 1. 确认输入目录、任务阶段（识别 / 提取 / 回填）及已有原文、译文和元数据。输出目录沿用下文约定，无需另问。
+   接续已有工作区时，先核对 `reports/translation-state.md`、manifest、源哈希及最近报告，再继续当前阶段；状态记录办法见[验证指南](guides/validation-and-deployment.md#工作状态与恢复)。
 2. 读 [识别指南](guides/detection.md)，可运行只读探测：
    ```text
    python /path/to/GalTransl-GalGameReverse-Skill/python/detect.py /path/to/game
@@ -99,6 +100,7 @@ JIS 交付可将随包 [UIF x86 winmm.dll](assets/uif/README.md) 与配置一并
 - [增补未知引擎或游戏变体](guides/extending-engines.md)
 - [完整归档/脚本格式 catalog](catalog/formats.json)：资料目录，不是 Python 支持列表。
 - [归档布局与解密资料](catalog/archive-notes.md)：按格式查阅索引、key 派生和成员解码规则；资料不代表已实现。
+- [脚本与字库格式研究资料](catalog/format-research.md)：补充 VM、字符串池、显示控制和位图字库的方言证据与待核条件，不是运行支持列表。
 - [上游实际注册清单](catalog/source-registries.json)：含预设、工具线索及禁用/不完整实现的区分。
 - [来源与许可证](provenance/NOTICE.md)
 
