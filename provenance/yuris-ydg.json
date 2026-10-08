@@ -1,0 +1,36 @@
+{
+  "sources": [
+    {
+      "repository": "https://github.com/Lite0812/Yuris_YDG_Tool",
+      "commit": "7742c207d9a5b2d34ec069792bc80e33d1d3c2c2",
+      "files": ["YDG_Tool.py", "README.md"],
+      "copyright": "Lite0812 / Yuris_YDG_Tool contributors",
+      "upstream_license": "No license file or source license header in the inspected revision.",
+      "authorization": "The user confirmed authorship or sufficient authorization and explicitly permitted adaptation and redistribution under GPL-3.0-or-later in this task.",
+      "adaptation_license": "GPL-3.0-or-later",
+      "scope": "YDG header/tile layout, QOI/WebP recognition, template rebuilding, CP932 font page order, glyph style and symbol positioning workflow."
+    },
+    {
+      "repository": "https://github.com/lifegpc/msg-tool",
+      "commit": "f72716cee88554d40c1cdface2812493b14ca653",
+      "files": ["src/scripts/yuris/img/ydg.rs"],
+      "copyright": "lifegpc/msg-tool contributors",
+      "license": "GPL-3.0-or-later",
+      "scope": "Variable header length and interpretation of the tile low 16 bits as horizontal x coordinate."
+    }
+  ],
+  "targets": [
+    "python/engines/yuris_ydg.py",
+    "python/engines/yuris_font.py",
+    "python/engines/yuris_ydg_workflow.py"
+  ],
+  "license_file": "licenses/GPL-3.0.txt",
+  "changes": [
+    "Pillow supplies QOI/WebP codecs; upstream GUI, native DLL and C acceleration are not copied or executed.",
+    "Reject unsupported versions, overlapping tiles, malformed QOI/RIFF, animation and oversized allocations.",
+    "Retain tile coordinates, physical ordering, header extensions, reserved fields, gaps and trailer; rebuild against immutable originals and verify decoded pixels.",
+    "Explicit font grid/style configuration replaces sample-specific sizes, paths and directory detection; missing/clipped glyphs fail instead of falling back silently.",
+    "Reuse common JIS mappings; do not duplicate subs_cn_jp.json or ship fonts.",
+    "Publish only complete new output trees, with original hashes, reparsed metadata and reports."
+  ]
+}

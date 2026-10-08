@@ -20,9 +20,13 @@ REQUIRED_ENGINES = {
     "tmrhiro", "whale", "nscripter", "siglus",
 }
 LOCAL_PATH = re.compile(r"(?:[A-Za-z]:[\\/]Users[\\/](?=[\w .-]+[\\/])|/c/Users/(?=[\w .-]+/)|\.claude/worktrees/)", re.IGNORECASE)
-# Engine-specific optional codecs, documented in engines/nexas.md. Keep the
-# exception scoped to its module; imports must remain lazy and ImportError-safe.
-OPTIONAL_RUNTIME_IMPORTS = {"python/archives/nexas.py": {"zstandard"}}
+# Engine-specific optional codecs/renderers, documented on their engine pages.
+# Keep exceptions scoped to modules and imports lazy and ImportError-safe.
+OPTIONAL_RUNTIME_IMPORTS = {
+    "python/archives/nexas.py": {"zstandard"},
+    "python/engines/yuris_ydg.py": {"PIL"},
+    "python/engines/yuris_font.py": {"PIL", "fontTools"},
+}
 
 
 def runtime_dependency_errors(tree: ast.AST, relative: str) -> list[str]:
