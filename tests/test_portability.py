@@ -1,6 +1,7 @@
 """Static package checks; neither parses nor executes commercial game files."""
 
 import ast
+import hashlib
 from pathlib import Path
 import unittest
 
@@ -39,10 +40,17 @@ class PortabilityTests(unittest.TestCase):
                         imported.add(node.module.split(".")[0])
                 self.assertFalse(imported & forbidden, imported & forbidden)
 
-    def test_no_shipped_native_or_game_binary_dependencies(self):
+    def test_no_unapproved_native_or_game_binaries(self):
         forbidden = {".exe", ".dll", ".pyd", ".so", ".dylib", ".rpyc", ".xp3", ".rpa"}
-        unexpected = [str(path.relative_to(ROOT)) for path in ROOT.rglob("*")
-                      if path.is_file() and path.suffix.lower() in forbidden]
+        # UIF is a documented delivery asset, never a Python runtime dependency.
+        allowed = {"assets/uif/winmm.dll":
+                   "b83f896edd06662078eadd5ea7970ab5bfd320cd8ec319e72b1455473c897e41"}
+        for relative, expected_hash in allowed.items():
+            self.assertEqual(hashlib.sha256((ROOT / relative).read_bytes()).hexdigest(),
+                             expected_hash, relative)
+        unexpected = sorted(path.relative_to(ROOT).as_posix() for path in ROOT.rglob("*")
+                            if path.is_file() and path.suffix.lower() in forbidden
+                            and path.relative_to(ROOT).as_posix() not in allowed)
         self.assertEqual(unexpected, [])
 
     def test_safety_paths_referenced_in_entry(self):

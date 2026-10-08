@@ -578,7 +578,7 @@ class PresetBoundaries(unittest.TestCase):
         with self.assertRaises(ValueError):
             violent.scan_candidates(text + b"\x00", start=0, end=len(text) + 1, max_candidates=0)
 
-    def test_modules_import_only_standard_library(self):
+    def test_modules_import_only_standard_library_or_shipped_modules(self):
         folder = Path(__file__).resolve().parents[1] / "python"
         names = ["overflow", "puremail", "patisserie", "ransel", "sfa", "slgsystem", "sakanagl",
                  "sceneplayer", "studiomiris", "studiopolaris", "succubus", "systemc", "tanaka",
@@ -595,8 +595,16 @@ class PresetBoundaries(unittest.TestCase):
                 if isinstance(node, ast.Import):
                     self.assertTrue(all(a.name.split(".")[0] in sys.stdlib_module_names for a in node.names), name)
                 if isinstance(node, ast.ImportFrom):
-                    self.assertEqual(node.level, 0, name)
-                    self.assertIn(node.module.split(".")[0], sys.stdlib_module_names, name)
+                    if node.level:
+                        package = ["python", *path.relative_to(folder).parent.parts]
+                        self.assertLessEqual(node.level, len(package), name)
+                        parts = package[:len(package) - node.level + 1]
+                        parts.extend((node.module or "").split(".") if node.module else [])
+                        target = folder.parent.joinpath(*parts)
+                        self.assertTrue(target.with_suffix(".py").is_file() or
+                                        (target / "__init__.py").is_file(), name)
+                    else:
+                        self.assertIn(node.module.split(".")[0], sys.stdlib_module_names, name)
                 if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
                     self.assertNotIn(node.func.id, {"eval", "exec", "open", "__import__"}, name)
 
