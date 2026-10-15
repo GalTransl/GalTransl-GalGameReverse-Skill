@@ -90,7 +90,7 @@
     {
       "repository": "cxdec-hxv4-static-analysis",
       "license": "none declared; repository root has no license file",
-      "use": "Read-only behavioural cross-check for the XP3 index pointer-block variant (the standard index-offset field holds 0x17 and the real offset is the qword at 0x20). Only format observations were re-implemented, from this package's own GARbro excerpt and the public PE/XP3 container layouts; no source was copied and no runtime dependency is created."
+      "use": "Read-only behavioural cross-check for the XP3 index pointer-block variant (the standard index-offset field holds 0x17 and the real offset is the qword at 0x20) and for Emote resource-bearing PSB section/table layout. Only format observations were re-implemented, from this package's own GARbro excerpt and the public PE/XP3 container layouts; no source was copied and no runtime dependency is created."
     },
     {
       "repository": "msg-tool",
@@ -115,6 +115,17 @@
       ],
       "notice": "kirikiri-textstream-BSD.txt",
       "use": "SimpleCrypt u16 mode 0 decode, mode 1 bit transform, little-endian BOM, zlib framing and compressed/uncompressed stream lengths. Bounded Python codec and synthetic known-byte vectors; mode 0 writing rejects code units without an inverse."
+    },
+    {
+      "repository": "GARbro-Mod",
+      "commit": "bc26d991ef5cdc0e1ecb32122ee9a48c3375750c",
+      "license": "MIT",
+      "copyright": "Copyright (C) 2014-2017 by morkt",
+      "files": [
+        "ArcFormats/Emote/ArcPSB.cs"
+      ],
+      "bundled_excerpt": "engines/garbro/ArcFormats/Emote/ArcPSB.md",
+      "use": "Resource-bearing Emote PSB header guards, name-table walk, object-tree tags, payload table and container naming (GetChunks/GetLayers/GetTextures). Bounded read-only Python reader with payload export; no layer/icon composition, no PSB body decryption and no writer."
     }
   ]
 }

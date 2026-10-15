@@ -132,6 +132,7 @@ JIS 交付可将随包 [UIF x86 winmm.dll](assets/uif/README.md) 与配置一并
 | DigitalWorks / BunBun TAK | [digitalworks](engines/digitalworks.md) |
 | EAGLS / ALIS：SCPACK、文本尾加密与标签修复 | [eagls](engines/eagls.md) |
 | EmonEngine / EME | [emonengine](engines/emonengine.md) |
+| Emote PSB：资源包读取与内嵌资源导出 | [emote](engines/emote.md) |
 | Entis GLS：SRCXML 多语言消息与选择属性 | [entis-gls](engines/entis-gls.md) |
 | Escu:de：ESC-ARC2、分离消息文件与 ESCR1_00 | [escude](engines/escude.md) |
 | ExHibit：RLD 操作片段、间接姓名与有界 XOR | [exhibit](engines/exhibit.md) |

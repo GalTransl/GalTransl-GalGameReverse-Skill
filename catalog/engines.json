@@ -1,6 +1,6 @@
 {
   "schema": "galgame-engine-index/1",
-  "count": 96,
+  "count": 97,
   "engines": [
     {
       "id": "advsys3",
@@ -601,6 +601,50 @@
         "python/archives/emonengine.py": [
           "pack_scripts",
           "zero_key_index"
+        ]
+      },
+      "scope": "version/stage-limited references; read the engine page",
+      "evidence": "per-module provenance and synthetic tests; not blanket game verification"
+    },
+    {
+      "id": "emote",
+      "title": "Emote PSB：资源包读取与内嵌资源导出",
+      "aliases": [
+        "emote"
+      ],
+      "document": "engines/emote.md",
+      "python_references": [
+        "python/archives/emote_psb.py",
+        "python/archives/xp3.py",
+        "python/engines/kirikiri_psb.py",
+        "python/engines/kirikiri_simple_crypt.py"
+      ],
+      "public_symbols": {
+        "python/archives/emote_psb.py": [
+          "ChunkRef",
+          "Resource",
+          "header",
+          "Psb",
+          "output_names",
+          "main"
+        ],
+        "python/archives/xp3.py": [
+          "Entry",
+          "resolve_index_offset",
+          "extract",
+          "build"
+        ],
+        "python/engines/kirikiri_psb.py": [
+          "Node",
+          "array",
+          "Psb"
+        ],
+        "python/engines/kirikiri_simple_crypt.py": [
+          "detect",
+          "swap_adjacent_bits",
+          "unpack",
+          "pack",
+          "text_codec"
         ]
       },
       "scope": "version/stage-limited references; read the engine page",
