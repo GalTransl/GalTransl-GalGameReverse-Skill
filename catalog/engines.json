@@ -1,6 +1,6 @@
 {
   "schema": "galgame-engine-index/1",
-  "count": 95,
+  "count": 96,
   "engines": [
     {
       "id": "advsys3",
@@ -1662,6 +1662,37 @@
           "restore_json_strings",
           "load_ruby_marshal",
           "dump_ruby_marshal"
+        ]
+      },
+      "scope": "version/stage-limited references; read the engine page",
+      "evidence": "per-module provenance and synthetic tests; not blanket game verification"
+    },
+    {
+      "id": "rugp",
+      "title": "rUGP：ReadEncrypted 块编解码与只读文本候选",
+      "aliases": [
+        "rugp"
+      ],
+      "document": "engines/rugp.md",
+      "python_references": [
+        "python/archives/rugp.py",
+        "python/engines/rugp.py"
+      ],
+      "public_symbols": {
+        "python/archives/rugp.py": [
+          "BlockHeader",
+          "DecodedBlock",
+          "parse_header",
+          "decode_block",
+          "encrypt_block",
+          "scan_headers",
+          "read_block"
+        ],
+        "python/engines/rugp.py": [
+          "AnalysisLimits",
+          "inspect_literals",
+          "analyze_archive",
+          "main"
         ]
       },
       "scope": "version/stage-limited references; read the engine page",

@@ -47,6 +47,10 @@ BGI 归档/DSC、标准 V1 扫描与工作流参考 GARbro-Mod 的 `ArcFormats/E
 
 这些是开发期算法来源，不是使用者运行依赖。许可允许移植不等于已经验证正确：标准 V1 的显式布局不含 `0x0461`，上游的宽松回退不能移植成支持声明；BP/BSI 等上游入口也不自动变成本包能力。
 
+### rUGP 块算法与候选研究
+
+rUGP 的 ReadEncrypted 编解码与候选扫描参考 huang5-png/rugp-extractor 的 MIT 声明；作者原通知为 `huang5-png & Pair AI Assistant`。来源未附独立 LICENSE，保留源码/README 的明确许可证据，并随包提供标准 MIT 条款及作者归属，见 [来源与改动](rugp-sources.json)、[MIT 通知](licenses/MIT-rugp-extractor.txt)。同时保留已有 GARbro 块格式资料的 morkt 归属。吸收范围不包含完整 VM、语义回填或归档重封包能力声明。
+
 ## 不随包提供的内容
 
 游戏专有资源、可执行文件、私有密钥、完整上游工作树、.NET BinaryFormatter `Formats.dat`、GUI或 native `.pyd`。如格式需要用户游戏的辅助表或授权获取的密钥，调用者必须显式提供，不会后台下载或猜测成功。

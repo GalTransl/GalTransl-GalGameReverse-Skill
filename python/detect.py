@@ -57,6 +57,7 @@ MAGICS = (
     (b"Entis\x1a\0\0", "entis-gls", "Entis CSX; distinguish VM versions"),
     (b"YKC001", "yuka", "YKC001 archive prefix"),
     (b"YKC002", "yuka", "YKC002 archive prefix; differs from writer v1"),
+    (b"\xcd\x32\x6e\x59", "rugp", "rUGP RIO object signature; schema/key/script roles unverified"),
 )
 
 EXTENSIONS = {
@@ -70,6 +71,7 @@ EXTENSIONS = {
     ".nnn": ("systemnnn",), ".srp": ("tmrhiro",), ".mwb": ("gxengine",),
     ".rvdata2": ("rpgmaker",), ".rvdata": ("rpgmaker",),
     ".ykc": ("yuka",), ".yks": ("yuka",),
+    ".rio": ("rugp",), ".ici": ("rugp",),
 }
 
 # Content probes for extensions that are ambiguous on their own.

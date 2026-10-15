@@ -1,0 +1,69 @@
+{
+  "scope": "rUGP format algorithms, attribution and license evidence only; no game validation records",
+  "references": [
+    {
+      "repository": "rugp-extractor",
+      "url": "https://github.com/huang5-png/rugp-extractor",
+      "commit": "9d5c4ea02ece01497e8d4098ae5dc07b4f904768",
+      "author_notice": "Author: huang5-png & Pair AI Assistant",
+      "license": "MIT",
+      "license_evidence": [
+        "rugp_extractor.py module header: License: MIT",
+        "README.md license badge and final section: MIT License."
+      ],
+      "license_note": "No separate LICENSE file or dated copyright notice is present at this commit. Preserve the exact author/license notices and supply the standard declared MIT terms without inventing an upstream copyright year.",
+      "bundled_license": "licenses/MIT-rugp-extractor.txt",
+      "files": [
+        {
+          "path": "rugp_extractor.py",
+          "sha256": "6e6b853b55b387545d4b429b147462fea85a38d5b4ffa95534ab1eaea867aa0d",
+          "symbols": [
+            "RugpExtractor.read_encrypted",
+            "RugpExtractor.encrypt_block",
+            "RugpExtractor.scan_scenario_blocks",
+            "RugpExtractor.extract_dialogues_from_bytecode"
+          ]
+        },
+        {
+          "path": "README.md",
+          "sha256": "8f481d51433560e0876dfeac615ff504f98683144599f120cce28402c51885ae"
+        }
+      ],
+      "adopted": "ReadEncrypted framing, 32-byte XOR/PRNG/checksum algorithm and constants; four-alignment physical scan strategy; 60 xx 00 u8-length literal search as analysis-only evidence.",
+      "modifications": [
+        "Split archive codec from script-candidate analysis; standard-library-only independent modules.",
+        "Bound allocations, input windows, header/literal counts, attempted decode bytes and output bytes; explicit corruption and budget diagnostics.",
+        "Read cross-window headers and frames from complete input; fixed little-endian scanning, unique starts and physical order.",
+        "Retain short, empty and unquoted blocks and header low bits; report incomplete checksum coverage.",
+        "Preserve duplicate literals, raw CP932 bytes, controls, resources and invalid candidates; no blanket exception swallowing.",
+        "Do not adopt heuristic name/message exports, global deduplication, data-dropping filters, full-VM claims or unproven archive patching.",
+        "New-directory analysis workspace with original physical frames, decoded data and candidate-only metadata; actual encoder roundtrip required per decoded frame."
+      ],
+      "local_files": [
+        "python/archives/rugp.py",
+        "python/engines/rugp.py",
+        "tests/test_rugp.py"
+      ]
+    },
+    {
+      "repository": "GARbro-Mod",
+      "url": "https://github.com/nanami5270/GARbro-Mod",
+      "commit": "bc26d991ef5cdc0e1ecb32122ee9a48c3375750c",
+      "path": "ArcFormats/rUGP/ArcRIO.cs",
+      "copyright": "Copyright (C) 2016 by morkt",
+      "license": "MIT",
+      "bundled_license": "licenses/MIT-GARbro.txt",
+      "use": "Cross-check ReadEncrypted size relation, per-full-chunk checksums, PRNG, key constants and RIO object signature using the already bundled source excerpt.",
+      "bundled_evidence": "engines/garbro/ArcFormats/rUGP/ArcRIO.md"
+    },
+    {
+      "url": "https://github.com/GalTransl/GalTransl-GalGameReverse-Skill/issues/6",
+      "use": "Integration request and format research lead only; coverage and historical runtime claims are not local verification evidence."
+    }
+  ],
+  "license_scope": {
+    "python/archives/rugp.py": "MIT adaptation; preserve both upstream notices",
+    "python/engines/rugp.py": "GPL-3.0-or-later new workflow; upstream pattern attribution retained",
+    "tests/test_rugp.py": "GPL-3.0-or-later new synthetic tests; frozen codec vectors from the attributed upstream implementation"
+  }
+}

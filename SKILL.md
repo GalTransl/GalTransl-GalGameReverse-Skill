@@ -175,6 +175,7 @@ JIS 交付可将随包 [UIF x86 winmm.dll](assets/uif/README.md) 与配置一并
 | RealLive：文本 token 与换行指令片段 | [reallive](engines/reallive.md) |
 | Ren'Py：有限 .rpy 词法与原位字符串回填 | [renpy](engines/renpy.md) |
 | RPG Maker：MV JSON 与 VX Marshal 转换中间态 | [rpgmaker](engines/rpgmaker.md) |
+| rUGP：ReadEncrypted 块编解码与只读文本候选 | [rugp](engines/rugp.md) |
 | SakanaGL：SX 密码与已解码索引 | [sakanagl](engines/sakanagl.md) |
 | ScenePlayer：PMX 剧本归档 | [sceneplayer](engines/sceneplayer.md) |
 | ScrPlayer：XOR 字符串表与命令指针 | [scrplayer](engines/scrplayer.md) |
