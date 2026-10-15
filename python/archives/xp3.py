@@ -1,7 +1,8 @@
 """Strict, standalone, unencrypted XP3 v1 reference; bytes in, records/bytes out.
 
 Only File/info/segm/adlr, raw or zlib index, and raw/zlib segments are supported.
-No executable overlay, chained index, crypt/filter, or obfuscated index support.
+The 0x17 index pointer block is followed; no executable overlay, chained
+index chain, crypt/filter or obfuscated index support.
 The caller must establish that no game-specific filter applies and pass
 filter_name="none"; zero info flags alone cannot prove that fact.
 Returned names are untrusted and MUST go through the caller's safe output layer.
@@ -32,6 +33,10 @@ import struct
 import zlib
 
 MAGIC = b"XP3\r\n \n\x1a\x8bg\x01"
+# Some containers put this constant in the standard index-offset field and keep
+# the real offset in the qword at INDEX_POINTER_OFFSET.
+INDEX_POINTER_FIELD = 0x17
+INDEX_POINTER_OFFSET = 0x20
 
 
 @dataclass(frozen=True)
@@ -62,6 +67,29 @@ def _inflate(data, expected, limit):
     return result
 
 
+def resolve_index_offset(read, size: int) -> int:
+    """Return the tail index offset for a bounded XP3 reader.
+
+    ``read(at, count)`` must return exactly ``count`` bytes or raise; ``size`` is
+    the total archive length and is used only for range checks. A container may
+    store ``INDEX_POINTER_FIELD`` in the standard index-offset field; that value
+    is then a pointer-block marker and the real offset is the qword at
+    ``INDEX_POINTER_OFFSET``. The substitution is only taken when the pointed-to
+    offset is itself inside the archive, so an archive that really starts its
+    index at the marker value keeps its previous handling.
+    """
+    offset, = struct.unpack("<Q", read(11, 8))
+    if offset == INDEX_POINTER_FIELD:
+        candidate, = struct.unpack("<Q", read(INDEX_POINTER_OFFSET, 8))
+        if 19 <= candidate < size:
+            offset = candidate
+    if offset < 19:
+        raise ValueError("XP3 index overlaps header")
+    if offset >= size:
+        raise ValueError("XP3 index offset outside archive")
+    return offset
+
+
 def _chunks(data):
     pos = 0
     while pos < len(data):
@@ -90,9 +118,7 @@ def extract(data: bytes, *, filter_name: str, max_entries: int = 100_000,
         raise ValueError("negative XP3 limit")
     if _range(data, 0, 11) != MAGIC:
         raise ValueError("not a standalone XP3 archive")
-    index_at, = struct.unpack("<Q", _range(data, 11, 8))
-    if index_at < 19:
-        raise ValueError("XP3 index overlaps header")
+    index_at = resolve_index_offset(lambda at, count: _range(data, at, count), len(data))
     flag = _range(data, index_at, 1)[0]
     if flag == 0:
         size, = struct.unpack("<Q", _range(data, index_at + 1, 8))

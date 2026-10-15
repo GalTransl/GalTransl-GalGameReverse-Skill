@@ -10,7 +10,7 @@ from dataclasses import dataclass
 import hashlib
 import struct
 import zlib
-from .xp3 import MAGIC, _chunks, _inflate
+from .xp3 import MAGIC, _chunks, _inflate, resolve_index_offset
 from python.common.safety import validate_names
 
 
@@ -34,8 +34,7 @@ def read_index(stream, *, max_index=16 << 20):
         if len(value)!=size: raise ValueError('truncated XP3 metadata')
         return value
     if read(0,11)!=MAGIC:raise ValueError('not XP3')
-    at,=struct.unpack('<Q',read(11,8))
-    if at<19:raise ValueError('XP3 index overlaps header')
+    at=resolve_index_offset(read,total)
     if read(at,9)==b'\x80'+b'\0'*8:at,=struct.unpack('<Q',read(at+9,8))
     flag=read(at,1)[0]
     if flag==1:

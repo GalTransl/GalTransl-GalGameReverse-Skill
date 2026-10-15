@@ -9,7 +9,7 @@ import hashlib
 import hmac
 import struct
 import zlib
-from .xp3 import MAGIC, _chunks, _inflate
+from .xp3 import MAGIC, _chunks, _inflate, resolve_index_offset
 
 
 def rot(v,n,bits=32):
@@ -162,7 +162,7 @@ def read_index(stream,keys=None):
         if len(value)!=n:raise ValueError('Hx index truncated')
         return value
     if read(0,11)!=MAGIC:raise ValueError('not XP3')
-    at,=struct.unpack('<Q',read(11,8))
+    at=resolve_index_offset(read,size)
     if read(at,9)==b'\x80'+bytes(8):at,=struct.unpack('<Q',read(at+9,8))
     flag=read(at,1)[0]
     if flag==1:

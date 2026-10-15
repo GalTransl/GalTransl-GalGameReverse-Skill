@@ -10,19 +10,37 @@ import zlib
 from .kirikiri_hxv4 import chacha
 
 
+PE32 = 0x10b
+PE32PLUS = 0x20b
+# Optional-header layout that differs between the two optional-header formats.
+IMAGE_BASE = {PE32: (0x1C, 4), PE32PLUS: (0x18, 8)}
+# Offset of DataDirectory[0] inside the optional header; resources are entry 2,
+# and the count of directories sits four bytes before entry 0.
+DATA_DIRECTORY = {PE32: 0x60, PE32PLUS: 0x70}
+RESOURCE_DIRECTORY = 2 * 8
+
+
 class PE:
     def __init__(self,data):
         self.data=data
         pe=self.u32(60)
         if self.read(pe,4)!=b'PE\0\0':raise ValueError('not PE')
         count=self.u16(pe+6);optional=pe+24;magic=self.u16(optional)
-        if count>96 or magic!=0x10b:raise ValueError('unsupported PE layout')
-        self.base=self.u32(optional+28);self.sections=[]
+        if count>96 or magic not in (PE32,PE32PLUS):raise ValueError('unsupported PE layout')
+        self.magic=magic;self.bits=32 if magic==PE32 else 64
+        at,width=IMAGE_BASE[magic]
+        # ImageBase is 32-bit in PE32 and 64-bit in PE32+; the salt scan needs the
+        # width the optional header declares, not the archive bitness alone.
+        self.base=int.from_bytes(self.read(optional+at,width),'little')
+        directory=optional+DATA_DIRECTORY[magic]
+        if self.u32(directory-4)<3:
+            raise ValueError('PE has no resource data directory')
+        self.sections=[]
         table=optional+self.u16(pe+20)
         for i in range(count):
             off=table+i*40
             self.sections.append((self.u32(off+12),self.u32(off+16),self.u32(off+20)))
-        self.resources=self.rva(self.u32(optional+112))
+        self.resources=self.rva(self.u32(directory+RESOURCE_DIRECTORY))
 
     def read(self,at,n):
         if at<0 or n<0 or at+n>len(self.data):raise ValueError('PE bounds')
@@ -55,7 +73,10 @@ class PE:
 
     def salts(self):
         found=set()
-        for m in re.finditer(b'\xc7\x05',self.data):
+        # The `mov dword ptr [imm32],...` store form only encodes a 32-bit address,
+        # so this scan is limited to PE32. PE32+ samples fall back to the layout
+        # anchors below; if those do not match, no candidate is reported.
+        for m in (re.finditer(b'\xc7\x05',self.data) if self.bits==32 else ()):
             at=m.start()
             if at+10>len(self.data):continue
             try:off=self.rva(self.u32(at+6)-self.base)

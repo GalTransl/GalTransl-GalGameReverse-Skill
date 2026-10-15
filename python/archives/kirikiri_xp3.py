@@ -18,8 +18,7 @@ def detect(stream):
         if len(data)!=count:raise ValueError('truncated XP3 probe')
         return data
     if read(0,11)!=xp3.MAGIC:raise ValueError('not XP3')
-    at,=struct.unpack('<Q',read(11,8))
-    if at<19:raise ValueError('XP3 index overlaps header')
+    at=xp3.resolve_index_offset(read,size)
     if read(at,9)==b'\x80'+b'\0'*8:at,=struct.unpack('<Q',read(at+9,8))
     flag=read(at,1)[0]
     if flag==1:

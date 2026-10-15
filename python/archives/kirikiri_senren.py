@@ -12,7 +12,7 @@ import hashlib
 from pathlib import Path
 import struct
 import zlib
-from .xp3 import MAGIC, _chunks, _inflate
+from .xp3 import MAGIC, _chunks, _inflate, resolve_index_offset
 from python.common.safety import validate_names
 
 MASK = 0xffffffff
@@ -161,7 +161,7 @@ def read_index(stream):
         if len(data) != size: raise ValueError('truncated XP3')
         return data
     if read(0, 11) != MAGIC: raise ValueError('not XP3')
-    at, = struct.unpack('<Q', read(11, 8))
+    at = resolve_index_offset(read, total)
     if read(at, 9) == b'\x80' + b'\0'*8:
         at, = struct.unpack('<Q', read(at+9, 8))
     flag = read(at, 1)[0]

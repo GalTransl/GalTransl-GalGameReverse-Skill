@@ -88,6 +88,11 @@
       "use": "CxdecKeyStatic read-only comparison; no native game code executed or code copied"
     },
     {
+      "repository": "cxdec-hxv4-static-analysis",
+      "license": "none declared; repository root has no license file",
+      "use": "Read-only behavioural cross-check for the XP3 index pointer-block variant (the standard index-offset field holds 0x17 and the real offset is the qword at 0x20). Only format observations were re-implemented, from this package's own GARbro excerpt and the public PE/XP3 container layouts; no source was copied and no runtime dependency is created."
+    },
+    {
       "repository": "msg-tool",
       "commit": "f72716cee88554d40c1cdface2812493b14ca653",
       "license": "GPL-3.0-or-later",
