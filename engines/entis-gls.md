@@ -1,10 +1,13 @@
-# Entis GLS：SRCXML 多语言消息与选择属性
+# Entis GLS：SRCXML 多语言消息、选择属性与 CSX 容器
 
 ## 能力边界
 - 引擎 ID：`entis-gls`，Python 模块名 `entis_gls`。
-- 参考模块：[python/engines/entis_gls.py](../python/engines/entis_gls.py)。
+- 参考模块：[python/engines/entis_gls.py](../python/engines/entis_gls.py)（SRCXML）与
+  [python/archives/entis_csx.py](../python/archives/entis_csx.py)（CSX 容器）。
 - 实现 `xscript/code/msg` 及 `select/menu` 属性文本的语义 XML 往返。
-- 不是 CSX 字节码 writer，不把 XML 重序列化承诺为逐字节一致。
+- 实现 `.csx` 的分块目录、`conststr` 表读写与 `image` 段字面量定长回写。
+- 不是 CSX 编译器或反汇编器：只走有操作数形状证据的指令，其余直接报错。
+- 不把 XML 重序列化承诺为逐字节一致。
 - 使用 Python 标准库 ElementTree；不加载外部实体、不访问网络。
 
 ## 识别证据
@@ -32,6 +35,35 @@
 4. 提取目标属性与稳定记录序号，其他语言/语音/ID 保持原样。
 5. 重序列化、重新解析后按实际运行时约定编码并部署。
 - 本叶模块不提供 NOA writer，也不认为改后缀即可将 CSX 转为 SRCXML。
+- CSX 走下面独立的容器路线，不与 XML 路线互相转换。
+
+## CSX 容器与 conststr 表
+- 识别：文件前五字节 `Entis`，偏移 16 起 18 字节为 `Cotopha Image file`；两者缺一即拒绝。
+- 头部固定 64 字节；之后是分块序列，每块为 8 字节 ASCII 名（其余补零）、`int64` 载荷长度、载荷。
+- 遇到首字节为 0 的块名即结束目录，其后到文件尾是未解释的 trailer，重写时原样保留。
+- 块名必须唯一；负长度或越界长度直接报错，不按剩余字节截断。
+- 已知块：`conststr`（字符串常量表）与 `image`（CS 字节码）。
+- `conststr` 载荷：`int32` 条数，每条为 `int32` 字符数、`chars*2` 字节 UTF-16LE、`int32` 附加数、附加数个 `int32`。
+- 字符数为 0 的槽位是占位，不产生可写文本；其余槽位通过重建整个块支持变长新文本。
+- `image` 载荷按操作码走：只解释有明确操作数形状的指令，未知操作码在指令边界处报错，不做重同步。
+- 字符串字面量为 `uint32` 字符数；`0` 表示缺席，`0x80000000` 表示引用并跟一个 `int32`；其余为 UTF-16LE 字节。
+- 走完必须正好落在载荷末尾，否则视为布局不符。
+- 接口：`parse_chunks` / `build_csx` / `parse_conststr` / `rebuild_conststr` / `parse_image` / `patch_image`。
+- 能力层级：`script-header-string-spans`。`conststr` 可增长；`image` 字面量定长，超长拒绝，短文本补 UTF-16 空格。
+- 不做：其他块的语义、CS 求值、`image` 增长后的跳转重写、块顺序调整、NOA/DAT 归档。
+
+```python
+from python.archives.entis_csx import parse_conststr, rebuild_conststr, parse_image, patch_image
+
+raw = open("script.csx", "rb").read()
+entries = parse_conststr(raw)
+patched = rebuild_conststr(raw, {0: "短い"})        # 块内变长
+literals = parse_image(raw)
+patched = patch_image(patched, {0: "短"})           # 段内定长
+```
+
+- 变长 `conststr` 会改变后续块偏移，但块目录按顺序重排，trailer 原样后移。
+- `rebuild_conststr`、`patch_image` 返回新字节串，不修改输入，重新解析并逐条比对后才返回。
 
 ## 源码与算法对应
 - 来源：`msg-tool`，GPL-3.0-or-later。
@@ -77,7 +109,7 @@ assert 'text_en="old"' in out
 
 ## 部署条件
 - 先确认游戏实际加载 SRCXML 源文件，还是只使用已编译 CSX。
-- 如果只有 CSX 执行路线，必须补上真正编译/反汇编方案，不能假称已闭环。
+- 如果只有 CSX 执行路线，可用 `conststr` 读写与 `image` 定长回写，但编译/反汇编仍不完整，不能假称全闭环。
 - 替换后需验证正文、名字、选项和语言切换。
 - 游戏自己的文本控制语法应原样保留在属性值中。
 - 所有磁盘写入、manifest 与原文件保护由父 Skill 公共层完成。
@@ -87,6 +119,10 @@ assert 'text_en="old"' in out
 - 覆盖菜单先出现的自动语言识别与 XML `&`/引号转义往返。
 - 覆盖注释保留、多语言歧义、缺属性、DTD 和非法字符拒绝。
 - 测试位置：`tests/test_engines_primary.py` 中 `EntisTests`。
-- 不支持命名空间方言、任意 XML 恢复、CSX v1/v2 或容器回封。
+- CSX 测试覆盖块目录、`conststr` 变长往返、`image` 字面量定长回写、未知操作码与越界拒绝：
+  见 [test_entis_csx.py](../tests/test_entis_csx.py)。
+- CSX 来源：翻译肋手 v4.9D 的 `GameRes.EntisGLS.ArcCSX`（GARbro 派生）；独立改写为严格边界、
+  未知操作码不重同步、整段必须精确走完。未使用真实 `.csx` 样本，未验证游戏显示。
+- 不支持命名空间方言、任意 XML 恢复、CSX 其他块语义或完整编译/反汇编。
 - 32 MiB 字符串上限是参考防护，不代表所有生产环境资源策略。
 - 没有商业资产、网络、外部工具或运行时验证。

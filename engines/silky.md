@@ -1,10 +1,12 @@
-# Silky / Silkys：MAP 全索引与 UTF-16 指针修复
+# Silky / Silkys：MAP 全索引、ARC 容器与 UTF-16 指针修复
 
 ## 能力边界
 - 引擎 ID：`silky`。
-- 参考模块：[python/engines/silky.py](../python/engines/silky.py)。
+- 参考模块：[python/engines/silky.py](../python/engines/silky.py)（MAP）与
+  [python/archives/silky_arc.py](../python/archives/silky_arc.py)（ARC）。
 - 本实现专门处理 VN 对应的 `count + (index, absoluteOffset)[]` MAP。
 - 不是 SExtractor 的四分区 MAP，也不是 Silkys/AI6WIN 的 MES。
+- ARC 容器（加密名、大端字段、LZSS 成员）单独成节，见下。
 - 在明确选择此方言后，支持空项、乱序索引、别名及变长文本回填。
 
 ## 识别证据
@@ -29,7 +31,41 @@
 3. 取出 MAP 后以全表合法性验证本方言，而非只抽第一条文本。
 4. 保存原 row、index、offset 与原文件哈希。
 5. 回填后重新读全表，核对所有项，包括没有翻译的空项。
-- 不提供 ARC 封包器，也不承诺松散文件优先加载。
+- ARC 容器由独立模块解包与重封包，见下节；仍不承诺松散文件优先加载。
+
+## ARC 容器
+- 头部为 `u32` 小端索引长度（不含自身 4 字节）；索引自偏移 4 起，结束于 `4 + 索引长度`。
+- 索引项：`u8` 名称长度（0 非法）、名称字节、`u32` 存储长度、`u32` 解压长度、`u32` 偏移，后三个为大端。
+- 名称字节按 `stored[i] + length - i` 还原；还原后必须在本项跨度内出现 NUL，并按 CP932 解码。
+- 成员偏移绝对定位，且必须落在索引之后；同一偏移出现两次即拒绝。
+- 存储长度与解压长度不同表示 LZSS 压缩，相同表示原样存储。
+- LZSS 为 Okumura 经典变体：窗口 4096、前瞻 18、阈值 2、填充 0，标志位从最低位开始；
+  字面量置 1，匹配由 `低 8 位位置 + (高 4 位位置 << 8)` 与 `长度 - 3` 编码。
+- `build_arc` 按给定顺序重算索引长度与偏移；压缩无收益或长度相同时改存原字节，
+  避免 `size == unpacked` 被误判为未压缩。
+- 参考实现中另有 32 字节定宽名的旧目录（`TryOpenOLD`），UI 从未调用；
+  `open_arc_old` 只读解析，不提供写回。
+- 不做：成员路径层级、名称重排、旧目录写回、MES 脚本语义。
+
+```python
+from python.archives.silky_arc import build_arc, open_arc, read_member
+
+archive = open_arc(arc_bytes)
+member = read_member(arc_bytes, archive.entries[0])
+rebuilt = build_arc({"script.mes": patched_bytes}, compress=True)
+```
+
+### AI6WIN 方言（Silky2）
+- 头部 `i32` 条数（1–16384），随后每条固定 272 字节。
+- 每条：`char name[260]` + `u32` 存储长度 + `u32` 解压长度 + `u32` 偏移，后三个为大端。
+- 名称字节按 `stored[j] - (len + 1 - j)` 还原，`len` 是第一个 NUL 之前的字节数；
+  加密为 `plain[j] + (len + 1 - j)`。相位从名字长度加一开始，与 ARC 的 `len - j` 相差 1。
+- 由于加密结果可能落在 `0x00`，名称槽在密文中遇 0 会被读端截断；参考实现同样如此，
+  遇到该情况应视为格式不支持，不要猜名字。
+- 成员压缩与 packed 判定同 ARC（存储长度不等于解压长度即 LZSS）。
+- `open_ai6win` / `build_ai6win` 复用同一 LZSS 与 `read_member`。
+- 不做：`layer` 目录的特殊免压缩规则（参考打包路径按目录名判断，属调用层约定）、
+  `ArcAKB` 图像还原。
 
 ## 源码与算法对应
 - 主来源：`VNTextPatch-net8`，MIT。
@@ -90,5 +126,9 @@ assert [r.index for r in again] == [r.index for r in rows]
 - 覆盖表行物理乱序、尾部保留、非 BMP、别名冲突与一致别名。
 - 覆盖内部指针、未终止串和空改动逐字节一致。
 - 测试位置：`tests/test_engines_primary.py` 中 `SilkyTests`。
-- 未实现四分区 MAP、MES VM 或加密归档。
+- ARC 测试覆盖手写 LZSS 字面量与匹配、压缩往返、名称加解密、索引边界、
+  packed 判定、旧目录只读、AI6WIN 定宽名与截断拒绝：见 `tests/test_silky_arc.py`。
+- ARC / AI6WIN 来源：翻译肋手 v4.9D 的 `GameRes.Silky.ArcARC` 与 `ArcAI6Win`（GARbro 派生）；
+  独立改写，编码器不复制参考实现的 2 倍输出缓冲假设。未用真实 `.arc` 样本验证。
+- 未实现四分区 MAP、MES VM、`ArcAKB` 图像还原与脚本加解密。
 - 没有商业素材和引擎运行测试，不能外推所有 Silkys 作品。

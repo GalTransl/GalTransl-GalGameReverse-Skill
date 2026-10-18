@@ -15,6 +15,26 @@
 - 将池放回脚本以后，池基址和所有使用者仍需结构化更新。
 - 本模块不会自动打开文件或调用归档程序。
 
+## PAC 容器
+- 头部 7 字节：`i16` 条数（1–4000）、`u8` 名称宽度、`u32` 索引长度；记录自偏移 7 起。
+- 记录为定宽名称（CP932，NUL 补齐）+ offset + size；两种布局按索引长度区分：
+  - `7 + (宽度 + 8) * 条数`：`u32` offset、`u32` size；
+  - `7 + (宽度 + 12) * 条数`：`i64` offset、`u32` size。
+- 记录必须正好结束在声明的索引长度处，否则视为布局不符；offset 相对索引末尾。
+- 部分成员是分页载荷：偏移 4 的 `i16` 值 6 与偏移 6 的 `u32` 0x00140010 标记
+  `i32` 块数，随后每块 6 字节头（`u16` 块长含 4）加数据；数据字节右旋 4 位存储。
+- `read_member` 反转旋转，`encode_member` 重新施加；`build_pac` 保留原名称宽度与布局变体。
+- 接口：[age_pac.py](../python/archives/age_pac.py) 的 `open_pac` / `read_member` / `encode_member` / `build_pac`。
+- 不做：`.srp` 等其他成员类型、成员压缩、路径层级、名称重排。
+
+```python
+from python.archives.age_pac import build_pac, open_pac, read_member
+
+archive = open_pac(pac_bytes)
+member = read_member(pac_bytes, archive.entries[0])
+rebuilt = build_pac({"data.bin": member}, name_width=archive.name_width, variant=archive.variant)
+```
+
 ## 源码依据
 - 仓库：VNTextPatch-net8。
 - 固定版本：`d9c0fab7b72fdcf87d674ef12a84d3829c9188be`。
@@ -81,7 +101,7 @@ assert read_pool_string(pool, refs[1]) == "本文"
 ## 缺口与部署限制
 - 未完成 AGE 指令反汇编、调用识别、角色推断。
 - 未完成池重定位、操作数重写、脚本头字段更新。
-- 未完成容器层解包与回包。
+- `.pac` 读写已实现；`.srp` 文本表与其它 AGE 容器未实现。
 - 不提供全引擎 CLI，也不包装外部程序冒充 writer。
 - 接口可作为完整结构工具中的局部算法单元使用。
 
@@ -91,4 +111,11 @@ assert read_pool_string(pool, refs[1]) == "本文"
 - 坏输入测试覆盖池不对齐、地址越界、缺终止符和坏填充。
 - 额外检查 NUL 输入与不可编码字符失败。
 - 测试文件：[test_engines_secondary.py](../tests/test_engines_secondary.py)。
-- 尚无真实脚本或游戏运行验证，状态为局部池算法已测。
+- PAC 测试覆盖两种偏移布局、定宽名称、分页旋转往返、索引长度不符与越界拒绝：
+  见 [test_neko_age_archives.py](../tests/test_neko_age_archives.py)。
+- 尚无真实脚本、真实 `.pac` 或游戏运行验证，状态为局部算法已测。
+
+## 来源与许可
+- 字符串池：VNTextPatch-net8 `d9c0fab7b72fdcf87d674ef12a84d3829c9188be`，MIT。
+- PAC 容器：翻译肋手 v4.9D 的 `GameRes.AGE_SYSTEM.ArcPAC`（GARbro 派生），独立改写；
+  参考实现在打包时忽略原名称宽度，本模块保留。未用真实 `.pac` 验证。

@@ -8,7 +8,8 @@ import stat
 from ..archives.yuris_482 import read_index, decode_member, pack_archive
 from ..common.contract import load_json, dump_rows, sha256
 from ..common.safety import logical_path, validate_names, write_new_tree, _check_existing_ancestors
-from .yuris_text import Profile, Scenario, commands_from, export_script, rebuild_script
+from .yuris_text import (PARSE_VERSIONS, WRITE_VERSION, Profile, Scenario, commands_from,
+                         export_script, rebuild_script, ystb_version)
 
 
 def read_file(path, limit=64 << 20):
@@ -69,7 +70,8 @@ def extract(game, output, *, archive, loose, uif_config=None, reference_archives
         loose_data[f"{loose}/{path.name}"] = data
     ysc = loose_data[f"{loose}/ysc.ybn"]
     commands = commands_from(ysc)
-    files, records, counts = {"gt_output/.keep": b""}, [], {"rows": 0, "named": 0, "exported": 0, "empty": 0, "non_target": 0}
+    files, records, counts = {"gt_output/.keep": b""}, [], {"rows": 0, "named": 0, "exported": 0,
+                                                              "empty": 0, "non_target": 0, "unsupported_version": 0}
     source_hashes = {}
     for name, data in loose_data.items():
         files[f"original/game/{name}"] = data
@@ -78,11 +80,23 @@ def extract(game, output, *, archive, loose, uif_config=None, reference_archives
         files[f"original/game/{uif_config}"] = config
         source_hashes[uif_config] = sha256(config)
     smoke = None
+    versions = set()
     for name, raw in loose_data.items():
         if raw[:4] != b"YSTB":
             # Ancillary files remain opaque, not submitted as dialogue.
             counts["non_target"] += 1
             records.append({"source": name, "status": "non_target", "signature_hex": raw[:4].hex()})
+            files[f"rebuilt/roundtrip/{name}"] = raw
+            continue
+        version = ystb_version(raw)
+        versions.add(version)
+        if version != WRITE_VERSION:
+            # Text append is only verified for v482. Reading a wider range must
+            # not be reported as translatable: keep the member byte-identical
+            # and state the reason instead of silently emitting JSON.
+            counts["unsupported_version"] += 1
+            records.append({"source": name, "status": "unsupported_version", "version": version,
+                            "writer_versions": [WRITE_VERSION]})
             files[f"rebuilt/roundtrip/{name}"] = raw
             continue
         rows, manifest = export_script(raw, ysc, profile)
@@ -126,6 +140,9 @@ def extract(game, output, *, archive, loose, uif_config=None, reference_archives
         differences = []
         for member, data in members.items():
             if data[:4] == b"YSTB":
+                if ystb_version(data) != WRITE_VERSION:
+                    rebuilt_members[member] = data
+                    continue
                 rebuilt_members[member] = Scenario(data, commands, profile.key).serialize({})
                 if rebuilt_members[member] != data:
                     raise ValueError("archive scenario structural roundtrip differs")
@@ -159,7 +176,10 @@ def extract(game, output, *, archive, loose, uif_config=None, reference_archives
         if archive_members(test) != changed:
             raise ValueError("smoke archive extraction mismatch")
         files["rebuilt/smoke-test/ysbin.ypf"] = test
-    report = {"engine": "yuris", "version": 482, "profile": profile.settings(), "archive": archive,
+    report = {"engine": "yuris", "version": 482 if versions <= {482} else None,
+              "versions": sorted(versions), "writer_versions": [WRITE_VERSION],
+              "parse_versions": [PARSE_VERSIONS.start, PARSE_VERSIONS.stop - 1],
+              "profile": profile.settings(), "archive": archive,
               "loose": loose, "uif_config": uif_config, "source_hashes": source_hashes,
               "counts": counts, "members": records, "archives": archive_reports,
               "selected_baseline": "explicit-loose-files", "load_precedence_verified": False,

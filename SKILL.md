@@ -114,8 +114,9 @@ JIS 交付可将随包 [UIF x86 winmm.dll](assets/uif/README.md) 与配置一并
 | AdvSys3 / arc*.dat | [advsys3](engines/advsys3.md) |
 | AGSI / SB2 | [agsi](engines/agsi.md) |
 | Ail / SNL | [ail](engines/ail.md) |
+| AliceSoft：AI2 容器与 AIN 文本表 | [alicesoft](engines/alicesoft.md) |
 | ANIM：滚动密钥 DAT / SCE 局部参考 | [anim](engines/anim.md) |
-| ArcGameEngine：AGE 字符串池算法 | [arcgameengine](engines/arcgameengine.md) |
+| ArcGameEngine：AGE 字符串池与 PAC 容器 | [arcgameengine](engines/arcgameengine.md) |
 | ARCX 工具目录 / SCX.ARC 顺序记录 | [arcx](engines/arcx.md) |
 | Artemis Engine：AST 文本剧本（`.ast`） | [artemis-ast](engines/artemis-ast.md) |
 | Artemis Engine：SCP 文本剧本（`.txt` / `.iet`）与 pf8 多分卷 | [artemis-scp](engines/artemis-scp.md) |
@@ -123,6 +124,7 @@ JIS 交付可将随包 [UIF x86 winmm.dll](assets/uif/README.md) 与配置一并
 | AST / ARC1、ARC2 | [ast](engines/ast.md) |
 | AZSystem：ASB 包装与解密后命令 | [azsystem](engines/azsystem.md) |
 | BGI / Ethornell：有界索引、DSC 编解码与标准 V1 往返 | [bgi](engines/bgi.md) |
+| Bishop / LiosGame GSC：固定头段表、NUL 字符串与 GBK 回写 | [bishop](engines/bishop.md) |
 | BlackRainbow：分段脚本与文本 XOR | [blackrainbow](engines/blackrainbow.md) |
 | BlueGale：BDT 与 indexwww.dat 联动 | [bluegale](engines/bluegale.md) |
 | CatSystem2：KIF/INT、CST 对话与安全提取 | [catsystem2](engines/catsystem2.md) |
@@ -133,21 +135,21 @@ JIS 交付可将随包 [UIF x86 winmm.dll](assets/uif/README.md) 与配置一并
 | EAGLS / ALIS：SCPACK、文本尾加密与标签修复 | [eagls](engines/eagls.md) |
 | EmonEngine / EME | [emonengine](engines/emonengine.md) |
 | Emote PSB：资源包读取与内嵌资源导出 | [emote](engines/emote.md) |
-| Entis GLS：SRCXML 多语言消息与选择属性 | [entis-gls](engines/entis-gls.md) |
+| Entis GLS：SRCXML 消息、选择属性与 CSX 容器 | [entis-gls](engines/entis-gls.md) |
 | Escu:de：ESC-ARC2、分离消息文件与 ESCR1_00 | [escude](engines/escude.md) |
 | ExHibit：RLD 操作片段、间接姓名与有界 XOR | [exhibit](engines/exhibit.md) |
 | Favorite：HCB u8 字符串长度与绝对地址更新 | [favorite](engines/favorite.md) |
 | FlyingShine / PD2 | [flyingshine](engines/flyingshine.md) |
 | FrontWing / FRONTWING_ADV CSB | [frontwing](engines/frontwing.md) |
 | GSD：先 decode 的 v2 族 SPT 与 global.dat | [gsd](engines/gsd.md) |
-| GxEngine：V3 MWB 字符串与 zlib 包装 | [gxengine](engines/gxengine.md) |
+| GxEngine：V3 MWB 字符串、zlib 包装与 GXP 容器 | [gxengine](engines/gxengine.md) |
 | HCSystem / PACK | [hcsystem](engines/hcsystem.md) |
 | Hexenhaus：NORI 的 XOR53 固定槽 | [hexenhaus](engines/hexenhaus.md) |
 | HotSoup / HSP DPMX | [hotsoup](engines/hotsoup.md) |
 | ICE / 索引字表文本流 | [ice](engines/ice.md) |
 | IKURA / MPX、ISF | [ikura](engines/ikura.md) |
 | Ivory / fAGS OCB | [ivory](engines/ivory.md) |
-| Kaguya：message.dat ver4.0 与 LINK6 容器往返 | [kaguya](engines/kaguya.md) |
+| Kaguya：message.dat ver4/早期分块、TBLSTR 与 LINK6 容器 | [kaguya](engines/kaguya.md) |
 | Kirikiri / KAG：有限 KS 文本往返 | [kirikiri](engines/kirikiri.md) |
 | Leaf / KCAP、SDT | [leaf](engines/leaf.md) |
 | Livemaker：外部导出的 Original text CSV 方言 | [livemaker](engines/livemaker.md) |
@@ -162,7 +164,7 @@ JIS 交付可将随包 [UIF x86 winmm.dll](assets/uif/README.md) 与配置一并
 | Musica：SC 消息、选择与文本转义 | [musica](engines/musica.md) |
 | Mware：Squirrel literal 与引用级克隆 | [mware](engines/mware.md) |
 | NEJII / CDT、144字节BIN | [nejii](engines/nejii.md) |
-| NekoSDK：ADVSCRIPT2 显示与日志记录 | [nekosdk](engines/nekosdk.md) |
+| NekoSDK：ADVSCRIPT2 记录与 NEKOPACK4 容器 | [nekosdk](engines/nekosdk.md) |
 | NeXAS：PAC 尾索引与 BIN 字符串池回填 | [nexas](engines/nexas.md) |
 | NonColor / legacy ACV | [noncolor](engines/noncolor.md) |
 | NScripter：容器可回写，文本仍须词法与命令边界审核 | [nscripter](engines/nscripter.md) |
@@ -173,7 +175,7 @@ JIS 交付可将随包 [UIF x86 winmm.dll](assets/uif/README.md) 与配置一并
 | PureMail：OBJ V1 / V2 索引文本池 | [puremail](engines/puremail.md) |
 | QLIE：PACK 3.0 解包、ImoScripter 对白与模板重封包 | [qlie](engines/qlie.md) |
 | Ransel：BCD / BCL 配对归档 | [ransel](engines/ransel.md) |
-| RealLive：文本 token 与换行指令片段 | [reallive](engines/reallive.md) |
+| RealLive：SEEN 容器、文本 token 与换行指令片段 | [reallive](engines/reallive.md) |
 | Ren'Py：有限 .rpy 词法与原位字符串回填 | [renpy](engines/renpy.md) |
 | RPG Maker：MV JSON 与 VX Marshal 转换中间态 | [rpgmaker](engines/rpgmaker.md) |
 | rUGP：ReadEncrypted 块编解码与只读文本候选 | [rugp](engines/rugp.md) |
@@ -183,7 +185,7 @@ JIS 交付可将随包 [UIF x86 winmm.dll](assets/uif/README.md) 与配置一并
 | SFA：FGA Huffman 成员与 AOS 文本线索 | [sfa](engines/sfa.md) |
 | ShSystem：只导出特定 scriptcall 0x33 | [shsystem](engines/shsystem.md) |
 | Siglus：Scene.pck 解包不等于 `.ss` 文本往返 | [siglus](engines/siglus.md) |
-| Silky / Silkys：MAP 全索引与 UTF-16 指针修复 | [silky](engines/silky.md) |
+| Silky / Silkys：MAP 全索引、ARC 容器与 UTF-16 指针修复 | [silky](engines/silky.md) |
 | SLGSystem：SZS100__ 容器与两种密码模式 | [slgsystem](engines/slgsystem.md) |
 | Softpal：PAC 解包与 Sv20 / TEXT.DAT / POINT.DAT | [softpal](engines/softpal.md) |
 | StudioMiris：SKMSd 消息资源表 | [studiomiris](engines/studiomiris.md) |
@@ -198,7 +200,8 @@ JIS 交付可将随包 [UIF x86 winmm.dll](assets/uif/README.md) 与配置一并
 | U-GOS：.o 指针引用的字符串块 | [ugos](engines/ugos.md) |
 | U-MeSoft：PK 尾索引与 SCR/TBL literal 封装 | [umesoft](engines/umesoft.md) |
 | Unison / Softpal Lazy：VAL 分离式字符串池 | [unison](engines/unison.md) |
-| Unity：仅 UTAGE mono DAT 的对齐字符串 | [unity](engines/unity.md) |
+| Unity：Utage 剧情表、serialized asset 与 .bin/.idx 容器 | [unity](engines/unity.md) |
+| VALKYRIA：DAT 容器与 SDT 文本片段 | [valkyria](engines/valkyria.md) |
 | Violent BIN 规则：只读 JIS 候选证据 | [violent](engines/violent.md) |
 | Whale：文本行结构、SELECT 与 [n] | [whale](engines/whale.md) |
 | WillPlus / AdvHD：ARC/AR2 解包与 WS2 v1 代码子集 | [willplus](engines/willplus.md) |

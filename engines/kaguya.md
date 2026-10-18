@@ -7,7 +7,8 @@
 | 格式 | 识别依据 | 随包能力 |
 |---|---|---|
 | ver4 文本表 | `[SCR-MESSAGE]ver4.0`，21 字节头，后接索引表 | 解析、导出、回填与重建 |
-| 早期分块文本（旧称 02/03） | `[SCR-MESSAGE]` 后的版本字段、头长和连续长度块共同确认 | 下文提供布局与适配规则；现有 CLI 尚不支持 |
+| 早期分块文本（旧称 02/03） | `[SCR-MESSAGE]` 后的版本字段、头长和连续长度块共同确认 | 解析、导出与变长回写；没有工作区 CLI，使用下方 Python 接口 |
+| TBLSTR.ARC 字符串记录 | `.ari` 伴随索引、`B8 33 25 00` 或 `UF01` 头 | 三种地址方言的读取与定长回写 |
 | LINK6 归档 | `LINK6` 头与有效成员索引 | 未压缩、未加密成员读写；其他成员可按存储字节保留 |
 
 共同签名不能证明不同版本可共用 writer。
@@ -95,11 +96,60 @@ CLI 只选择输入目录根部的 `message.dat`。没有 SCR 调用点到对白
 1. 确认编码后严格解码；CP932 是候选，不从共同签名推断，也不套用 ver4 的 `F040` 映射。
 2. sidecar 保存块序号、字符串位置、姓名共享关系和原字节；JSON 姓名在正文前，同块多条正文的改名须一致。
 3. 只替换已确认的字符串范围，禁止新增 NUL；保留分隔符、count、空串、头和尾部。变长后重算 payload 的**编码字节长度**，再 XOR `0xFF` 并写入长度前缀。
-4. 验证真实 parser/writer 原文逐字节往返，再做变长中文回填、重解析及非文本字节对照。验证完成前不要将该分支标记为完整支持。
+4. 未改块的原始密文按原区间复制，不从对象重新编码，避免 CP932 别名在无修改时改变文件。
+
+### Python 接口
+
+```python
+from python.engines.kaguya_early import patch_early_message, read_early_message
+
+document = read_early_message(data)
+for block in document.blocks:
+    print(block.ordinal, block.name, block.messages, block.choice)
+patched = patch_early_message(data, {0: {"name": "名前", "messages": ["新しい", "台詞"]}})
+```
+
+- `read_early_message(data, encoding="cp932", strict=True) -> EarlyDocument`。
+- 每个 `EarlyBlock` 保留 ordinal、长度字段绝对偏移、声明大小、姓名、正文、选项、count、
+  未分类 tail 以及解密后的原始字节。
+- `strict=True` 要求 `count > 0` 时实际扫描到的正文字符串数等于声明值；不等时先分析样本，
+  可显式 `strict=False` 提取并保留差异，不能据此认定 count 语义。
+- `count == 0` 的选项块：首串导出为无姓名正文，其后的字节作为 tail 原样保留，不导出。
+- `patch_early_message(data, {块序号: {"name"/"messages"/"choice": ...}}) -> bytes`；
+  正文数量不可改变，选项块与正文块的字段不可互换。
+- 写入后重新解析，比较块数、姓名、正文、选项与 tail；头部和零长度标记后的尾部逐字节保留。
+
+## TBLSTR.ARC 字符串记录
+
+`TBLSTR.ARC` 是独立的字符串表，不是 `message.dat`，也不在 LINK6 索引中。所有记录都是
+`i32 消息号 + i32 长度 + XOR 0xFF 文本`，区别只在地址表来源：
+
+| 方言 | 识别与地址来源 | 文本区长度 |
+|---|---|---|
+| `.ari` 伴随索引 | 同名 `.ari` 存在；从偏移 4 起每 4 字节一个 `i32` 绝对地址 | `长度 - 2` |
+| 内嵌标记 | 归档以 `B8 33 25 00` 开头，仍需调用方提供 `.ari` | `长度 - 2` |
+| `UF01` | 头为 `UF01`，偏移 4 为 `u32` 索引起点；该起点到 EOF 为 `u32` 地址表 | `长度` |
+
+- `.ari` 的前 4 字节原样保留，不作为地址；地址数量受预算限制。
+- 地址必须非负、不重复，记录头与文本区必须完整落在文件内；文本按 CP932 严格解码。
+- `长度 - 2` 的尾部两字节不参与文本，写入时原样保留。
+- `patch_tblstr` 只做定长替换：目标编码后不得长于文本区，短文本补 `fill`（默认空格），
+  XOR 后原位写回，并重新解析比对每条地址、长度与字节。
+- 参考工具写入用 GBK、补 `0x0A`；本模块默认空格，可传 `fill=0x0A` 复现。
+- 读取编码与写入编码由调用方保持一致；编码不一致时回读校验会失败。
+- 不做：变长重排（会移动绝对地址与 `.ari` 表）、地址表重建、其他 TBLSTR 变体。
+
+```python
+from python.archives.kaguya_tblstr import open_tblstr, patch_tblstr, read_entry
+
+archive = open_tblstr(data, ari_bytes)          # ari_bytes 可为 None（仅 UF01 可省略）
+text = read_entry(archive, archive.entries[0])
+patched = patch_tblstr(data, archive, {0: "译文"}, encoding="gbk")
+```
 
 ## 编码与中文显示
 
-ver4 正文、姓名和选项使用严格 CP932，语音名使用 UTF-16LE。`F040` 与全角百分号相互映射，按 SJIS 字符边界处理。单独的“％”姓名是不可改上下文；改写字段保持特殊百分号数量、LF 数量及结尾换行状态。姓名也可能含 LF。
+ver4 正文、姓名和选项使用严格 CP932，语音名使用 UTF-16LE。`F040` 与全角百分号相互映射，按 SJIS 字符边界处理。单独的"％"姓名是不可改上下文；改写字段保持特殊百分号数量、LF 数量及结尾换行状态。姓名也可能含 LF。
 
 中文超出 CP932 时优先使用[公共 JIS 替换流程](../guides/jis-substitution.md)，将代理 JSON 交给现有 writer，不逐引擎实现编码器。重读输出后验证代理文本及还原中文，再交付对应映射和字体或 hook 配置。字节回填成功不等于已验证游戏显示。
 
@@ -113,13 +163,22 @@ ver4 正文、姓名和选项使用严格 CP932，语音名使用 UTF-16LE。`F0
 
 - [kaguya.py](../python/engines/kaguya.py)：ver4 底层读写。
 - [kaguya_extract.py](../python/engines/kaguya_extract.py)：ver4 JSON 契约与工作目录流程。
+- [kaguya_early.py](../python/engines/kaguya_early.py)：早期分块解析与变长回写。
 - [kaguya_link.py](../python/archives/kaguya_link.py)：LINK6 容器。
-- [test_kaguya.py](../tests/test_kaguya.py)、[test_engines_secondary.py](../tests/test_engines_secondary.py)：ver4 与容器回归；不覆盖早期分块格式。
+- [kaguya_tblstr.py](../python/archives/kaguya_tblstr.py)：TBLSTR 三种地址方言与定长回写。
+- [test_kaguya.py](../tests/test_kaguya.py)、[test_engines_secondary.py](../tests/test_engines_secondary.py)：ver4 与容器回归。
+- [test_kaguya_early.py](../tests/test_kaguya_early.py)：早期分块（姓名/正文、选项 tail、变长重算、严格计数、截断）
+  与 TBLSTR（三方言、缺 ari、定长与超长拒绝）。
 
 ```text
 python -m unittest discover -s tests -p test_kaguya.py
+python -m unittest discover -s tests -p test_kaguya_early.py
 python -m unittest discover -s tests -p test_engines_secondary.py
 python tools/check_skill.py
 ```
 
-许可：ver4 与 LINK6 的来源通知见 [MIT-VNTextPatch](../provenance/licenses/MIT-VNTextPatch.txt)、[MIT-GARbro](../provenance/licenses/MIT-GARbro.txt)；早期分块布局依据 SExtractor `extract_Kaguya_dat.py`，沿用 [GPL-3.0](../provenance/licenses/GPL-3.0.txt)。
+早期分块与 TBLSTR 均为合成样本验证：原文往返、变长/定长回填、重新解析与非文本字节保留已测；
+未使用真实 `message.dat`/`TBLSTR.ARC`，未运行游戏，不能据此声称这两条分支已适配全部 02/03 变体
+或全部 TBLSTR 版本。
+
+许可：ver4 与 LINK6 的来源通知见 [MIT-VNTextPatch](../provenance/licenses/MIT-VNTextPatch.txt)、[MIT-GARbro](../provenance/licenses/MIT-GARbro.txt)；早期分块布局依据 SExtractor `extract_Kaguya_dat.py`，沿用 [GPL-3.0](../provenance/licenses/GPL-3.0.txt)；TBLSTR 三种方言依据翻译肋手 v4.9D 的同名处理函数，记录见 [translate-helper-archives](../provenance/translate-helper-archives.json)。

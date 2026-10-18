@@ -16,37 +16,48 @@
 - 提供的 EXE/DLL 并非本 leaf 的运行依赖，也没有在 import 时加载。
 - 若 MWB 位于 GXP 等容器，应先使用已确认匹配版本的容器工具。
 - 保留成员相对路径、容器版本及是否已被工具解压的信息。
-- 本页不实现 GXP 加密/索引或外部工具的 GUI/CLI 封装。
+- GXP 加密/索引由下节模块实现；不包含外部工具的 GUI/CLI 封装。
 - “提取了 MWB 文本”与“已重新封包可运行”是两个不同结论。
 
-### GXP v100：头部检查与原始区域读取
+### GXP：头部、加密索引与模板重封
 
-[gxp.py](../python/archives/gxp.py) 仅检查版本 `100`、标记 `0x10203040` 的固定头及数据范围。它接受 `bytes` 或可 seek 的二进制流；使用流时头部检查只读取 48 字节并恢复流位置，不载入整个媒体包。
+[gxp.py](../python/archives/gxp.py) 解析 48 字节头、逐条索引与成员解密，并提供模板重封。
 
 | 偏移 | 类型 | 字段 |
 |---|---|---|
-| `0x00` | 4 bytes | `GXP\0` |
-| `0x04` / `0x08` | u32 LE | 版本 / 标记；其他值拒绝 |
-| `0x0C` / `0x10` / `0x14` | u32 LE | 原始标志，暂不解释加密语义 |
-| `0x18` / `0x1C` | u32 LE | 声明成员数 / 声明索引大小 |
-| `0x20` / `0x28` | u64 LE | 数据区大小 / 数据区绝对偏移 |
+| `0x00` | 4 bytes | `GXP\0`（`0x00505847`） |
+| `0x14` | u32 LE | 加密标志；非 0 表示索引与载荷都做 XOR |
+| `0x18` | u32 LE | 成员数 |
+| `0x1C` | u32 LE | 索引字节数 |
+| `0x28` | u32 LE | 载荷区绝对起点 |
 
-数据区不得覆盖固定头或越界，且 `data_offset + data_size` 必须等于文件大小。`index_bytes()` 返回 `[0x30, data_offset)` 的完整不透明区域；**不假定其中有固定长度前置块**，也不根据 `0x1C` 与实际区间的差值跳过字节。声明索引大小与记录边界的关系仍需索引解码器核实。
+其余头部字节原样保留。索引位于 `0x30` 起，长度必须落在载荷起点之前；逐条记录为
+`i32 total` + 记录体，`total = 36 + 2 * 名称字符数`。记录体：
+`u32 size`、4 字节不透明值、`i32 字符数`、`i32 c1`、`i32 c2`、`i32 相对偏移`、
+4 字节填充、UTF-16LE 名称、4 字节尾值。
 
-`read_member()` 只读取数据区内的**原始字节跨度**。调用方必须已有独立验证的索引项，才能提供相对数据区的 `offset/size`；范围合法不证明其确实是一个成员。返回值可能仍被加密或封装，不能标为已解包明文。传入的缓存头也会与当前输入重新核对，防止错用其他文件的头部。
-
-索引区域默认预算 16 MiB，单次数据读取默认 64 MiB；可通过 `max_size` 显式调整，读取前检查。批量调用还须由上层限制成员数和累计输出。
+- 成员偏移相对载荷区起点，必须完整落在文件内；`c1/c2`、不透明值、填充与尾值只保存不解释。
+- 名称必须非空、无 NUL、无绝对路径或 `..` 段；重名不自动合并。
+- XOR 流：`mask[j] = (j & 0xFF) ^ KEY[j % 23] ^ 归档文件名字节[j % 名称长度]`，
+  KEY 为 23 字节常量。
+- 索引按记录重新起算：`j = 0..3` 对应 4 字节长度，记录体从 `j = 4` 继续；
+  载荷则从 `j = 0` 起算。相位不同，不能用同一段掩码连续覆盖。
+- 归档名是密钥的一部分，必须由调用方按实际文件名传入；ASCII 之外或缺失直接报错，不能猜。
+- `read_member` 解密后返回成员字节；成员上限默认 256 MiB，可在调用时降低。
+- `pack_gpx(template, archive_name, replacements)`：未替换成员保持原位，替换成员追加到载荷区末尾；
+  索引按新 size/offset 重新生成，并在无替换时要求与原索引逐字节一致，否则拒绝重封。
+- 不做：其他 magic、索引不透明字段的语义推断、成员解压、目录层级。
 
 ```python
-from python.archives.gxp import read_header, index_bytes, read_member
-with open("/path/to/archive.gxp", "rb") as stream:
-    hdr = read_header(stream)
-    raw_index = index_bytes(stream, hdr)
-    # offset/size 必须来自另行确认的索引项；这里没有索引解码器。
-    raw_member = read_member(stream, offset, size, hdr)
+from python.archives.gxp import open_gpx, read_member, pack_gpx
+
+archive = open_gpx(gxp_bytes, archive_name="data.gxp")
+raw = read_member(gxp_bytes, archive, archive.entries[0])
+rebuilt = pack_gpx(gxp_bytes, "data.gxp", {"scenario.mwb": patched_bytes})
 ```
 
-此模块没有文件名解析、成员解密、解压或 writer，不能用于宣称 GXP 解包/重封包已支持。
+测试见 [test_gxp.py](../tests/test_gxp.py)：覆盖头部与索引边界、两种加密开关、逐条相位、
+模板重封与原文索引复现。未使用真实 `.gxp` 样本验证。
 
 ## MWB 包装
 - [unpack_mwb](../python/engines/gxengine.py#L20) 返回完整解压 payload。

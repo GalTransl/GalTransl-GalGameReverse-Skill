@@ -1,13 +1,15 @@
-# Unity：Utage 剧情表与 serialized asset 回写
+# Unity：Utage 剧情表、serialized asset 与 .bin/.idx 容器
 
 ## 选择路径
 
-本页支持两层能力，不代表任意 Unity 游戏都使用同一种剧情格式。
+本页支持多层能力，不代表任意 Unity 游戏都使用同一种剧情格式。
 
 | 已确认的输入 | 随包实现 | 能力边界 |
 |---|---|---|
 | Unity serialized file v20，小端、TypeTree 已剥离；对象类为 `Utage.AdvImportBook` | [容器](../python/archives/unity_serialized.py)、[剧情语义](../python/engines/unity_utage.py)、[工作区 CLI](../python/engines/unity_utage_extract.py) | 指定 Utage 布局的整表提取、UTF-8 变长回填、完整 `.assets` 重建 |
 | 已有可靠字段位置的 Utage mono DAT 对齐字符串 | [局部字符串接口](../python/engines/unity.py) | 单记录解码和等占位替换；不能代替完整资产 writer |
+| 同名 `.bin` + `.idx` 资源对，索引为 AES-CBC 密文 MsgPack | [容器](../python/archives/unity_arc.py) | 索引解密、成员解密与 `.bin`/`.idx` 重写；key/IV 为方言参数 |
+| MsgPack 单字符串，内容含 `\text`/`\endtext` 块 | [剧本行接口](../python/engines/unity_snr.py) | 块内行替换与整串重打包；不解析块外的剧本命令 |
 
 `*_Data`、`GameAssembly.dll`、StreamingAssets 只帮助识别，不能证明剧情是 Utage。Mono/IL2CPP 是运行时差异，也不能单独确定资源的序列化布局。不要把所有可读字符串、TextAsset 或 MonoBehaviour 自动当对白。
 
@@ -98,3 +100,50 @@ writer 会重建 UTF-8 字符串、四字节 padding、表 textLength、对象�
 旧 leaf 改编自 SExtractor `src/extract_Unity_dat.py`、`src/engine.ini` 的 Unity_dat 段（commit `8d8d976fd04ae54e7c677705af937273d04a376a`，GPL-3.0-only），保留原模块的许可说明；来源记录见 [sextractor-core](../provenance/sextractor-core.json)。它把正则候选扫描改为显式 offset，并增加严格边界及变长拒绝。
 
 完整 book 路径参考了 [unity-text-locator](https://github.com/timeance/unity-text-locator) 的 Utage 对象定位、行/列定位和读回验证思路（该项目 AGPL-3.0-only），未复制其实现代码。这里独立实现 stripped-TypeTree profile、表头识别、命令语义和 v20 writer，随本项目按 GPL-3.0-only 提供；使用本 Skill 不需要访问该外部仓库。
+
+## .bin/.idx 资源容器
+
+与 Utage 表路线无关，这是另一类 Unity 归档：`.bin` 放密文成员，`.idx` 放加密目录。
+
+- `.idx` 记录：`i32` 密文长度 + AES-CBC/PKCS#7 密文；长度必须是 16 的倍数且不越界。
+- 解密后的记录是 MsgPack 映射，键至少包含 `fileName`、`index`、`size`。
+- 参考实现的 `fileName` 用 str16、键用 fixstr、整数用 int32；读取端同时接受 fixstr/str8/str16/str32 与各整数宽度。
+- `.bin` 布局为每条 `u32` 密文长度 + 密文；目录中的 `index` 指向密文起点，不是长度字段。
+- 成员整体用同一 AES-CBC 密钥解密，PKCS#7 去填充；填充非法即拒绝。
+- key 与 IV 是参考工具写死的 ASCII 常量，属于单个会社/样本的方言参数，不是 Unity 通性；
+  其他构建必须提供自己的 key 对，不把这两个常量推广。
+- `build_bin` 重新加密并重算 `u32` 长度前缀与偏移，重新解析索引、解密每个成员比对后才返回。
+- 不做：AssetBundle（UnityFS）外壳、serialized file 版本差异、索引中未出现的成员、加密 key 推断。
+
+```python
+from python.archives.unity_arc import build_bin, read_index, read_member
+
+entries = read_index(idx_bytes)
+member = read_member(bin_bytes, entries[0])
+rebuilt_bin, rebuilt_idx = build_bin({"data/scenario.bin": patched_bytes})
+```
+
+## SNR 剧本（MsgPack 字符串）
+
+- 整个文件是一个 MsgPack 字符串；不是 `serialized file`，也不能按 `.assets` 解析。
+- 字符串内容按 `\n` 分行；`\text` 前缀开启块，`\endtext` 前缀关闭块，其余块内行是显示文本。
+- 标记行按前缀识别，块行上的附加字段原样保留。
+- 行尾换行会产生一个末尾空行，读写都必须保留；不能用“每行补一个换行”的方式重建。
+- 只允许替换块内行的整行内容；含 `\n`/`\r` 或本身以标记开头的译文拒绝。
+- 重打包后重新分行比对行序、块标志与每行文本。
+- 不做：块外命令语义、跳转/变量修复、多字符串结构或压缩外壳。
+
+```python
+from python.engines.unity_snr import apply_snr_texts, open_snr
+
+script, lines = open_snr(snr_bytes)
+writable = {line.index: line.text for line in lines if line.in_text}
+patched = apply_snr_texts(snr_bytes, {1: "新しい行"})
+```
+
+- 来源：翻译肋手 v4.9D 的 `GameRes.Unity.ArcBIN`、`BinDeserializer`、`ArcSNR`（GARbro 派生）。
+- 独立改写：严格记录边界、索引长度与密文块对齐校验、写回重算偏移；
+  SNR 不再复制“每行后追加换行”导致空行累积的行为。
+- 测试：[test_unity_arc.py](../tests/test_unity_arc.py) 覆盖 AES FIPS/SP800 向量、MsgPack 记录、
+  `.bin`/`.idx` 往返、截断拒绝、SNR 块标志、no-op 字节一致与非法译文拒绝。
+- 未使用真实 `.bin`/`.idx` 或 SNR 样本，未验证游戏加载与显示。

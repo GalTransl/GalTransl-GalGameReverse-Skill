@@ -1,0 +1,174 @@
+{
+  "schema_version": 1,
+  "group": "translate-helper-archives",
+  "license_policy": "Modules in this group are independent rewrites. The reference is a decompiled third-party translation tool that bundles a GARbro-derived namespace family plus self-written handlers. GARbro is GPL-3.0; the bundled copy's exact commit and the self-written handlers' terms are unconfirmed, so all rewrites ship as GPL-3.0-only and no source lines were copied. Every module is validated with synthetic fixtures only; no game assets were used.",
+  "reference_tool": {
+    "name": "translation-helper v4.9D",
+    "form": "decompiled .NET research copy (not shipped, not executed)",
+    "notes": "Only structure and parameter values were read. The tool has no in-game verification record of its own."
+  },
+  "entries": [
+    {
+      "id": "alicesoft",
+      "implementation": ["python/archives/ain.py", "python/engines/alicesoft.py"],
+      "document": "engines/alicesoft.md",
+      "reference_paths": ["WindowsFormsApplication1.Archive/AliceSoft/ArcAin.cs"],
+      "symbols": ["TryOpen", "MSG1", "MSG0", "STR0", "AliceSoftDecryptString", "AliceSoftEncryptString"],
+      "license_status": "Self-written handler inside the tool; no license statement found.",
+      "deviations": [
+        "Overlong text is refused instead of truncated.",
+        "Padding joins the same cipher pass so a shortened slot decrypts to text plus spaces.",
+        "Tables must end on a known section boundary; a failed parse advances one byte instead of trusting the tag."
+      ],
+      "tests": ["tests/test_alicesoft_ain.py"],
+      "not_ported": ["EX table parser", "AIN opcode model", "slot growth"]
+    },
+    {
+      "id": "bishop-gsc",
+      "implementation": ["python/archives/bishop_gsc.py"],
+      "document": "engines/bishop.md",
+      "reference_paths": ["GameRes.LiosGame/ArcGSC.cs"],
+      "symbols": ["TryOpen", "Export", "Import"],
+      "license_status": "GARbro-derived namespace family (GPL-3.0 lineage).",
+      "deviations": [
+        "Out-of-range reads raise instead of being clamped to the remaining bytes.",
+        "Overlong text is refused instead of being cut mid-character.",
+        "parseStringByStruct is not ported because the reference export path never calls it."
+      ],
+      "tests": ["tests/test_bishop_gsc.py"]
+    },
+    {
+      "id": "entis-csx",
+      "implementation": ["python/archives/entis_csx.py"],
+      "document": "engines/entis-gls.md",
+      "reference_paths": ["GameRes.EntisGLS/ArcCSX.cs"],
+      "symbols": ["TryOpen", "Export", "Import", "CSInstructionCode", "LoadStringLiteral"],
+      "license_status": "GARbro-derived namespace family (GPL-3.0 lineage).",
+      "deviations": [
+        "Unknown opcodes abort at a boundary instead of resynchronising.",
+        "The image walk must consume the payload exactly.",
+        "Chunk names must be unique and ASCII."
+      ],
+      "tests": ["tests/test_entis_csx.py"],
+      "not_ported": ["other chunk semantics", "CS evaluation", "growing image literals"]
+    },
+    {
+      "id": "nekopack",
+      "implementation": ["python/archives/nekopack.py"],
+      "document": "engines/nekosdk.md",
+      "reference_paths": ["GameRes.NEKOSDK/ArcPAK.cs"],
+      "symbols": ["TryOpen", "Export", "Pack"],
+      "license_status": "GARbro-derived namespace family (GPL-3.0 lineage).",
+      "deviations": [
+        "The fixed placeholder index size written by the reference packer is not copied.",
+        "Only mode A is written; mode S is read-only because the reference never packed it.",
+        "Member bounds and the zlib stream are validated exactly."
+      ],
+      "tests": ["tests/test_neko_age_archives.py"]
+    },
+    {
+      "id": "age-pac",
+      "implementation": ["python/archives/age_pac.py"],
+      "document": "engines/arcgameengine.md",
+      "reference_paths": ["GameRes.AGE_SYSTEM/ArcPAC.cs"],
+      "symbols": ["TryOpen", "Export", "Pack"],
+      "license_status": "GARbro-derived namespace family (GPL-3.0 lineage).",
+      "deviations": [
+        "The original name width and offset layout are preserved on rebuild.",
+        "The record layout must end exactly at the declared index size.",
+        "Paged members are rotated back only when the marker and block bounds are consistent."
+      ],
+      "tests": ["tests/test_neko_age_archives.py"],
+      "not_ported": ["SRP text tables", "other AGE containers"]
+    },
+    {
+      "id": "reallive-seen",
+      "implementation": ["python/archives/reallive_seen.py"],
+      "document": "engines/reallive.md",
+      "reference_paths": ["WindowsFormsApplication1.Archive/RealLive/ArcSeen.cs"],
+      "symbols": ["TryOpen", "Export", "SectionInformation"],
+      "license_status": "Self-written handler inside the tool; no license statement found.",
+      "deviations": [
+        "No debug dialogs, hardcoded section indexes or in-place buffer mutation.",
+        "The key table is supplied by the caller instead of being read from a fixed path.",
+        "Section table entries are validated before any payload is read."
+      ],
+      "tests": ["tests/test_reallive_seen.py"],
+      "not_ported": ["VM disassembly", "address relocation", "SEEN repack"]
+    },
+    {
+      "id": "silky-arc",
+      "implementation": ["python/archives/silky_arc.py"],
+      "document": "engines/silky.md",
+      "reference_paths": ["GameRes.Silky/ArcARC.cs", "GameRes.Silky/ArcAI6Win.cs"],
+      "symbols": ["TryOpen", "TryOpenOLD", "Export", "Pack", "DecryptName", "EncryptName"],
+      "license_status": "GARbro-derived namespace family (GPL-3.0 lineage).",
+      "deviations": [
+        "The LZSS encoder does not assume a 2x output buffer.",
+        "The legacy 32-byte-name directory is read-only because the reference UI never calls it.",
+        "AI6WIN names must be NUL terminated inside the 260-byte slot."
+      ],
+      "tests": ["tests/test_silky_arc.py"],
+      "not_ported": ["MES VM", "ArcAKB image restoration", "four-section MAP"]
+    },
+    {
+      "id": "unity-bin-snr",
+      "implementation": ["python/archives/unity_arc.py", "python/engines/unity_snr.py", "python/common/aes.py"],
+      "document": "engines/unity.md",
+      "reference_paths": ["GameRes.Unity/ArcBIN.cs", "GameRes.Unity/BinDeserializer.cs", "GameRes.Unity/ArcSNR.cs"],
+      "symbols": ["TryOpen", "Export", "Pack", "DeserializeEntry", "SerializeEntryBinary"],
+      "license_status": "GARbro-derived namespace family (GPL-3.0 lineage).",
+      "deviations": [
+        "The index offset is recomputed from the size-prefixed bin layout instead of a running counter that double counts.",
+        "Member paths keep their original separators instead of being rewritten to backslashes.",
+        "SNR edits replace only selected lines, so a no-op is byte identical.",
+        "AES is a new standard-library implementation checked against FIPS-197 and SP 800-38A vectors."
+      ],
+      "tests": ["tests/test_unity_arc.py"],
+      "not_ported": ["UnityFS/AssetBundle", "other MsgPack schemas", "key inference"]
+    },
+    {
+      "id": "valkyria",
+      "implementation": ["python/archives/valkyria.py", "python/engines/valkyria.py"],
+      "document": "engines/valkyria.md",
+      "reference_paths": ["GameRes.VALKYRIA/ArcDAT.cs", "GameRes.VALKYRIA/ArcSDT.cs", "GameRes.VALKYRIA/MICO_OP.cs"],
+      "symbols": ["TryOpen", "Export", "Pack", "DecryptXOR"],
+      "license_status": "GARbro-derived namespace family (GPL-3.0 lineage).",
+      "deviations": [
+        "IndexOf returning -1 no longer feeds a length computation; unterminated strings raise.",
+        "The DAT writer derives the index size from the member count.",
+        "SDT spans are reported as candidates and the reader states it is not a disassembler."
+      ],
+      "tests": ["tests/test_valkyria.py"],
+      "not_ported": ["MICO VM semantics", "choice branch structure", "unknown opcode shapes"]
+    },
+    {
+      "id": "yuris-version-range",
+      "implementation": ["python/engines/yuris.py", "python/engines/yuris_text.py", "python/engines/yuris_extract.py"],
+      "document": "engines/yuris.md",
+      "reference_paths": ["WindowsFormsApplication1.Archive/YU_RIS/ArcYBN.cs", "YSTB.cs"],
+      "symbols": ["TryOpen", "Export", "Import"],
+      "license_status": "Self-written handler inside the tool; no license statement found.",
+      "deviations": [
+        "234..490 is a parse boundary only; text append stays limited to the version with real round-trip tests.",
+        "Non-482 scripts are recorded as unsupported_version with member bytes preserved."
+      ],
+      "tests": ["tests/test_yuris_versions.py"]
+    },
+    {
+      "id": "kaguya-tblstr",
+      "implementation": ["python/archives/kaguya_tblstr.py"],
+      "document": "engines/kaguya.md",
+      "reference_paths": ["WindowsFormsApplication1/Form1.cs"],
+      "symbols": ["KaguyaTblStrDecrypt", "button44_Click", "button46_Click"],
+      "license_status": "Self-written handler inside the tool; no license statement found.",
+      "deviations": [
+        "The three address dialects are detected explicitly instead of relying on a file dialog for the missing .ari.",
+        "Addresses must be non-negative, unique and inside the file; the reference trusts them.",
+        "The fixed-slot writer re-reads the archive and compares every address, length and byte."
+      ],
+      "tests": ["tests/test_kaguya_early.py"],
+      "not_ported": ["variable-length reflow that would move absolute addresses", "other TBLSTR variants"]
+    }
+  ]
+}

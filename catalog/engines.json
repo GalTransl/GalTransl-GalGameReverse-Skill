@@ -1,6 +1,6 @@
 {
   "schema": "galgame-engine-index/1",
-  "count": 97,
+  "count": 100,
   "engines": [
     {
       "id": "advsys3",
@@ -65,6 +65,35 @@
       "evidence": "per-module provenance and synthetic tests; not blanket game verification"
     },
     {
+      "id": "alicesoft",
+      "title": "AliceSoft：AI2 容器与 AIN 文本表",
+      "aliases": [
+        "AliceSoft",
+        "AIN",
+        "AI2"
+      ],
+      "document": "engines/alicesoft.md",
+      "python_references": [
+        "python/archives/ain.py",
+        "python/engines/alicesoft.py"
+      ],
+      "public_symbols": {
+        "python/archives/ain.py": [
+          "unpack",
+          "repack"
+        ],
+        "python/engines/alicesoft.py": [
+          "AinText",
+          "AinTable",
+          "cipher",
+          "read_ain",
+          "rewrite_ain"
+        ]
+      },
+      "scope": "version/stage-limited references; read the engine page",
+      "evidence": "per-module provenance and synthetic tests; not blanket game verification"
+    },
+    {
       "id": "anim",
       "title": "ANIM：滚动密钥 DAT / SCE 局部参考",
       "aliases": [
@@ -89,16 +118,25 @@
     },
     {
       "id": "arcgameengine",
-      "title": "ArcGameEngine：AGE 字符串池算法",
+      "title": "ArcGameEngine：AGE 字符串池与 PAC 容器",
       "aliases": [
         "ArcGameEngine",
         "AGE"
       ],
       "document": "engines/arcgameengine.md",
       "python_references": [
+        "python/archives/age_pac.py",
         "python/engines/arcgameengine.py"
       ],
       "public_symbols": {
+        "python/archives/age_pac.py": [
+          "PacEntry",
+          "PacArchive",
+          "open_pac",
+          "read_member",
+          "encode_member",
+          "build_pac"
+        ],
         "python/engines/arcgameengine.py": [
           "build_string_pool",
           "read_pool_string"
@@ -364,6 +402,28 @@
           "patch_v1"
         ],
         "python/engines/bgi_v1_opcodes.py": []
+      },
+      "scope": "version/stage-limited references; read the engine page",
+      "evidence": "per-module provenance and synthetic tests; not blanket game verification"
+    },
+    {
+      "id": "bishop",
+      "title": "Bishop / LiosGame GSC：固定头段表、NUL 字符串与 GBK 回写",
+      "aliases": [
+        "bishop"
+      ],
+      "document": "engines/bishop.md",
+      "python_references": [
+        "python/archives/bishop_gsc.py"
+      ],
+      "public_symbols": {
+        "python/archives/bishop_gsc.py": [
+          "GscHeader",
+          "GscString",
+          "GscScript",
+          "open_gsc",
+          "apply_gsc_texts"
+        ]
       },
       "scope": "version/stage-limited references; read the engine page",
       "evidence": "per-module provenance and synthetic tests; not blanket game verification"
@@ -652,7 +712,7 @@
     },
     {
       "id": "entis-gls",
-      "title": "Entis GLS：SRCXML 多语言消息与选择属性",
+      "title": "Entis GLS：SRCXML 消息、选择属性与 CSX 容器",
       "aliases": [
         "EntisGLS",
         "Entis GLS",
@@ -661,9 +721,20 @@
       ],
       "document": "engines/entis-gls.md",
       "python_references": [
+        "python/archives/entis_csx.py",
         "python/engines/entis_gls.py"
       ],
       "public_symbols": {
+        "python/archives/entis_csx.py": [
+          "Chunk",
+          "Literal",
+          "parse_chunks",
+          "build_csx",
+          "parse_conststr",
+          "rebuild_conststr",
+          "parse_image",
+          "patch_image"
+        ],
         "python/engines/entis_gls.py": [
           "Message",
           "extract_srcxml",
@@ -852,16 +923,26 @@
     },
     {
       "id": "gxengine",
-      "title": "GxEngine：V3 MWB 字符串与 zlib 包装",
+      "title": "GxEngine：V3 MWB 字符串、zlib 包装与 GXP 容器",
       "aliases": [
         "GxEngine",
-        "GxEngine_mwb"
+        "GxEngine_mwb",
+        "GXP"
       ],
       "document": "engines/gxengine.md",
       "python_references": [
+        "python/archives/gxp.py",
         "python/engines/gxengine.py"
       ],
       "public_symbols": {
+        "python/archives/gxp.py": [
+          "GxpEntry",
+          "GxpArchive",
+          "keystream",
+          "open_gpx",
+          "read_member",
+          "pack_gpx"
+        ],
         "python/engines/gxengine.py": [
           "Field",
           "unpack_mwb",
@@ -991,7 +1072,7 @@
     },
     {
       "id": "kaguya",
-      "title": "Kaguya：message.dat ver4.0 与 LINK6 容器往返",
+      "title": "Kaguya：message.dat ver4/早期分块、TBLSTR 与 LINK6 容器",
       "aliases": [
         "KaGuYa",
         "Kaguya",
@@ -1001,7 +1082,9 @@
       "document": "engines/kaguya.md",
       "python_references": [
         "python/archives/kaguya_link.py",
+        "python/archives/kaguya_tblstr.py",
         "python/engines/kaguya.py",
+        "python/engines/kaguya_early.py",
         "python/engines/kaguya_extract.py"
       ],
       "public_symbols": {
@@ -1012,12 +1095,25 @@
           "read_member",
           "rebuild"
         ],
+        "python/archives/kaguya_tblstr.py": [
+          "TblEntry",
+          "TblArchive",
+          "open_tblstr",
+          "read_entry",
+          "patch_tblstr"
+        ],
         "python/engines/kaguya.py": [
           "Message",
           "Group",
           "Document",
           "read_message_dat",
           "write_message_dat"
+        ],
+        "python/engines/kaguya_early.py": [
+          "EarlyBlock",
+          "EarlyDocument",
+          "read_early_message",
+          "patch_early_message"
         ],
         "python/engines/kaguya_extract.py": [
           "export",
@@ -1341,15 +1437,24 @@
     },
     {
       "id": "nekosdk",
-      "title": "NekoSDK：ADVSCRIPT2 显示与日志记录",
+      "title": "NekoSDK：ADVSCRIPT2 记录与 NEKOPACK4 容器",
       "aliases": [
-        "nekosdk"
+        "nekosdk",
+        "NEKOPACK"
       ],
       "document": "engines/nekosdk.md",
       "python_references": [
+        "python/archives/nekopack.py",
         "python/engines/nekosdk.py"
       ],
       "public_symbols": {
+        "python/archives/nekopack.py": [
+          "PakEntry",
+          "PakArchive",
+          "open_pak",
+          "read_member",
+          "build_pak"
+        ],
         "python/engines/nekosdk.py": [
           "Field",
           "extract_fields",
@@ -1637,15 +1742,24 @@
     },
     {
       "id": "reallive",
-      "title": "RealLive：文本 token 与换行指令片段",
+      "title": "RealLive：SEEN 容器、文本 token 与换行指令片段",
       "aliases": [
         "reallive"
       ],
       "document": "engines/reallive.md",
       "python_references": [
+        "python/archives/reallive_seen.py",
         "python/engines/reallive.py"
       ],
       "public_symbols": {
+        "python/archives/reallive_seen.py": [
+          "SeenSection",
+          "SeenArchive",
+          "open_seen",
+          "read_section",
+          "lz_decompress",
+          "lz_compress"
+        ],
         "python/engines/reallive.py": [
           "quote_text",
           "unquote_text",
@@ -1869,7 +1983,7 @@
     },
     {
       "id": "silky",
-      "title": "Silky / Silkys：MAP 全索引与 UTF-16 指针修复",
+      "title": "Silky / Silkys：MAP 全索引、ARC 容器与 UTF-16 指针修复",
       "aliases": [
         "Silky's",
         "Silky's Plus",
@@ -1878,9 +1992,26 @@
       ],
       "document": "engines/silky.md",
       "python_references": [
+        "python/archives/silky_arc.py",
         "python/engines/silky.py"
       ],
       "public_symbols": {
+        "python/archives/silky_arc.py": [
+          "ArcEntry",
+          "ArcArchive",
+          "lzss_decompress",
+          "lzss_compress",
+          "decrypt_name",
+          "encrypt_name",
+          "open_arc",
+          "open_arc_old",
+          "read_member",
+          "build_arc",
+          "decrypt_ai6_name",
+          "encrypt_ai6_name",
+          "open_ai6win",
+          "build_ai6win"
+        ],
         "python/engines/silky.py": [
           "Entry",
           "read_map",
@@ -2199,21 +2330,70 @@
     },
     {
       "id": "unity",
-      "title": "Unity：仅 UTAGE mono DAT 的对齐字符串",
+      "title": "Unity：Utage 剧情表、serialized asset 与 .bin/.idx 容器",
       "aliases": [
         "UTAGE",
-        "Unity UTAGE mono DAT"
+        "Unity UTAGE mono DAT",
+        "Unity bin idx",
+        "SNR"
       ],
       "document": "engines/unity.md",
       "python_references": [
-        "python/engines/unity.py"
+        "python/archives/unity_arc.py",
+        "python/engines/unity.py",
+        "python/engines/unity_snr.py"
       ],
       "public_symbols": {
+        "python/archives/unity_arc.py": [
+          "ArcEntry",
+          "IndexEntry",
+          "pack_record",
+          "unpack_record",
+          "read_index",
+          "read_member",
+          "build_bin"
+        ],
         "python/engines/unity.py": [
           "AlignedString",
           "decode_aligned_string",
           "encode_aligned_string",
           "replace_aligned_string"
+        ],
+        "python/engines/unity_snr.py": [
+          "SnrLine",
+          "open_snr",
+          "apply_snr_texts",
+          "pack_string"
+        ]
+      },
+      "scope": "version/stage-limited references; read the engine page",
+      "evidence": "per-module provenance and synthetic tests; not blanket game verification"
+    },
+    {
+      "id": "valkyria",
+      "title": "VALKYRIA：DAT 容器与 SDT 文本片段",
+      "aliases": [
+        "VALKYRIA",
+        "MICO"
+      ],
+      "document": "engines/valkyria.md",
+      "python_references": [
+        "python/archives/valkyria.py",
+        "python/engines/valkyria.py"
+      ],
+      "public_symbols": {
+        "python/archives/valkyria.py": [
+          "DatEntry",
+          "DatArchive",
+          "open_dat",
+          "read_member",
+          "build_dat"
+        ],
+        "python/engines/valkyria.py": [
+          "Span",
+          "xor_body",
+          "open_sdt",
+          "write_sdt"
         ]
       },
       "scope": "version/stage-limited references; read the engine page",

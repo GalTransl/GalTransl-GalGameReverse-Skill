@@ -1,8 +1,17 @@
 {
+
   "implementation": "python/archives/gxp.py",
   "license": "GPL-3.0-only",
-  "origin": "Header inspection contributed independently; header boundary and raw-region behavior corrected using the reference below.",
+  "origin": "Independent rewrite of the GXP header, length-prefixed index, keyed XOR and template repack. Structure and keystream were taken from the decompiled third-party tool described below; no source lines were copied.",
   "reference": {
+    "tool": "translation-helper v4.9D (decompiled research copy, not shipped)",
+    "path": "GameRes.GxEngine/ArcGPX.cs",
+    "symbols": ["TryOpen", "Export", "Pack", "CryptIndex", "DecryptData"],
+    "license_status": "The tool embeds a GARbro-derived namespace family. GARbro is GPL-3.0; the exact commit, modifications and redistribution terms of this copy could not be confirmed.",
+    "use": "Header offsets, index record shape, 23-byte key table, per-entry XOR phase and payload encryption. Verified against the byte layout by synthetic round trips only.",
+    "notice": "Treated as a GPL-3.0-only lineage; no upstream source is required to use this skill."
+  },
+  "cross_check": {
     "repository": "https://github.com/nanami5270/GARbro-Mod",
     "commit": "bc26d991ef5cdc0e1ecb32122ee9a48c3375750c",
     "path": "ArcFormats/Astronauts/ArcGXP.cs",
@@ -10,6 +19,12 @@
     "license": "MIT",
     "copyright": "Copyright (C) 2016 by morkt",
     "license_file": "licenses/MIT-GARbro.txt",
-    "use": "Cross-check only: index starts at 0x30, data base is the 64-bit field at 0x28, and stored members may require decryption. No index decoder, key data, decryption routine or writer was ported."
-  }
+    "use": "Cross-check only for the 0x30 index start and the 64-bit field family at 0x28; the shipped implementation uses the 32-bit payload offset that the synthetic layout and the tool agree on."
+  },
+  "deviations": [
+    "Strict range checks on every index record; the reference silently trusts lengths.",
+    "Rebuilt index must reproduce the original byte for byte when no member changed.",
+    "Archive name is required for the keystream instead of being guessed."
+  ],
+  "tests": "tests/test_gxp.py"
 }

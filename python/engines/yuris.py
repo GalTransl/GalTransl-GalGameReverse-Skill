@@ -7,6 +7,11 @@ No automatic XOR-key guessing, expression VM or complete YBN patcher.
 """
 import struct
 
+# Version words observed for the YSTB/YSCM descriptor layout. A third-party
+# tool gates on this range; this repository only tests the writer at 482, so
+# the range is a parse boundary, not a claim that the layout is identical.
+YSCM_PARSE_VERSIONS = range(234, 491)
+
 
 def toggle_ybn_sections(data: bytes, key: int) -> bytes:
     """XOR each of the four YSTB sections, restarting LE key phase per section."""
@@ -94,7 +99,8 @@ def read_command_list(data: bytes, encoding: str = "cp932", *, allow_message_tai
             pos += 2
         commands.append((name, tuple(attrs)))
     if pos != len(data):
-        if not allow_message_tail or struct.unpack_from("<I", data, 4)[0] != 482 or len(data) - pos < 257 or data[-257] != 0:
+        if (not allow_message_tail or struct.unpack_from("<I", data, 4)[0] not in YSCM_PARSE_VERSIONS
+                or len(data) - pos < 257 or data[-257] != 0):
             raise ValueError("unsupported YSCM trailing data")
         # msg-tool yscm.rs (GPLv3): diagnostic cstrings then a 256-byte opaque
         # table. Extension adapted under GPL-3.0-only; retain MIT origin above.

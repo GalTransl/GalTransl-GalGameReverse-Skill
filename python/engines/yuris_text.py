@@ -8,7 +8,7 @@ No VM execution: opaque attributes retain their bytes and original pool offsets.
 from dataclasses import dataclass
 import re
 import struct
-from .yuris import toggle_ybn_sections, read_command_list, convert_control_bytes
+from .yuris import YSCM_PARSE_VERSIONS, toggle_ybn_sections, read_command_list, convert_control_bytes
 from ..common.contract import make_manifest, validate_translation
 
 
@@ -38,10 +38,22 @@ class Profile:
                 "target_characters": self.target_characters}
 
 
+# YSTB/YSCM carry their own version word. A third-party tool accepts 234..490
+# with this descriptor layout, but the layout itself is only validated here by
+# structural invariants; nothing proves every version in that range shares it.
+# Reading is therefore opened to the range, while appending text stays pinned to
+# the one version whose round trip this repository actually tests.
+PARSE_VERSIONS = YSCM_PARSE_VERSIONS
+WRITE_VERSION = 482
+
+
 class Scenario:
     def __init__(self, raw, commands, key):
-        if len(raw) > 64 << 20 or raw[:4] != b"YSTB" or struct.unpack_from("<I", raw, 4)[0] != 482:
-            raise ValueError("expected bounded v482 YSTB")
+        if len(raw) > 64 << 20 or raw[:4] != b"YSTB":
+            raise ValueError("expected bounded YSTB")
+        self.version = struct.unpack_from("<I", raw, 4)[0]
+        if self.version not in PARSE_VERSIONS:
+            raise ValueError(f"YSTB version {self.version} is outside 234..490")
         self.plain = toggle_ybn_sections(raw, key)
         self.key = key
         self.literal_eval = any(name == "_" and attrs and attrs[0][1] == b"\x03\0"
@@ -81,6 +93,8 @@ class Scenario:
         return self.values[offset:offset + size]
 
     def serialize(self, changes):
+        if self.version != WRITE_VERSION:
+            raise ValueError(f"YSTB v{self.version} is read-only; text append is verified for v{WRITE_VERSION} only")
         if set(changes) - set(range(len(self.attrs))) or set(changes) & self.control_targets:
             raise ValueError("unknown changed descriptor")
         prefix = bytearray(self.plain[:self.value_start])
@@ -100,11 +114,15 @@ class Scenario:
         return toggle_ybn_sections(plain, self.key)
 
 
-def commands_from(ysc):
+def commands_from(ysc, version=None):
+    """Parse YSCM; ``version`` pins the dictionary to a scenario's own version."""
     if len(ysc) > 1 << 20:
         raise ValueError("YSCM exceeds budget")
     commands = read_command_list(ysc, allow_message_tail=True)
-    if struct.unpack_from("<I", ysc, 4)[0] != 482:
+    found = struct.unpack_from("<I", ysc, 4)[0]
+    if found not in PARSE_VERSIONS:
+        raise ValueError(f"YSCM version {found} is outside 234..490")
+    if version is not None and found != version:
         raise ValueError("YSCM version mismatch")
     return commands
 
@@ -181,10 +199,22 @@ def _rows(scenario, profile):
     return rows, locations
 
 
+def ystb_version(raw):
+    """Return the YSTB version word for detection/reporting; bounded, no decode."""
+    if not isinstance(raw, bytes) or len(raw) < 32 or raw[:4] != b"YSTB":
+        raise ValueError("expected YSTB header")
+    version = struct.unpack_from("<I", raw, 4)[0]
+    if version not in PARSE_VERSIONS:
+        raise ValueError(f"YSTB version {version} is outside 234..490")
+    return version
+
+
 def export_script(raw, ysc, profile=Profile()):
-    s = Scenario(raw, commands_from(ysc), profile.key)
+    version = ystb_version(raw)
+    s = Scenario(raw, commands_from(ysc, version), profile.key)
     rows, locations = _rows(s, profile)
-    manifest = make_manifest(engine="yuris", variant="482-word-raw", reference="yuris_text/2",
+    variant = "482-word-raw" if version == WRITE_VERSION else f"{version}-word-raw-readonly"
+    manifest = make_manifest(engine="yuris", variant=variant, reference="yuris_text/2",
                              sources={"member.ybn": raw, "ysc.ybn": ysc}, rows=rows, locators=locations,
                              encoding="utf-8", settings=profile.settings(),
                              name_policies=["writable" if "name" in r else "absent" for r in rows])
@@ -192,7 +222,15 @@ def export_script(raw, ysc, profile=Profile()):
 
 
 def rebuild_script(raw, ysc, translated, manifest, profile=Profile()):
-    commands = commands_from(ysc)
+    version = ystb_version(raw)
+    if version != WRITE_VERSION:
+        raise ValueError(f"YSTB v{version} is read-only; rebuild requires v{WRITE_VERSION}")
+    if any(not isinstance(value, str) or not value for value in
+           (manifest.get("engine", {}).get("variant"), manifest.get("engine", {}).get("reference"))):
+        raise ValueError("manifest engine block is missing")
+    if manifest["engine"]["variant"] != "482-word-raw":
+        raise ValueError("manifest was produced by a read-only variant")
+    commands = commands_from(ysc, version)
     scenario = Scenario(raw, commands, profile.key)
     rows, locations = _rows(scenario, profile)
     _, expected = export_script(raw, ysc, profile)

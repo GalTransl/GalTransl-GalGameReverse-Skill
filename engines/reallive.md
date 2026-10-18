@@ -1,20 +1,30 @@
-# RealLive：文本 token 与换行指令片段
+# RealLive：SEEN 容器、文本 token 与换行指令片段
 
 ## 识别与适用范围
 - GARbro 的 `ArcFormats/RealLive` 目录同时收录 Siglus、AVG32 和 Flix，源码目录名不能作为本引擎身份。`Scene.pck` 路线见 [Siglus](siglus.md)。
 - RealLive 的完整剧本不是“找到字符串再替换”的文本文件。
 - 来源处理的是已经准备好的 `.rl` 剧本字节。
 - SEEN 等外层封装、解密/解压和 VM 指令需要各自的结构阶段。
-- 本页只给出引号文本编码与函数调用换行的真实片段算法。
+- 本页给出 SEEN 容器的 section 还原，以及引号文本编码与函数调用换行的片段算法。
 - 不声称能识别整个 RealLive 文件或重建所有 VM 地址。
 - 任意扩展名、正则命中日文、引号成对都不能替代 VM 边界证据。
 
 ## 容器与剧本
 - 打包文件、压缩脚本和反汇编后的代码范围不是同一种输入。
 - 应由独立容器/剧本分析阶段取得有效代码与文本范围。
-- 本模块既不拆容器，也不运行外部转换器。
+- 文本 token 模块不拆容器；SEEN 外层由 [reallive_seen.py](../python/archives/reallive_seen.py) 处理。
+- 容器模块只还原 section 字节，不做 VM 反汇编、地址重定位或文本回填。
 - 生成的片段只有安装到合法指令位置才有意义。
 - 未修复地址前不能将变长片段写进游戏副本并宣称完成。
+
+## SEEN 容器
+- 头部 80000 字节；参考实现按 5000 条 `(u32 offset, u32 size)` 读取，`size` 为 0 的是空槽，头部其余字节在参考实现中未使用。
+- section 内 `+32` 为原样前缀长度，`+36` 为解压后长度（0 表示尾段不压缩），`+40` 为使用外部 `KeyTable.mem` XOR 的字节数。
+- 压缩尾位于 `offset + prefix`，先跳过 8 字节流头；控制位低位优先，1 为字面量，0 为 u16 回溯（低 4 位加 2 为长度，高 12 位为距离）。
+- 解压后偏移 256..512（含）再与固定 16 字节表 XOR；窗口取自参考条件 `(uint)(index - 256) > 256`，尚未用真实样本核对。
+- 密钥表由调用方提供；section 声明加密而未提供密钥时报错，不从固定路径读取 `KeyTable.mem`。
+- `lz_compress` 是合法的字面量/回溯编码器，供重封包使用；不声称与原始压缩器的选择一致。
+- `read_section` 输出前缀加解压明文，不解释 VM 指令。
 
 ## 源码依据
 - 仓库：VNTextPatch-net8，许可 MIT。
@@ -24,14 +34,20 @@
 - 消息拼接依据：同目录 `RealLiveScript.cs` 的 `EncodeMessage`。
 - 完整来源先反汇编收集 `_textRanges/_addressOffsets`。
 - 完整写入最后对地址列表执行重定位，本模块没有伪装该能力。
+- SEEN 容器来源：翻译肋手 v4.9D 的 `WindowsFormsApplication1.Archive.RealLive.ArcSeen`。
+- 移植剔除调试弹窗、硬编码的 section 索引和原地改写文件缓冲区的做法。
 
 ## Python 接口
-- 模块：[reallive.py](../python/engines/reallive.py)。
+- 文本模块：[reallive.py](../python/engines/reallive.py)。
 - `quote_text(text) -> bytes` 构造单个非空 CP932 引号 token。
 - `unquote_text(data) -> str` 只读取此有限 token 子集。
 - `assemble_message(message, name=None) -> bytes` 构造局部消息片段。
 - `LINE_BREAK` 是经过来源参数核对的八字节换行调用。
-- 任何接口均不读写磁盘、不导入 VM 或来源库。
+- 容器模块：[reallive_seen.py](../python/archives/reallive_seen.py)。
+- `open_seen(data) -> SeenArchive` 建立非空 section 表（`index`、`offset`、`size`）。
+- `read_section(data, section, key_table=None) -> bytes` 还原单个 section 载荷。
+- `lz_decompress(stream, unpacked_size)` 与 `lz_compress(payload)` 为流级接口。
+- 任何接口均不读写磁盘、不导入 VM 或来源库；密钥表由调用方传入。
 
 ## 使用示例
 ```python
@@ -77,7 +93,7 @@ fragment = assemble_message("一行目\n二行目", name="名前")
 ## 部署缺口
 - 未完成 RealLiveDisassembler 的 opcode/表达式语法。
 - 未完成所有分支、调用、选择项及地址来源识别。
-- 未完成代码基址映射、地址字段更新与封装重建。
+- 未完成代码基址映射、地址字段更新与 SEEN 封装重建。
 - 全 VM 地址绝不能靠 regex 字符串替换修复。
 - 当前接口只为将来的完整结构工具提供可测组装单元。
 
@@ -86,4 +102,6 @@ fragment = assemble_message("一行目\n二行目", name="名前")
 - 核对换行调用的精确八字节布局及消息片段计数。
 - 覆盖非法姓名、NUL、孤立转义、缺闭引号与截断字节。
 - 测试文件：[test_engines_secondary.py](../tests/test_engines_secondary.py)。
-- 无真实 VM 运行或游戏启动验证，不能以测试通过宣称整引擎支持。
+- SEEN 测试覆盖 section 表、字面量与回溯的 LZ 往返、密钥表 XOR、256..512 窗口、越界与截断拒绝。
+- SEEN 测试文件：[test_reallive_seen.py](../tests/test_reallive_seen.py)。
+- 无真实 SEEN 文件、VM 运行或游戏启动验证，不能以测试通过宣称整引擎支持。

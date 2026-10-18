@@ -16,10 +16,22 @@
 - 每条索引的名称长度、名称字节及 offset/size 都参与解包。
 - 名称字节按**有符号** byte 累加得到 key，解码 offset/size。
 - 成员头部分字节另用 `size/8+0x22` 派生 key 处理，再 zlib 解压。
-- 上述仅用于确定容器层与脚本层不同，不是本 leaf 的实现范围。
-- 本 Python 不解 NEKOPACK，不依赖 GARbro，也不重新封包该容器。
+- 容器层现由 [nekopack.py](../python/archives/nekopack.py) 独立实现，见下节；脚本层不从容器推断。
 - 应先保留提取后成员的完整相对路径与加解密阶段记录。
 - 仅有 `.txt` 或 NEKOPACK 字样不足以证明成员是 ADVSCRIPT2。
+
+## NEKOPACK4 容器
+- 头部 14 字节：`NEKOPACK4`、模式字节 `A`(0x41) 或 `S`(0x53)、偏移 10 的 `u32` 索引长度。
+- 模式 `A` 索引自 14 起；模式 `S` 自 10 起，且索引区后再有 12 字节才到成员数据。
+- 索引记录：`u32` 名称长度（含一个结尾 NUL；0 结束索引）、CP932 名称、`u32` offset、`u32` size。
+- offset 与 size 都 XOR 同一个 key：名称字节（含 NUL）的**有符号**求和；NUL 贡献 0，所以两种写法等价。
+- 成员前四字节再 XOR 滚动 key `size // 8 + 34`（每字节左移 3 位，按 32 位截断），其后是 zlib 流，末尾 `u32` 为解压后长度。
+- `size` 包含尾部 4 字节，不含头部那 4 字节的异或结果之外的开销。
+- `read_member` 要求解压结果长度与尾字段一致、流正好结束且无尾随数据。
+- `build_pak` 只写模式 `A`：保留调用方给定名称顺序，压缩级别 9，然后重新打开并逐成员比对。
+- 模式 `S` 只读：参考实现的打包路径未生成该变体，不按推测写回。
+- 名称宽度上限 256、条数上限 100000；越界一律报错。
+- 不做：成员路径层级（参考实现只取文件名）、名称重名检测之外的排序、`.txt` 之外的脚本语义。
 
 ## 命令定位算法
 - [extract_fields](../python/engines/nekosdk.py#L31) 首先校验脚本头。
@@ -67,23 +79,30 @@
 
 ## 调用示意
 ```python
+from python.archives.nekopack import build_pak, open_pak, read_member
 from python.engines import nekosdk
-fields = nekosdk.extract_fields(script_bytes)
+
+archive = open_pak(pak_bytes)
+script = read_member(pak_bytes, archive.entries[0])
+fields = nekosdk.extract_fields(script)
 # 筛选 name/message；选择项不在 fields 中。
-result_bytes = nekosdk.replace_fields(script_bytes, {verified_field: encoded_translation})
+result = nekosdk.replace_fields(script, {verified_field: encoded_translation})
+rebuilt = build_pak({"script.txt": result})
 ```
 - 空 fields 不等于该游戏没有文本；可能命令版本不同。
 - 输入/输出均无文件访问，公共层负责安全写盘和归档。
 
 ## 部署与缺口
-- 完成局部修改后交给对应 NEKOPACK writer 或经证实的 loose-file 覆盖流程。
+- 完成局部修改后用 `build_pak` 重建容器；成员顺序与名称必须与原始索引一致，否则游戏可能找不到资源。
 - 本页没有提供通用补丁包名称或保证免封包可运行。
 - 源未处理的选择项需要独立调查，不能交付时省略此事实。
 - 测试合成了 display 命令、空隙、name/message 与不透明 choice 尾部。
 - 验证变长时两个 length 正确，choice 原字节不丢，no-op 字节一致。
 - 测试还拒绝错误 magic、超界长度和内嵌 NUL。
-- 无商业游戏样本、实际引擎运行或原容器 writer 测试。
-- 未实现日志/选择完整语义、NEKOPACK 封包、未知命令重定位和字库修改。
+- 容器测试覆盖模式 A 往返、名称 checksum、成员滚动 key、模式 S 索引边界与越界拒绝：
+  见 [test_neko_age_archives.py](../tests/test_neko_age_archives.py)。
+- 无商业游戏样本、实际引擎运行或真实容器往返验证。
+- 未实现日志/选择完整语义、模式 S 写回、未知命令重定位和字库修改。
 
 ## 来源与许可
 - SExtractor commit `8d8d976fd04ae54e7c677705af937273d04a376a`。
@@ -91,5 +110,7 @@ result_bytes = nekosdk.replace_fields(script_bytes, {verified_field: encoded_tra
 - 另核实 `src/engine.ini` 对选择项及 CRLF 的警告。
 - [固定源码](https://github.com/satan53x/SExtractor/blob/8d8d976fd04ae54e7c677705af937273d04a376a/src/extract_NekoSDK.py)。
 - 容器线索：GARbro-Mod `bc26d991ef5cdc0e1ecb32122ee9a48c3375750c` 的 `ArcFormats/NekoSDK/ArcPAK.cs`。
+- 容器实现另参考翻译肋手 v4.9D 的 `GameRes.NEKOSDK.ArcPAK`（GARbro 派生），独立改写为有界解析；
+  其 `Pack` 写入的固定索引长度占位值不复制，由本模块按实际索引长度计算。
 - GARbro 文件带 MIT 许可头；Python 改编按 SExtractor GPLv3 标 GPL-3.0-only。
 - 详细验证与阶段清单见 [provenance](../provenance/sextractor-core.json)。
