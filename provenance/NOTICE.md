@@ -51,6 +51,18 @@ BGI 归档/DSC、标准 V1 扫描与工作流参考 GARbro-Mod 的 `ArcFormats/E
 
 rUGP 的 ReadEncrypted 编解码与候选扫描参考 huang5-png/rugp-extractor 的 MIT 声明；作者原通知为 `huang5-png & Pair AI Assistant`。来源未附独立 LICENSE，保留源码/README 的明确许可证据，并随包提供标准 MIT 条款及作者归属，见 [来源与改动](rugp-sources.json)、[MIT 通知](licenses/MIT-rugp-extractor.txt)。同时保留已有 GARbro 块格式资料的 morkt 归属。吸收范围不包含完整 VM、语义回填或归档重封包能力声明。
 
+### TJS2 字节码阅读
+
+TJS2100 的指令编码、条件标志和编译器布局参考 krkrz 的 `tjs2/tjsDisassemble.cpp`、`tjs2/tjsInterCodeGen.cpp` 与 `tjs2/tjsInterCodeExec.cpp`。krkrz 使用日文 BSD 三条款式许可（GitHub 标记为 NOASSERTION），版权与全文随包保存为 [BSD-3-Clause-krkrz.txt](licenses/BSD-3-Clause-krkrz.txt)；实现为独立的 Python 重建，没有逐行转译 C++。
+
+`crate-1556/tjs2-decompiler` 未声明任何许可证。它只作为输出形态和已知信息损失的行为参考，未复制、未随包分发其实现；本项目的有界结构化逻辑和拒绝规则独立编写。精确提交与采用范围见 [TJS 来源记录](kirikiri-tjs.json)。验证仅覆盖合成字节码，不代表真实游戏脚本可完整反编译。
+
+### Hx 名称提示与候选顺序
+
+Hx 名称提示的分阶段顺序（启动 TJS、TJS 全字符串池、场景列表、纯文本、PBD 图层、TLGref 字符串）、提示清洗与扩展名/目录变体、以及 `(path_hash, file_hash)` 歧义拒绝规则参考 Cxdec_Tools 的 MIT 实现；没有复制代码，Python 侧为独立实现。精确提交与采用范围见 [Kirikiri 算法来源](kirikiri-sources.json)，MIT 全文见 [MIT-Cxdec_Tools.txt](licenses/MIT-Cxdec_Tools.txt)。
+
+名称哈希域/mediaName 的取值、扩展名补全位置和 CG 标签/差分映射的行为观察参考 cxdec-hxv4-static-analysis；该仓库未声明许可证，只采纳格式观察，未复制代码。详见 [Kirikiri 算法来源](kirikiri-sources.json) 中的同名条目。
+
 ## 不随包提供的内容
 
 游戏专有资源、可执行文件、私有密钥、完整上游工作树、.NET BinaryFormatter `Formats.dat`、GUI或 native `.pyd`。如格式需要用户游戏的辅助表或授权获取的密钥，调用者必须显式提供，不会后台下载或猜测成功。

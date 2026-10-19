@@ -45,7 +45,7 @@ def parse(data):
     pools[3] = []
     for _ in range(p.count()): pools[3].append(p.take(p.count()*2).decode('utf-16le')); p.align()
     pools[4] = []
-    for _ in range(p.count()): pools[4].append(p.take(p.count()).hex()); p.align()
+    for _ in range(p.count()): pools[4].append(p.take(p.count())); p.align()
     if p.at != len(p.data): raise ValueError('TJS DATA trailing bytes')
     p = Reader(r.chunk(b'OBJS')); top = p.num(); objects = []
     for ident in range(p.count()):
@@ -66,8 +66,12 @@ def parse(data):
             else: raise ValueError('unknown TJS variant')
         p.take(p.count()*4); p.take(p.count()*8)
         if p.at-start not in (declared, declared-8): raise ValueError('TJS object length')
-        name = pools[3][header[1]] if header[1] >= 0 else None
-        objects.append(dict(id=ident,name=name,parent=header[0],code=code,constants=constants))
+        name = pools[3][header[1]] if 0 <= header[1] < len(pools[3]) else None
+        objects.append(dict(id=ident,name=name,parent=header[0],code=code,constants=constants,
+            context=header[2],max_variable=header[3],variable_reserve=header[4],
+            max_frame=header[5],arg_count=header[6],unnamed_arg_base=header[7],
+            collapse_base=header[8],prop_setter=header[9],prop_getter=header[10],
+            super_getter=header[11]))
     if p.at != len(p.data) or r.at != len(data): raise ValueError('TJS trailing bytes')
     if not 0 <= top < len(objects): raise ValueError('TJS top object')
     return top, objects
@@ -98,8 +102,10 @@ def instructions(code):
         args = code[at+1:at+size]; out.append((at,name,args)); at += size
     starts = {at for at,_,_ in out}
     for at,name,args in out:
-        if name in ('JF','JNF','JMP','ENTRY') and at+args[0] not in starts:
-            raise ValueError('TJS branch is not an instruction boundary')
+        if name in ('JF','JNF','JMP','ENTRY'):
+            target = at+args[0]
+            if target != len(code) and target not in starts:
+                raise ValueError('TJS branch is not an instruction boundary')
     return out
 
 

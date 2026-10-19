@@ -68,6 +68,18 @@ class HxTests(unittest.TestCase):
         bad=dict(keys,index_b=bytes(32))
         with self.assertRaises((ValueError,zlib.error)):read_index(io.BytesIO(data),bad)
 
+    def test_directory_candidates_keep_trailing_slash(self):
+        entry = dict(name_hash=name_hash('main.ks.scn'), path_hash=path_hash('scn/'))
+        result = resolve([entry], ['main.ks.scn'], ['scn/'])[0]
+        self.assertEqual(result['name'], 'main.ks.scn')
+        self.assertEqual(result['path'], 'scn/')
+        with self.assertRaises(ValueError):
+            resolve([entry], [], ['../'])
+        named = dict(name_hash=name_hash('main.ks.scn', ''), path_hash=path_hash('scn/', ''))
+        self.assertEqual(resolve([named], ['main.ks.scn'], ['scn/'], '')[0]['name'], 'main.ks.scn')
+        self.assertIsNone(resolve([named], ['main.ks.scn'], ['scn/'])[0].get('name'))
+        self.assertEqual(resolve([named], ['scn/main.ks.scn'], ['scn/'], '')[0]['name'], 'main.ks.scn')
+
     def test_malformed_objects_and_static_sources(self):
         for data in (b'\x81\xff\xff\xff\xff',b'\3\0\0\0\5a',b'\0trailing'):
             with self.assertRaises(ValueError):deserialize(data)

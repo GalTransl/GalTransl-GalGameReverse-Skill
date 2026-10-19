@@ -1128,7 +1128,7 @@
     },
     {
       "id": "kirikiri",
-      "title": "Kirikiri / KAG：有限 KS 文本往返",
+      "title": "Kirikiri / KAG：有限 KS 文本往返与 TJS2 字节码阅读",
       "aliases": [
         "KiriKiri",
         "KAG",
@@ -1138,7 +1138,11 @@
       "document": "engines/kirikiri.md",
       "python_references": [
         "python/archives/xp3.py",
-        "python/engines/kirikiri.py"
+        "python/engines/kirikiri.py",
+        "python/engines/kirikiri_tjs_inspect.py",
+        "python/engines/kirikiri_tjs_decompile.py",
+        "python/engines/kirikiri_hxv4_candidates.py",
+        "python/engines/kirikiri_hxv4_tables.py"
       ],
       "public_symbols": {
         "python/archives/xp3.py": [
@@ -1150,6 +1154,25 @@
           "Span",
           "kag_spans",
           "patch_kag"
+        ],
+        "python/engines/kirikiri_tjs_inspect.py": [
+          "parse",
+          "instructions",
+          "disassemble"
+        ],
+        "python/engines/kirikiri_tjs_decompile.py": [
+          "decompile",
+          "strings",
+          "info"
+        ],
+        "python/engines/kirikiri_hxv4_candidates.py": [
+          "collect",
+          "write_candidates"
+        ],
+        "python/engines/kirikiri_hxv4_tables.py": [
+          "candidate_names",
+          "scene_candidates",
+          "diff_map_candidates"
         ]
       },
       "scope": "version/stage-limited references; read the engine page",

@@ -1,0 +1,31 @@
+{
+  "scope": "TJS2100 bytecode reading only; no game assets, scripts, or per-game validation records",
+  "references": [
+    {
+      "repository": "krkrz",
+      "commit": "fd5c4baa6a2ef5978db1bd043634351f48667daf",
+      "license": "BSD-3-Clause-style Kirikiri license (Japanese text; GitHub reports NOASSERTION)",
+      "license_file": "provenance/licenses/BSD-3-Clause-krkrz.txt",
+      "files": [
+        "tjs2/tjsDisassemble.cpp",
+        "tjs2/tjsInterCodeGen.cpp",
+        "tjs2/tjsInterCodeExec.cpp"
+      ],
+      "use": "Instruction encodings and operand layouts, condition-flag semantics, and compiler-emitted control-flow shapes. Reimplemented independently in Python; no source text copied.",
+      "not_copied": [
+        "no C++ source is bundled or translated line by line",
+        "no game scripts or decompiled game output"
+      ]
+    },
+    {
+      "repository": "tjs2-decompiler",
+      "commit": "8b9c9b5932d9159ed7f3771441c6add944bd4eeb",
+      "license": "none declared",
+      "use": "Behavioural reference for output expectations and known unrecovable names only. The repository has no LICENSE, so it is not a porting source; no source was copied or bundled.",
+      "status": "reference_only_not_bundled"
+    }
+  ],
+  "implementation": "python/engines/kirikiri_tjs_inspect.py, python/engines/kirikiri_tjs_decompile.py",
+  "tests": "tests/test_kirikiri_tjs_inspect.py, tests/test_kirikiri_tjs_decompile.py",
+  "validation": "Synthetic bytecode fixtures only; no real game script and no runtime display verification."
+}

@@ -150,7 +150,7 @@ JIS 交付可将随包 [UIF x86 winmm.dll](assets/uif/README.md) 与配置一并
 | IKURA / MPX、ISF | [ikura](engines/ikura.md) |
 | Ivory / fAGS OCB | [ivory](engines/ivory.md) |
 | Kaguya：message.dat ver4/早期分块、TBLSTR 与 LINK6 容器 | [kaguya](engines/kaguya.md) |
-| Kirikiri / KAG：有限 KS 文本往返 | [kirikiri](engines/kirikiri.md) |
+| Kirikiri / KAG：有限 KS 文本往返与 TJS2 反编译阅读 | [kirikiri](engines/kirikiri.md) |
 | Leaf / KCAP、SDT | [leaf](engines/leaf.md) |
 | Livemaker：外部导出的 Original text CSV 方言 | [livemaker](engines/livemaker.md) |
 | Majiro：MJO 异或与文本 / Ruby 指令片段 | [majiro](engines/majiro.md) |

@@ -15,6 +15,7 @@
 | 已解码的简单 KS 文本，使用 `#名字`、`[r]`、`[ns/nse]` 等有限语法 | 本页的 [有限 KS 接口](#有限-ks-接口)，需要调用层完成编码、分组和封包 |
 | 完整解析后属于已支持的 PSB v2/v3 SCN | [统一 SCN 入口](#统一-scn-入口)，使用 `kirikiri_extract` |
 | XP3 含 `Hxv4` 扩展及哈希/内部 ID 名称 | [Hxv4 静态处理](kirikiri/hxv4.md)；已支持的 SCN 使用 `kirikiri_hxv4_text` |
+| 文件头为 `TJS2100\0` 的编译 TJS | [TJS2 反编译阅读](kirikiri/tjs.md)：先 `--mode strings` 定位常量，再尝试反编译；被拒绝的形状保留反汇编 |
 | TJS 字节码、加密内层 PSB、未知 KAG 宏或 SCN 结构 | 保留诊断，按 [新方言适配方法](kirikiri/workflow.md#适配新文本方言的方法) 补齐证据与读写规则 |
 
 `.ks` 不保证是文本，`.scn` 不保证属于已支持的 SCN 方言；XP3 签名只证明容器格式。`kirikiri_kag.py` 的词法分析也不等于完整对白提取，不能直接把 token 当作翻译 JSON。
@@ -34,6 +35,12 @@
 - 解开后再判断内容：SimpleCrypt 中的 KAG 文本按 [KAG 工作流](kirikiri/kag-text.md) 的语义 API 处理，TJS 源码仅静态读取；MDF 中的 PSB/TJS 按对应格式解析。包装头不能证明存在对白，不能把带 UTF-16 BOM 的文本交给 PSB parser。
 - 当前 CLI 不自动解开或恢复 SimpleCrypt。调用层必须保存原始包装字节及 mode，完成内部文本的 parser/writer 往返后，用同一 mode 重新包装，再解包复核文本和非文本结构；mode 2 重压缩不保证压缩字节完全一致。来源与算法差异见[出处记录](../provenance/kirikiri-sources.json)。
 - 这两种包装与 XP3 索引、独立过滤器、Hx 载荷过滤互不相干，不能互相代替；每一层的参数都要分别确认。
+
+## 编译 TJS：只读阅读
+
+[TJS 反编译模块](../python/engines/kirikiri_tjs_decompile.py) 读取 `TJS2100` 的 `DATA`/`OBJS`，把常见编译器布局还原为可读源码，并提供 `info`、`strings`、`disasm` 模式。它不重建字节码，也不能替代 SCN/KAG 的正文回填流程；编译脚本中的字符串是否可写，取决于是否存在对应 writer，而不是反编译是否成功。
+
+先核对源文件确实是编译字节码，再按 [TJS 页面](kirikiri/tjs.md) 列出字符串并阅读结构。反编译失败时保留对象名、地址和反汇编；不要按字符串字面搜索后直接改字节。
 
 ## XP3 索引与正文过滤
 
@@ -156,6 +163,6 @@ assert patched == '#Alice\r\n你好[r]world[l]\r\n'
 
 ## 验证与维护
 
-- 批处理回归：[test_kirikiri_extract.py](../tests/test_kirikiri_extract.py)、[多语言 SCN](../tests/test_kirikiri_multilang.py)、[类型化定位回写](../tests/test_kirikiri_structural.py)、[Hxv4 文本](../tests/test_kirikiri_hxv4_text.py)。有限 KS 回归位于 `tests/test_engines_primary.py`。
+- 批处理回归：[test_kirikiri_extract.py](../tests/test_kirikiri_extract.py)、[多语言 SCN](../tests/test_kirikiri_multilang.py)、[类型化定位回写](../tests/test_kirikiri_structural.py)、[Hxv4 文本](../tests/test_kirikiri_hxv4_text.py)、[Hx 候选表](../tests/test_kirikiri_hxv4_candidates.py)、[TJS 反编译](../tests/test_kirikiri_tjs_decompile.py)。有限 KS 回归位于 `tests/test_engines_primary.py`。
 - 新索引变体放归档适配器，密码放过滤器，KAG 标签放语义方言，SCN tuple 放共享 parser/writer；复用 manifest、导出和回填流程，不按游戏名新建脚本。
-- 出处与许可见 [Kirikiri 算法来源](../provenance/kirikiri-sources.json)；有限 KS 接口改编自 VNTextPatch-net8 的 MIT 实现，SCN 语义参考 msg-tool 的 GPL-3.0-or-later 实现。使用本 Skill 不需要访问这些外部仓库。
+- 出处与许可见 [Kirikiri 算法来源](../provenance/kirikiri-sources.json)与 [TJS 来源记录](../provenance/kirikiri-tjs.json)；有限 KS 接口改编自 VNTextPatch-net8 的 MIT 实现，SCN 语义参考 msg-tool 的 GPL-3.0-or-later 实现，TJS 指令语义参考 krkrz 的日文 BSD 三条款式许可。使用本 Skill 不需要访问这些外部仓库。

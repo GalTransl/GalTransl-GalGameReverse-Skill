@@ -28,6 +28,8 @@ class TjsInspectTests(unittest.TestCase):
     def test_calls_and_branch_targets(self):
         self.assertEqual(instructions([100,0,1,2,1,3,119])[0],(0,'CALLD',[0,1,2,1,3]))
         self.assertEqual(instructions([17,2,119])[-1],(2,'RET',[]))
+        # The compiler patches skip jumps to the end of the code area.
+        self.assertEqual(instructions([17,2])[0],(0,'JMP',[2]))
         for code in ([128],[1,2],[100,0,1,2,4],[17,1,119]):
             with self.assertRaises(ValueError): instructions(code)
 

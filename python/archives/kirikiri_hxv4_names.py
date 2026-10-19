@@ -14,13 +14,17 @@ from python.archives import kirikiri_xp3
 from python.common.safety import write_new_tree,Limits,validate_names
 
 
-def resolve(entries,names,paths=('',)):
+def resolve(entries,names,paths=('',),domain='xp3hnp'):
     nm=defaultdict(set);pm=defaultdict(set)
     for name in names:
-        validate_names([name]);nm[name_hash(name)].add(name)
+        validate_names([name])
+        leaf=name.replace('\\','/').rsplit('/',1)[-1]
+        if leaf:nm[name_hash(leaf,domain)].add(leaf)
     for path in paths:
-        if path:validate_names([path])
-        pm[path_hash(path)].add(path)
+        if path:
+            # Directory hashes include the trailing slash; validation works on components.
+            validate_names([path[:-1] if path.endswith('/') else path])
+        pm[path_hash(path,domain)].add(path)
     result=[]
     for e in entries:
         item={k:v for k,v in e.items() if k!='key'}
@@ -32,7 +36,7 @@ def resolve(entries,names,paths=('',)):
     return result
 
 
-def inspect(archive,exe,names,paths=('',)):
+def inspect(archive,exe,names,paths=('',),domain='xp3hnp'):
     exe=Path(exe);archive=Path(archive)
     if exe.stat().st_size>32<<20:raise ValueError('EXE budget')
     raw=exe.read_bytes();packages=candidates(raw);accepted=[]
@@ -43,10 +47,10 @@ def inspect(archive,exe,names,paths=('',)):
         except (ValueError,UnicodeError,zlib.error):continue
     unique={json.dumps(p,sort_keys=True):(p,r) for p,r in accepted}
     if len(unique)!=1:raise ValueError('need one uniquely validated static key candidate')
-    package,r=next(iter(unique.values()));entries=resolve(r['files'],names,paths)
+    package,r=next(iter(unique.values()));entries=resolve(r['files'],names,paths,domain)
     with archive.open('rb') as stream:sha=hashlib.file_digest(stream,'sha256').hexdigest()
     report={'schema':'kirikiri-hxv4-name-evidence/1','archive':archive.name,'source_sha256':sha,
-            'exe':exe.name,'exe_sha256':hashlib.sha256(raw).hexdigest(),'key_package':package,
+            'exe':exe.name,'exe_sha256':hashlib.sha256(raw).hexdigest(),'domain':domain,'key_package':package,
             'index_entries':len(entries),'index_mapped':r['mapped'],'names_resolved':sum('name' in e for e in entries),
             'paths_resolved':sum('path' in e for e in entries),'entries':entries,
             'validation':'Static PE resources -> BRES -> candidate config -> ChaCha/zlib -> bounded Hx object -> exact candidate hashes',
@@ -59,7 +63,7 @@ def main():
     parser.add_argument('archive',type=Path);parser.add_argument('--exe',required=True,type=Path)
     parser.add_argument('--names',action='append',type=Path,default=[],help='BOM-aware UTF-8/UTF-16 candidate filenames, one per line; supplied hashes are not trusted')
     parser.add_argument('--candidate-archive',action='append',type=Path,default=[],help='standard/eliF XP3 whose index contains plaintext candidate names')
-    parser.add_argument('--paths',nargs='*',default=['']);parser.add_argument('--output',required=True,type=Path)
+    parser.add_argument('--paths',nargs='*',default=['']);parser.add_argument('--domain',default='xp3hnp',help='hash domain/media name from STARTUP.TJS; empty string if the sample uses no extra string');parser.add_argument('--output',required=True,type=Path)
     args=parser.parse_args();names=set();sources=[]
     for path in args.names:
         if path.stat().st_size>8<<20:raise ValueError('candidate text budget')
@@ -72,7 +76,7 @@ def main():
             stream.seek(0);sha=hashlib.file_digest(stream,'sha256').hexdigest()
         sources.append({'path':str(path),'sha256':sha,'use':'index names only; payloads not used'})
     if len(names)>100000:raise ValueError('name candidate budget')
-    report=inspect(args.archive,args.exe,names,args.paths);report['candidate_sources']=sources
+    report=inspect(args.archive,args.exe,names,args.paths,args.domain);report['candidate_sources']=sources
     matches=set()
     for e in report['entries']:
         for field in ('name','path'):

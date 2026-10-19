@@ -89,8 +89,9 @@
     },
     {
       "repository": "cxdec-hxv4-static-analysis",
+      "commit": "3c6dee001df011fa7ed557c7463635c6f67698f6",
       "license": "none declared; repository root has no license file",
-      "use": "Read-only behavioural cross-check for the XP3 index pointer-block variant (the standard index-offset field holds 0x17 and the real offset is the qword at 0x20) and for Emote resource-bearing PSB section/table layout. Only format observations were re-implemented, from this package's own GARbro excerpt and the public PE/XP3 container layouts; no source was copied and no runtime dependency is created."
+      "use": "Read-only behavioural cross-check for the XP3 index pointer-block variant (the standard index-offset field holds 0x17 and the real offset is the qword at 0x20), Emote resource-bearing PSB section/table layout, and Hx name-recovery details: mediaName/hash domain from STARTUP.TJS, UTF-16LE name + domain without separator, filename extension completion above the storage layer, CG tag/diff-map semantics, and manifest lookup by path/file hash. Only format observations were re-implemented; no source was copied and no runtime dependency is created."
     },
     {
       "repository": "msg-tool",
@@ -126,6 +127,22 @@
       ],
       "bundled_excerpt": "engines/garbro/ArcFormats/Emote/ArcPSB.md",
       "use": "Resource-bearing Emote PSB header guards, name-table walk, object-tree tags, payload table and container naming (GetChunks/GetLayers/GetTextures). Bounded read-only Python reader with payload export; no layer/icon composition, no PSB body decryption and no writer."
+    },
+    {
+      "repository": "Cxdec_Tools",
+      "commit": "c25804340610bdfb9e971e3b6bd23b8abd52797a",
+      "license": "MIT",
+      "copyright": "Copyright (c) 2026 bfloat16",
+      "files": [
+        "src/process/common.rs",
+        "src/process/tjs.rs",
+        "src/process/scn.rs",
+        "src/process/pbd.rs",
+        "src/process/tlg.rs",
+        "src/process/script.rs",
+        "src/pipeline.rs"
+      ],
+      "use": "Behavioural reference for Hx name-hint staging, token cleaning and extension/directory variants, scene-list and PBD/TLGref candidate sources, and unambiguous (path_hash, file_hash) matching. No source copied; the Python implementation remains independent."
     }
   ]
 }
