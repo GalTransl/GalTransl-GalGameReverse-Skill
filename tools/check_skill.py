@@ -24,6 +24,7 @@ LOCAL_PATH = re.compile(r"(?:[A-Za-z]:[\\/]Users[\\/](?=[\w .-]+[\\/])|/c/Users/
 # Keep exceptions scoped to modules and imports lazy and ImportError-safe.
 OPTIONAL_RUNTIME_IMPORTS = {
     "python/archives/nexas.py": {"zstandard"},
+    "python/engines/kirikiri_tlg.py": {"PIL"},
     "python/engines/yuris_ydg.py": {"PIL"},
     "python/engines/yuris_font.py": {"PIL", "fontTools"},
 }

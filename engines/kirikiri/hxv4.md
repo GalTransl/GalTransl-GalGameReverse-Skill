@@ -63,9 +63,10 @@ python -m python.archives.kirikiri_hxv4_archive "游戏/scn.xp3" --exe "游戏/�
 
 - `--names` 接受 UTF-8 或带 BOM 的 UTF-16，一行一个候选名；`--candidate-archive` 只从标准/eliF 索引收集名称，不采用补丁正文。参数可重复，目录候选用 `--paths`。
 - `--domain` 指定哈希域/media name，默认 `xp3hnp`；换样本时从 `STARTUP.TJS` 的 `CompoundStorageMedia` 读取，实际可能为空或其它字符串。路径和文件名必须使用同一个域。
-- `kirikiri_hxv4_candidates` 只读小成员（默认单成员 8 MiB、累计 384 MiB），从 PSB/TJS 常量、SimpleCrypt 文本表（场景列表、差分映射）、普通表 token 和 `psb://` 引用中收集候选，输出 `candidates.txt` 与 `report.json`。候选只对源包核验；跨包使用时仍由目标包的名称哈希决定是否命中。
+- `kirikiri_hxv4_candidates` 只读小成员（默认单成员 8 MiB、累计 384 MiB），从 PSB/TJS 常量、MDF 内 PSB、SimpleCrypt 文本表（场景列表、差分映射、分辨率表）、普通表 token、`psb://` 引用和 Ogg `TITLE` 注释中收集候选，输出 `candidates.txt` 与 `report.json`。候选只对源包核验；跨包使用时仍由目标包的名称哈希决定是否命中。
 - 候选扫描报告中的 `scan_complete=false`、`skipped_oversize_members`、`skipped_unmapped_members` 必须如实保留；跨包合并 `candidates.txt` 后再对目标包跑 `kirikiri_hxv4_names`。目录默认预注册常见 Kirikiri 目录，也可用 `--paths` 覆盖。
-- 多个源包分别扫描后合并去重即可；候选文件只是名字列表，跨包使用时仍由目标包的 `(path_hash, file_hash)` 决定是否命中。
+- 多个源包分别扫描后合并去重即可；候选文件只是名字列表，跨包使用时仍由目标包的 `(path_hash, file_hash)` 决定是否命中。候选上限为 50 万条、文本 16 MiB；超限时应缩小源包或拆分扫描，不能静默截断后宣称完整。
+- 表 token 会去掉 `100:`、`200:` 这类分辨率前缀，并尝试 `cg_`、`ev_`、`thum_` 等逻辑前缀的裸名；对已出现至少两次的 `prefix + 两位/三位数字 + 扩展名` 会向上下扩展数值序列。两类扩展都只产生候选，仍须逐条哈希核验。
 - 名称输出含 `report.json` 和 `HxNames.lst`，只记录哈希匹配的名称；名称报告必须对应同一源档案，已有映射仍重新核验。
 - 自动候选收集支持严格解析的 PSB v2/v3（含有界 MDF/zlib 外壳）和 TJS2100 常量，尝试原名及 `.ks.scn/.txt.scn` 形式；失败单独报告。
 - TJS 常量也可能引用 CSV/数据表；完整候选流程见下文[从 TJS 与数据表扩展候选](#从-tjs-与数据表扩展候选)。
@@ -101,7 +102,7 @@ TJS 常量引用 `.csv`、`.dat`、`.tjs` 等表名时，按名定位并解开�
 
 适用边界：
 
-- 当前候选扫描已覆盖 PSB/TJS 常量、SimpleCrypt 文本表/场景列表/差分映射、普通文本 token、`psb://` 引用、常见扩展名和默认目录；EXE 内嵌 `STARTUP.TJS` 独立扫描、PBD 图层和 TLGref/TLGqoi 二进制解析尚未接入，遇到这些来源需要按格式补解析器。
+- 当前候选扫描已覆盖 PSB/TJS 常量、MDF 内 PSB、SimpleCrypt 文本表/场景列表/差分映射/分辨率表、普通文本 token、`psb://` 引用、Ogg `TITLE`、逻辑前缀与数值序列、常见扩展名和默认目录；EXE 内嵌 `STARTUP.TJS` 独立扫描、PBD 图层和 TLGref/TLGqoi 二进制解析尚未接入，遇到这些来源需要按格式补解析器。
 - 只读取小体积脚本和表成员，避免为了找名字解密整包媒体；单成员 32 MiB、累计 384 MiB 的预算仍适用。
 - 表里没有的名字（纯图像、视频、Live2D 资源等）不会因为 TJS 反编译而出现；`names_resolved < index_entries` 时必须如实报告未解析范围。
 - TJS 反编译被拒绝不代表 `strings` 不可用；保留反汇编和常量清单，不要为了凑名字猜文件名。

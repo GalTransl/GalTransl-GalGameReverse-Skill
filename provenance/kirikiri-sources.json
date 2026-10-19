@@ -129,6 +129,17 @@
       "use": "Resource-bearing Emote PSB header guards, name-table walk, object-tree tags, payload table and container naming (GetChunks/GetLayers/GetTextures). Bounded read-only Python reader with payload export; no layer/icon composition, no PSB body decryption and no writer."
     },
     {
+      "repository": "GARbro-Mod",
+      "commit": "bc26d991ef5cdc0e1ecb32122ee9a48c3375750c",
+      "license": "MIT",
+      "copyright": "Copyright (C) 2014-2020 by morkt",
+      "files": [
+        "ArcFormats/KiriKiri/ImageTLG.cs"
+      ],
+      "upstream": "W.Dee TLG5/6 decoder, Copyright (C) 2000-2005 W.Dee",
+      "use": "TLG5 raw header, per-block channel marks, 4096-byte LZSS ring and per-line/per-channel delta composition. Python port decodes 3/4-channel TLG5 to RGBA PNG, writes lossless raw blocks with a matching block table, and rejects TLG6, TLG0 sds, indexed, QOI, mux and ref variants; no LZSS encoder."
+    },
+    {
       "repository": "Cxdec_Tools",
       "commit": "c25804340610bdfb9e971e3b6bd23b8abd52797a",
       "license": "MIT",

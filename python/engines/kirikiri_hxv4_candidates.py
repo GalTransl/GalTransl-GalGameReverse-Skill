@@ -12,14 +12,16 @@ import hashlib
 import json
 from pathlib import Path
 
-from python.archives.kirikiri_hxv4 import derive, read_index
+from python.archives.kirikiri_hxv4 import _inflate, derive, read_index
 from python.archives.kirikiri_hxv4_names import inspect, resolve
 from python.archives.kirikiri_hxv4_payload import Cipher, read_member
 from python.common.safety import Limits, write_new_tree
 from python.engines.kirikiri_hxv4_recover import script_names
+from python.engines.kirikiri_tjs_decompile import strings as tjs_strings
+from python.engines.kirikiri_psb import Psb
 from python.engines import kirikiri_hxv4_tables as tables
 
-MAX_NAMES = 100000
+MAX_NAMES = 500000
 DEFAULT_PATHS = (
     '', 'data/', 'system/', 'scenario/', 'scn/', 'image/', 'evimage/', 'fgimage/',
     'bgimage/', 'thum/', 'sound/', 'bgm/', 'voice/', 'video/', 'font/', 'plugin/',
@@ -37,7 +39,7 @@ def collect(archive, exe, *, domain='xp3hnp', paths=None,
     keys = derive(report['key_package'])
     cipher = Cipher(keys)
     names = set()
-    sources = {'tjs': 0, 'psb': 0, 'text': 0}
+    sources = {'tjs': 0, 'psb': 0, 'text': 0, 'ogg': 0}
     errors = []
     scanned = 0
     total = 0
@@ -64,9 +66,25 @@ def collect(archive, exe, *, domain='xp3hnp', paths=None,
             try:
                 if data[:8] == b'TJS2100\0':
                     hints = script_names(data)
+                    hints |= tables.token_candidates(
+                        value['text'] for value in tjs_strings(data))
                     sources['tjs'] += 1
-                elif data[:4] in (b'PSB\0', b'mdf\0'):
+                elif data[:4] == b'PSB\0':
                     hints = script_names(data)
+                    hints |= tables.token_candidates(Psb(data).strings)
+                    sources['psb'] += 1
+                elif data[:4] == b'OggS':
+                    hints = tables.ogg_title_candidates(data)
+                    if hints:
+                        sources['ogg'] += 1
+                elif data[:4] == b'mdf\0':
+                    hints = script_names(data)
+                    try:
+                        payload = _inflate(data[8:], int.from_bytes(data[4:8], 'little'), 32 << 20)
+                        if payload[:4] == b'PSB\0':
+                            hints |= tables.token_candidates(Psb(payload).strings)
+                    except ValueError:
+                        pass
                     sources['psb'] += 1
                 else:
                     hints = tables.candidate_names(data)
@@ -78,6 +96,7 @@ def collect(archive, exe, *, domain='xp3hnp', paths=None,
             names.update(hints)
             if len(names) > MAX_NAMES:
                 raise ValueError('Hx candidate budget')
+    names |= tables.series_candidates(names)
     return {
         'report': report,
         'index': index,

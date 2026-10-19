@@ -12,6 +12,7 @@
 |---|---|
 | 带 BOM 的 KAG 文本，宏语义符合 `nm/np/exlink` 方言 | [KAG 文本工作流](kirikiri/kag-text.md)，使用 `kirikiri_kag_extract` |
 | 成员头为 `fe fe <mode> ff fe` 或 `mdf\0` | 先解[脚本源码包装层](#脚本源码包装层simplecrypt-与-mdf)，再按内部内容分流 |
+| 成员头为 `TLG5.0\0raw\x1a`，3/4 通道 | [TLG5 图像转换](kirikiri/tlg.md)，使用 `kirikiri_tlg` 解码为 PNG；TLG6 与其它变体拒绝 |
 | 已解码的简单 KS 文本，使用 `#名字`、`[r]`、`[ns/nse]` 等有限语法 | 本页的 [有限 KS 接口](#有限-ks-接口)，需要调用层完成编码、分组和封包 |
 | 完整解析后属于已支持的 PSB v2/v3 SCN | [统一 SCN 入口](#统一-scn-入口)，使用 `kirikiri_extract` |
 | XP3 含 `Hxv4` 扩展及哈希/内部 ID 名称 | [Hxv4 静态处理](kirikiri/hxv4.md)；已支持的 SCN 使用 `kirikiri_hxv4_text` |
@@ -126,6 +127,19 @@ python -m python.engines.kirikiri_hxv4_text pack "提取目录" "新的打包目
 
 该入口静态读取 EXE 配置，不执行游戏代码；复用共享 SCN 契约，同时维护 Hx 成员身份与加密封包。不能用普通 `kirikiri_extract pack` 的明文中间包代替。名称恢复、非 SCN 资源、预算与认证要求详见 [Hxv4 子页](kirikiri/hxv4.md)。
 
+## TLG5 图像转换
+
+[解码模块](../python/engines/kirikiri_tlg.py)只支持 `TLG5.0\0raw\x1a` 的 3/4 通道版本，输出 RGBA PNG；可回写无损 raw 块（不生成 LZSS，文件通常更大），不支持 TLG6、`TLG0 sds`、`idx`、`qoi`、`mux`、`ref`。命令供 agent 执行：
+
+```text
+python -m python.engines.kirikiri_tlg info <文件.tlg>
+python -m python.engines.kirikiri_tlg convert <文件.tlg> <输出.png>
+python -m python.engines.kirikiri_tlg convert <目录> <新的输出目录>
+python -m python.engines.kirikiri_tlg encode <编辑后.png> <输出.tlg>
+```
+
+目录模式递归处理 `*.tlg`，输出目录必须不存在。`encode` 需要 Pillow 读取 PNG；解码路径只用标准库。格式布局、LZSS/差分还原、预算与验证状态见 [TLG5 子页](kirikiri/tlg.md)。
+
 ## 有限 KS 接口
 
 [语义区间模块](../python/engines/kirikiri.py) 接收已经正确解码的 `str`，不负责文件 I/O、编码探测或完整 TJS/KAG 宏解释。
@@ -163,6 +177,6 @@ assert patched == '#Alice\r\n你好[r]world[l]\r\n'
 
 ## 验证与维护
 
-- 批处理回归：[test_kirikiri_extract.py](../tests/test_kirikiri_extract.py)、[多语言 SCN](../tests/test_kirikiri_multilang.py)、[类型化定位回写](../tests/test_kirikiri_structural.py)、[Hxv4 文本](../tests/test_kirikiri_hxv4_text.py)、[Hx 候选表](../tests/test_kirikiri_hxv4_candidates.py)、[TJS 反编译](../tests/test_kirikiri_tjs_decompile.py)。有限 KS 回归位于 `tests/test_engines_primary.py`。
+- 批处理回归：[test_kirikiri_extract.py](../tests/test_kirikiri_extract.py)、[多语言 SCN](../tests/test_kirikiri_multilang.py)、[类型化定位回写](../tests/test_kirikiri_structural.py)、[Hxv4 文本](../tests/test_kirikiri_hxv4_text.py)、[Hx 候选表](../tests/test_kirikiri_hxv4_candidates.py)、[TJS 反编译](../tests/test_kirikiri_tjs_decompile.py)、[TLG5 解码](../tests/test_kirikiri_tlg.py)。有限 KS 回归位于 `tests/test_engines_primary.py`。
 - 新索引变体放归档适配器，密码放过滤器，KAG 标签放语义方言，SCN tuple 放共享 parser/writer；复用 manifest、导出和回填流程，不按游戏名新建脚本。
 - 出处与许可见 [Kirikiri 算法来源](../provenance/kirikiri-sources.json)与 [TJS 来源记录](../provenance/kirikiri-tjs.json)；有限 KS 接口改编自 VNTextPatch-net8 的 MIT 实现，SCN 语义参考 msg-tool 的 GPL-3.0-or-later 实现，TJS 指令语义参考 krkrz 的日文 BSD 三条款式许可。使用本 Skill 不需要访问这些外部仓库。

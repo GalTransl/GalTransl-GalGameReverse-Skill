@@ -66,7 +66,7 @@ def main():
     parser.add_argument('--paths',nargs='*',default=['']);parser.add_argument('--domain',default='xp3hnp',help='hash domain/media name from STARTUP.TJS; empty string if the sample uses no extra string');parser.add_argument('--output',required=True,type=Path)
     args=parser.parse_args();names=set();sources=[]
     for path in args.names:
-        if path.stat().st_size>8<<20:raise ValueError('candidate text budget')
+        if path.stat().st_size>16<<20:raise ValueError('candidate text budget')
         raw=path.read_bytes();encoding='utf-16' if raw[:2] in (b'\xff\xfe',b'\xfe\xff') else 'utf-8-sig'
         names.update(s for s in raw.decode(encoding).splitlines() if s)
         sources.append({'path':str(path),'sha256':hashlib.sha256(raw).hexdigest(),'use':'names only'})
@@ -75,7 +75,7 @@ def main():
             _,entries=kirikiri_xp3.read_index(stream);names.update(e.name.rsplit('/',1)[-1] for e in entries)
             stream.seek(0);sha=hashlib.file_digest(stream,'sha256').hexdigest()
         sources.append({'path':str(path),'sha256':sha,'use':'index names only; payloads not used'})
-    if len(names)>100000:raise ValueError('name candidate budget')
+    if len(names)>500000:raise ValueError('name candidate budget')
     report=inspect(args.archive,args.exe,names,args.paths,args.domain);report['candidate_sources']=sources
     matches=set()
     for e in report['entries']:

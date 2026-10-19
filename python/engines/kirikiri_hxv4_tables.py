@@ -12,7 +12,7 @@ from python.engines.kirikiri_simple_crypt import detect, unpack
 from python.common.safety import validate_names
 
 MAX_TEXT = 4 << 20
-MAX_TOKENS = 40000
+MAX_TOKENS = 300000
 BOM_LE = b'\xff\xfe'
 BOM_BE = b'\xfe\xff'
 
@@ -26,13 +26,14 @@ FILE_EXTENSIONS = (
 )
 TABLE_EXTENSIONS = (
     '.scn', '.txt', '.ks', '.csv', '.ini', '.png', '.tlg', '.dref', '.dpak',
-    '.ogg', '.opus', '.webm', '.psd', '.stand',
+    '.ogg', '.opus', '.webm', '.psd', '.stand', '.sinfo', '.pimg', '.psb',
+    '.stage', '.wav', '.jpg', '.webp',
 )
 IMAGE_EXTENSIONS = (
     '.dref', '.dpak', '.tlg', '.tlg5', '.tlg6', '.png', '.webp', '.jpg',
     '.jpeg', '.bmp', '.psd',
 )
-_SPLIT = re.compile(r'[,\t|]')
+_SPLIT = re.compile(r'[,\t|=:]')
 _QUOTED = re.compile(r'''["']([^"'\r\n]{1,180})["']''')
 _FILE_TOKEN = re.compile(r'''[A-Za-z0-9_./\\-]{2,180}\.[A-Za-z0-9]{1,8}''')
 _PSB_REF = re.compile(r'''psb://([^\s/]+)/([^\s]+)''', re.IGNORECASE)
@@ -77,6 +78,7 @@ def clean_token(token: str):
     if not isinstance(token, str):
         return None
     token = token.strip().strip('"\'`').strip()
+    token = re.sub(r'^\d+:', '', token)
     token = token.replace('\\', '/').lstrip('@')
     if '|' in token:
         token = token.split('|', 1)[0]
@@ -239,6 +241,133 @@ def text_candidates(text: str):
     for match in _FILE_TOKEN.finditer(sample):
         for name in name_variants(match.group(0), FILE_EXTENSIONS, expand=False):
             _add(out, name, seen)
+    return out
+
+
+def token_candidates(values, max_tokens=300000):
+    """Short literal tokens from scripts, expanded with runtime extensions.
+
+    Covers English UI names and short Japanese effect labels; long dialogue
+    lines are ignored before any extension expansion.  ASCII tokens are
+    processed first so a cap does not hide short asset identifiers.
+    """
+    tokens = []
+    for value in values:
+        token = value.strip().strip('"\'`').strip()
+        if not token or len(token) > 60 or not token.isprintable():
+            continue
+        if any(ch in token for ch in '\r\n\t?<>:"|*'):
+            continue
+        if '/' in token or '\\' in token:
+            token = token.replace('\\', '/').rsplit('/', 1)[-1]
+        if token:
+            tokens.append(token)
+    out = set()
+    seen = set()
+
+    def add(candidate):
+        try:
+            validate_names([candidate])
+        except ValueError:
+            return
+        _add(out, candidate, seen)
+
+    def stripped_variants(token):
+        values = [token]
+        for prefix in ('cg_', 'ev_', 'ev', 'thum_', 'image_', 'img_', 'bg_'):
+            if token.startswith(prefix) and len(token) > len(prefix):
+                remainder = token[len(prefix):]
+                values.append(remainder)
+                if prefix == 'cg_' and remainder.startswith('ev'):
+                    values.append(remainder[2:])
+        return values
+
+    for token in tokens:
+        if len(out) >= max_tokens:
+            break
+        if not re.fullmatch(r'[A-Za-z0-9_.\-@]+', token):
+            continue
+        for value in stripped_variants(token):
+            add(value)
+            for extension in ('.png', '.webp', '.jpg', '.tlg', '.ogg', '.opus', '.wav'):
+                add(value + extension)
+            stem = value.rsplit('.', 1)[0]
+            if stem != value:
+                for extension in ('.png', '.webp', '.jpg', '.tlg', '.ogg', '.opus', '.wav'):
+                    add(stem + extension)
+    for token in tokens:
+        if len(out) >= max_tokens:
+            break
+        if re.fullmatch(r'[A-Za-z0-9_.\-@]+', token):
+            continue
+        if len(token) > 24 or any(ch.isspace() for ch in token):
+            continue
+        add(token)
+        for extension in ('.png', '.webp', '.jpg'):
+            add(token + extension)
+    return out
+
+
+def ogg_title_candidates(data: bytes):
+    """TITLE comments from Ogg Vorbis data, expanded as audio names."""
+    if data[:4] != b'OggS':
+        return set()
+    at = data.find(b'\x03vorbis')
+    if at < 0:
+        return set()
+    at += 7
+    try:
+        vendor_length = int.from_bytes(data[at:at + 4], 'little')
+        at += 4 + vendor_length
+        count = int.from_bytes(data[at:at + 4], 'little')
+        at += 4
+    except (IndexError, ValueError):
+        return set()
+    titles = set()
+    for _ in range(min(count, 32)):
+        if at + 4 > len(data):
+            break
+        length = int.from_bytes(data[at:at + 4], 'little')
+        at += 4
+        value = data[at:at + length].decode('utf-8', errors='replace')
+        at += length
+        if '=' in value:
+            key, title = value.split('=', 1)
+            if key.lower() == 'title' and title.strip():
+                titles.add(title.strip())
+    out = set()
+    seen = set()
+    for title in titles:
+        for name in (title, title + '.ogg', title + '.opus', title + '.wav'):
+            try:
+                validate_names([name])
+            except ValueError:
+                continue
+            _add(out, name, seen)
+    return out
+
+
+def series_candidates(names, extra=64, max_candidates=200000):
+    """Extend observed numeric series (asset_01, asset_02, ...) with neighbours."""
+    groups = {}
+    for name in names:
+        match = re.match(r'^(.*?)(\d{2,3})(\.[A-Za-z0-9]+)$', name)
+        if not match:
+            continue
+        prefix, digits, extension = match.groups()
+        if not prefix:
+            continue
+        groups.setdefault((prefix, len(digits), extension), set()).add(int(digits))
+    out = set()
+    # Series with more observed members are more likely to be real asset families.
+    for (prefix, width, extension), values in sorted(groups.items(), key=lambda item: -len(item[1])):
+        if len(values) < 2:
+            continue
+        upper = min(999, max(values) + extra)
+        for number in range(1, upper + 1):
+            out.add(f'{prefix}{number:0{width}d}{extension}')
+            if len(out) >= max_candidates:
+                return out
     return out
 
 

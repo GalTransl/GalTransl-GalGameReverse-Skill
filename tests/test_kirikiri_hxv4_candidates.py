@@ -2,8 +2,9 @@
 import unittest
 
 from python.engines.kirikiri_hxv4_tables import (
-    candidate_names, diff_map_candidates, name_variants, psb_ref_candidates,
-    scene_candidates, table_tokens,
+    candidate_names, diff_map_candidates, name_variants, ogg_title_candidates,
+    psb_ref_candidates, scene_candidates, series_candidates, table_tokens,
+    token_candidates,
 )
 from python.engines.kirikiri_simple_crypt import pack
 
@@ -48,6 +49,30 @@ class HxCandidateTests(unittest.TestCase):
         wrapped = pack(b'\xff\xfe' + text.encode('utf-16-le'), 1)
         names = candidate_names(wrapped)
         self.assertIn('sc_1_st01.txt.scn', names)
+
+    def test_resolution_prefix_and_logical_prefix_variants(self):
+        names = table_tokens('cha001\t100:cha001\t200:cha001_up\n')
+        self.assertIn('cha001.pimg', names)
+        self.assertIn('cha001_up.pimg', names)
+        tokens = token_candidates(['cg_multi_oppai_w01', '@発射カウント_1'])
+        self.assertIn('multi_oppai_w01.png', tokens)
+        self.assertIn('@発射カウント_1.png', tokens)
+
+    def test_numeric_series_and_ogg_titles(self):
+        names = series_candidates({'multi_w01.png', 'multi_w02.png'}, extra=2)
+        self.assertIn('multi_w03.png', names)
+        self.assertIn('multi_w04.png', names)
+
+        def comment(title):
+            vendor = b'v'
+            entry = ('TITLE=' + title).encode('utf-8')
+            payload = b'\x03vorbis' + len(vendor).to_bytes(4, 'little') + vendor
+            payload += (1).to_bytes(4, 'little') + len(entry).to_bytes(4, 'little') + entry
+            return b'OggS' + b'\0' * 20 + payload
+
+        titles = ogg_title_candidates(comment('se_test'))
+        self.assertIn('se_test.ogg', titles)
+        self.assertIn('se_test.wav', titles)
 
     def test_name_variants_do_not_expand_plain_words(self):
         self.assertEqual(name_variants('Array'), {'Array'})
