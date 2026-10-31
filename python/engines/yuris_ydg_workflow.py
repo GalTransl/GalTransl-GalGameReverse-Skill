@@ -157,9 +157,9 @@ def pack(workspace, destination, *, images=None):
 
 def _mapping(path, preset):
     if preset:
-        from ..common.jis_substitution import MAPPING_SHA256
+        from ..common.jis_substitution import MAPPING_SHA256, mapping_sha256
         data = _small(Path(__file__).resolve().parents[1] / "common/jis_cn_jp.json", 1 << 20)
-        if _sha(data) != MAPPING_SHA256:
+        if mapping_sha256(data) != MAPPING_SHA256:
             raise ValueError("public JIS preset hash changed")
         return load_json(data)
     if path is None:

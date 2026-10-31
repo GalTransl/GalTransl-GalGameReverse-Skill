@@ -9,7 +9,8 @@ import unittest
 
 from python.common.binary import FormatError
 from python.common.contract import make_manifest, validate_translation, dump_rows
-from python.common.jis_substitution import JisSubstitution, is_cp932, HOOK_SHA256
+from python.common.jis_substitution import (
+    HOOK_SHA256, JisSubstitution, MAPPING_SHA256, is_cp932, mapping_sha256)
 from python.engines.systemc import export_act, inject_act
 from python.engines.systemc_extract import extract, pack
 from python.archives.systemc import unpack_fpk
@@ -17,6 +18,16 @@ from tests.test_systemc import fixture, archive
 
 
 class JisTests(unittest.TestCase):
+    def test_mapping_hash_ignores_line_endings(self):
+        raw = (Path(__file__).resolve().parents[1]
+               / "python/common/jis_cn_jp.json").read_bytes()
+        lf = raw.replace(b"\r\n", b"\n")
+        crlf = lf.replace(b"\n", b"\r\n")
+        self.assertEqual(mapping_sha256(raw), MAPPING_SHA256)
+        self.assertEqual(mapping_sha256(lf), MAPPING_SHA256)
+        self.assertEqual(mapping_sha256(crlf), MAPPING_SHA256)
+        self.assertNotEqual(mapping_sha256(lf.replace(b"\n", b"\n ", 1)), MAPPING_SHA256)
+
     def test_upstream_mapping_and_config_direction(self):
         codec = JisSubstitution()
         text = "你好，说这句话。ABC\n$S"

@@ -17,13 +17,22 @@ from pathlib import Path
 from .binary import FormatError
 from .contract import load_json
 
-MAPPING_SHA256 = "c7d435172c76e6773bba3e2c593c9fd435fefceef22fa2082e41fa8d574b0ba0"
+MAPPING_SHA256 = "0d503680cc62e032b8d0574328842d2b19162774ac19184e8af67be70c147c80"
 HOOK_SHA256 = "b83f896edd06662078eadd5ea7970ab5bfd320cd8ec319e72b1455473c897e41"
 HOOK_PATH = Path(__file__).resolve().parents[2] / "assets/uif/winmm.dll"
 
 
 def is_cp932(encoding):
     return codecs.lookup(encoding).name == "cp932"
+
+
+def mapping_sha256(raw):
+    """Hash the preset after CRLF->LF normalization.
+
+    The repository normalizes tracked text, so a Windows checkout (CRLF) and a
+    Linux/macOS checkout (LF) must verify identically; only content edits count.
+    """
+    return hashlib.sha256(raw.replace(b"\r\n", b"\n")).hexdigest()
 
 
 def _json(value):
@@ -44,7 +53,7 @@ class JisSubstitution:
         if not is_cp932(encoding):
             raise FormatError("JIS substitution requires proven CP932 script encoding")
         raw = Path(__file__).with_name("jis_cn_jp.json").read_bytes()
-        if hashlib.sha256(raw).hexdigest() != MAPPING_SHA256:
+        if mapping_sha256(raw) != MAPPING_SHA256:
             raise FormatError("JIS preset changed; update provenance and matching font policy")
         self._mapping = load_json(raw)
         if (not isinstance(self._mapping, dict)

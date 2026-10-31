@@ -15,7 +15,9 @@
   "copied_resource": {
     "path": "python/common/jis_cn_jp.json",
     "source": "src/subs_cn_jp.json",
-    "sha256": "c7d435172c76e6773bba3e2c593c9fd435fefceef22fa2082e41fa8d574b0ba0",
+    "sha256": "0d503680cc62e032b8d0574328842d2b19162774ac19184e8af67be70c147c80",
+    "sha256_note": "SHA-256 after CRLF->LF normalization; the tracked copy is normalized by .gitattributes, so CRLF and LF checkouts verify identically",
+    "upstream_sha256": "c7d435172c76e6773bba3e2c593c9fd435fefceef22fa2082e41fa8d574b0ba0",
     "entries": 2999,
     "modified": false,
     "direction": "intended Chinese to CP932 proxy character"
