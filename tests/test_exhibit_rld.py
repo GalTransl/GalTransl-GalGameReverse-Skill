@@ -132,9 +132,13 @@ class RldTests(unittest.TestCase):
         self.assertEqual(new.ops[4].strings[0].split("\t")[:14], choice().split("\t")[:14])
         self.assertEqual(new.ops[4].strings[0].split("\t")[16:], choice().split("\t")[16:])
         self.assertEqual(new.plain[slice(*new.spans[5][0])], original.plain[slice(*original.spans[5][0])])
+        # A shorter translation may drop the source line break.
+        rows[0]["message"] = "Single line"
+        shorter = parse(crypt(rebuild_rld(self.raw, 17, rows, self.manifest, **self.kw), 17))
+        self.assertEqual(shorter.ops[0].strings[1], "Single line")
 
     def test_translation_rejections(self):
-        for index, field, value in ((0, "name", "Other"), (0, "message", "lost newline"),
+        for index, field, value in ((0, "name", "Other"), (0, "message", "added\nline\n"),
                                     (2, "name", "*"), (2, "message", "bad\0"),
                                     (2, "message", "<unknown>"), (4, "message", "bad\tchoice")):
             rows = copy.deepcopy(self.rows)

@@ -214,10 +214,19 @@ class CatSystemDialogueTests(unittest.TestCase):
         self.assertEqual(exported.locators[1]['choice_span'], (9, 15))
         self.assertEqual(exported.orphan_names, (5, 8))
         self.assertEqual(exported.name_command_crossings, ((2, (3,)),))
-        self.assertIn("\n", exported.protected_tokens[0])
+        self.assertNotIn("\n", exported.protected_tokens[0])
         self.assertIn(r"\@", exported.protected_tokens[0])
         self.assertEqual(catsystem2.patch_dialogue(data, exported,
                                                    list(exported.rows)), data)
+        shorter = [dict(row) for row in exported.rows]
+        shorter[0] = dict(shorter[0], message=r"single line\@")
+        self.assertEqual(catsystem2.export_cst(
+            catsystem2.patch_dialogue(data, exported, shorter)).rows[0]["message"],
+            r"single line\@")
+        longer = [dict(row) for row in exported.rows]
+        longer[0] = dict(longer[0], message="three\nlines\nhere\\@")
+        with self.assertRaises(ValueError):
+            catsystem2.patch_dialogue(data, exported, longer)
 
     def test_choice_caption_growth_preserves_prefix_and_nontext_records(self):
         for compressed in (True, False):

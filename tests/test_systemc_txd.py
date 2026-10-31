@@ -16,6 +16,16 @@ def fixture():
             'A0000_00.spt':struct.pack('<I8i',1,1,1,1,-1,1,3,7,17)}
 
 
+def styled_fixture(first='$S一行', second='$L二行'):
+    text=('花子,'+first+'\\n'+second).encode('utf-8')
+    ptr=b'PTR '+struct.pack('<III',1,0,0)+struct.pack('<III',17,0,len(text))
+    act=(' ***SC_A0000_00\r\n花子　（０００１）[17]\r\n'+first+'\r\n'+second+'\r\n').encode('utf-8')
+    dat=bytes(80)+struct.pack('<19i',1,4,0,0,0,*([0]*14))
+    return {'ACT_A_JA.TXD':text,'ACT_A_JA.PTR':ptr,'ACT_A.txt':act,
+            'ACT_A.DAT':struct.pack('<I',1)+dat,'charaid.tbl':'花子 1\r\nナレーション 0\r\n'.encode('utf-8'),
+            'A0000_00.spt':struct.pack('<I8i',1,1,1,1,-1,1,3,7,17)}
+
+
 class TxdTests(unittest.TestCase):
     def test_workspace_pack_and_no_overwrite(self):
         from tests.test_systemc import archive
@@ -53,11 +63,23 @@ class TxdTests(unittest.TestCase):
 
     def test_controls_manifest_and_name_separator(self):
         m=fixture();rows,meta=export_table('ACT_A_JA',m)
-        for row in ({'name':'a,b','message':rows[0]['message']},{'name':'花子','message':'lost newline'},
+        shorter=[{'name':'花子','message':'「短い」'}]
+        r=inject_table('ACT_A_JA',m,shorter,meta)
+        self.assertEqual(read_table(r['ACT_A_JA.TXD'],r['ACT_A_JA.PTR'])[1],shorter)
+        for row in ({'name':'a,b','message':rows[0]['message']},{'name':'花子','message':'a\nb\nc'},
                     {'name':'花子','message':'$NEW\ntext'}):
             with self.assertRaises(ValueError):inject_table('ACT_A_JA',m,[row],meta)
         bad=copy.deepcopy(meta);bad['records'][0]['locator']['text_id']=99
         with self.assertRaises(ValueError):inject_table('ACT_A_JA',m,rows,bad)
+
+    def test_fewer_lines_keep_per_line_font_groups(self):
+        m=styled_fixture('$S一行','二行');rows,meta=export_table('ACT_A_JA',m)
+        merged=[{'name':'花子','message':'$S一行二行'}]
+        r=inject_table('ACT_A_JA',m,merged,meta)
+        self.assertEqual(read_table(r['ACT_A_JA.TXD'],r['ACT_A_JA.PTR'])[1],merged)
+        m=styled_fixture();rows,meta=export_table('ACT_A_JA',m)
+        with self.assertRaises(ValueError):
+            inject_table('ACT_A_JA',m,[{'name':'花子','message':'$S一行$L二行'}],meta)
 
     def test_unreferenced_runtime_record_is_preserved_not_exported(self):
         m=fixture();extra=',未使用'.encode('utf-8');n=len(m['ACT_A_JA.TXD'])

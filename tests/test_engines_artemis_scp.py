@@ -182,6 +182,17 @@ class RoundtripTests(unittest.TestCase):
         self.assertIn('name="???"', rebuilt.decode("utf-8"))
         self.assertEqual(rebuilt.decode("utf-8").count("\r\n"), SCRIPT.count("\r\n"))
 
+    def test_shorter_translation_changes_record_line_span(self):
+        raw = SCRIPT.encode("utf-8")
+        rows = _read().rows()
+        rows[0]["message"] = "\u300c\u8c22\u8c22\u300d"
+        rebuilt = scp.patch_script(raw, rows, encoding="utf-8")
+        after = scp.read_script(rebuilt, encoding="utf-8")
+        self.assertEqual([row["message"] for row in rows],
+                         [record.text for record in after.records])
+        self.assertEqual(after.records[0].kind, "dialogue")
+        self.assertEqual(after.records[0].line_end - after.records[0].line_start, 1)
+
     def test_rejects_structural_damage(self):
         raw = SCRIPT.encode("utf-8")
         base = _read().rows()

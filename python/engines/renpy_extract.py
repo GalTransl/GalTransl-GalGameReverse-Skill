@@ -205,7 +205,7 @@ def extract(directory, output, *, archives, smoke_test=False):
     files["README.txt"] = ("Ren'Py RPYC2 提取结果\n\n"
         "gt_input：平铺 UTF-8 JSON；同名跨语言脚本以归档名后缀区分，映射见 reports/extraction.json。\n"
         "gt_output：译文按同名文件放回后告诉 agent，由 agent 校验并回包，无需手动执行命令。\n"
-        "name 仅是只读人物上下文；不要翻译变量 ID，也不要改动它。保留行数、顺序和文本控制码。\n"
+        "name 仅是只读人物上下文；不要翻译变量 ID，也不要改动它。保留顺序和文本控制码；显示换行可自行增删。\n"
         "提取对白、菜单、翻译表 new；不扫描 Python、screen、ATL 中的任意字符串。\n"
         "原始语言和 tl/<语言> 是不同套文本；要测试哪种语言，就编辑对应 JSON 并在游戏选择该语言。\n"
         "original、metadata 不要修改；rebuilt/roundtrip 为经过读写且逐字节一致的归档。\n"

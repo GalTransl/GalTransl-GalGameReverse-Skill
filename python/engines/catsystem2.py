@@ -149,8 +149,6 @@ def export_cst(value, encoding: str = "cp932") -> DialogueExport:
             policies.append("context" if _DYNAMIC_NAME.fullmatch(pending_name.text)
                             else "writable")
         tokens = set(_CONTROL_TOKEN.findall(message))
-        if "\n" in message:
-            tokens.add("\n")
         rows.append(row)
         locators.append(locator)
         protected_tokens.append(tuple(sorted(tokens)))
@@ -184,6 +182,8 @@ def patch_dialogue(data: bytes, exported: DialogueExport, translated_rows,
             raise ValueError(f"row {position}: invalid message")
         if "choice_span" in locator and "\n" in message:
             raise ValueError(f"row {position}: line break in choice caption")
+        if message.count("\n") > before["message"].count("\n"):
+            raise ValueError(f"row {position}: translation uses more lines than the source")
         for token in tokens:
             if message.count(token) != before["message"].count(token):
                 raise ValueError(f"row {position}: protected token changed")

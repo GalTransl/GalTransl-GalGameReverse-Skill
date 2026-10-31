@@ -176,12 +176,17 @@ class EscudeMessTests(unittest.TestCase):
         result = mess.read_mess(mess.patch_mess(raw, change))
         self.assertEqual([s.decode('cp932') for s in result.strings], [change[0], change[1], change[2], '末尾'])
         self.assertEqual(mess.read_mess(raw).strings[0].decode('cp932'), '!?ｱ')
+        # A shorter translation may drop the <r> line-break tag.
+        one_line = mess.read_mess(mess.patch_mess(raw, {1: "短<ruby text='よみ'>文</ruby>"}))
+        self.assertEqual(one_line.strings[1].decode('cp932'), "短<ruby text='よみ'>文</ruby>")
 
     def test_controls_and_unencodable_text_are_rejected(self):
         raw = message_file(['a<r><font color=\'1\'>b'])
         for text in ('a', "a<font color='1'><r>b", "a<r><font color='2'>b", 'a\0', 'a\nb'):
             with self.subTest(text=text), self.assertRaises(ValueError):
                 mess.patch_mess(raw, {0: text})
+        with self.assertRaises(ValueError):
+            mess.patch_mess(message_file(['a']), {0: 'a<r>b'})
         with self.assertRaises(UnicodeEncodeError):
             mess.patch_mess(message_file(['a']), {0: '😀'})
         with self.assertRaises(ValueError):

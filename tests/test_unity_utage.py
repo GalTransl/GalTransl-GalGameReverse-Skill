@@ -198,6 +198,16 @@ class UtageTests(unittest.TestCase):
             with self.subTest(candidate=candidate), self.assertRaises(FormatError):
                 u.patch_book(raw, {0: candidate})
 
+    def test_shorter_translation_may_drop_a_line_break(self):
+        raw = book_bytes()
+        rows = u.export_book(u.read_book(raw))[0]["rows"]
+        rows[0]["message"] = "短い<param=x>"
+        shorter = u.read_book(u.patch_book(raw, {0: rows}))
+        self.assertEqual(u.export_book(shorter)[0]["rows"], rows)
+        rows[0]["message"] = "原文<param=x>\n\n末尾"
+        with self.assertRaises(FormatError):
+            u.patch_book(raw, {0: rows})
+
     def test_unknown_command_not_silently_dropped(self):
         raw = book_bytes([grid_bytes(custom=[(["Command", "Arg1", "Text"], False, False),
             (["PluginDialogue", "", "表示"], False, False)])])

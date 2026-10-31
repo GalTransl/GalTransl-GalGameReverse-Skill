@@ -114,12 +114,16 @@ class ScriptTests(unittest.TestCase):
                 med.export(bad)
 
     def test_control_changes_and_nuls_refused(self):
-        for change in ("失われた改行", "章\\X一", "章\\N一\0", "章\\N一@x"):
+        for change in ("章\\X一", "章\\N一\0", "章\\N一@x", "章\\N一\\N二"):
             with self.subTest(change=change):
                 rows, m = med.export(example())
                 rows[-1]["message"] = change
                 with self.assertRaises(FormatError):
                     med.rebuild(example(), rows, m)
+        # The \\N break may be removed when the translation needs fewer lines.
+        rows, m = med.export(example())
+        rows[-1]["message"] = "失われた改行"
+        self.assertEqual(med.export(med.rebuild(example(), rows, m))[0], rows)
 
     def test_malformed_layouts(self):
         base = example()

@@ -12,6 +12,7 @@ from python.archives.systemc import (decode_zlc2, decode_zlc2_literals, encode_z
 from python.common.binary import FormatError
 from python.common.safety import Limits
 from python.engines.systemc import export_act, inject_act
+from python.common.jis_substitution import JisSubstitution
 from python.engines.systemc_extract import extract, pack
 
 
@@ -117,6 +118,91 @@ class FpkTests(unittest.TestCase):
 
 
 class ScriptTests(unittest.TestCase):
+    def test_shorter_translation_pads_slots_and_keeps_all_companions(self):
+        members = fixture()
+        members["ACT_A.txt"] = members["ACT_A.txt"].replace(b"$S", b"").replace(b"$L", b"")
+        rows, meta = export_act("ACT_A.txt", members)
+        self.assertEqual(meta["engine"]["variant"], "act-dat156-spt32-cp932")
+        translated = deepcopy(rows)
+        translated[0]["message"] = "合併後の正文。"
+        out = inject_act("ACT_A.txt", members, rows, meta, translated)
+        expected = members["ACT_A.txt"].split(b"\r\n")
+        expected[4:6] = [translated[0]["message"].encode("cp932"), b""]
+        self.assertEqual(out, b"\r\n".join(expected))
+        updated = dict(members, **{"ACT_A.txt": out})
+        actual, padded_meta = export_act("ACT_A.txt", updated)
+        self.assertEqual(actual, translated)
+        self.assertEqual(padded_meta["records"], meta["records"])
+        self.assertEqual(padded_meta["records"][0]["locator"]["message_lines"], 2)
+        self.assertEqual(inject_act("ACT_A.txt", updated, actual, padded_meta, actual), out)
+        self.assertEqual(inject_act("ACT_A.txt", updated, actual, padded_meta, rows), members["ACT_A.txt"])
+        _, packed = unpack_fpk(rebuild_fpk(archive(members), updated))
+        self.assertEqual(packed, updated)
+        self.assertTrue(all(packed[name] == data for name, data in members.items() if name != "ACT_A.txt"))
+
+    def test_multiple_padding_slots_and_chinese_jis_reparse(self):
+        members = fixture()
+        lines = members["ACT_A.txt"].decode("cp932").split("\r\n")
+        lines[3:6] = ["第一行。", "第二行。", "第三行。"]
+        members["ACT_A.txt"] = "\r\n".join(lines).encode("cp932")
+        spt = bytearray(members["A0000_00.spt"])
+        struct.pack_into("<2i", spt, 4 + 32 + 4, 2, 0)
+        members["A0000_00.spt"] = bytes(spt)
+        rows, meta = export_act("ACT_A.txt", members)
+        self.assertNotIn("name", rows[0])
+        translated = deepcopy(rows)
+        translated[0]["message"] = "简体中文合并为一行。"
+        codec = JisSubstitution()
+        out = inject_act("ACT_A.txt", members, rows, meta, translated, text_codec=codec)
+        physical = out.decode("cp932").split("\r\n")
+        self.assertEqual(physical[4:6], ["", ""])
+        self.assertEqual(codec.display(physical[3]), translated[0]["message"])
+        proxy, new_meta = export_act("ACT_A.txt", dict(members, **{"ACT_A.txt": out}))
+        self.assertEqual([{key: codec.display(value) for key, value in row.items()} for row in proxy], translated)
+        self.assertEqual(new_meta["records"], meta["records"])
+
+    def test_padding_and_translation_boundaries(self):
+        members = fixture()
+        members["ACT_A.txt"] = members["ACT_A.txt"].replace(b"$L", b"")
+        rows, meta = export_act("ACT_A.txt", members)
+        changed = deepcopy(rows)
+        changed[0]["message"] = "一行に合併$S。"
+        out = inject_act("ACT_A.txt", members, rows, meta, changed)
+        self.assertEqual(out.split(b"\r\n")[5], b"")
+        self.assertEqual(export_act("ACT_A.txt", dict(members, **{"ACT_A.txt": out}))[0], changed)
+        for bad in ("$S第一行。\n第二行。\n第三行。", "$S第一行。\n", "\n$S第二行。", "$S第一行。\n ", ""):
+            changed[0]["message"] = bad
+            with self.subTest(bad=bad), self.assertRaises(FormatError):
+                inject_act("ACT_A.txt", members, rows, meta, changed)
+        for first, second in ((b"", b"text"), (b" ", b""), (b"", b"")):
+            invalid = dict(members)
+            lines = members["ACT_A.txt"].split(b"\r\n")
+            lines[4:6] = [first, second]
+            invalid["ACT_A.txt"] = b"\r\n".join(lines)
+            with self.subTest(first=first, second=second), self.assertRaises(FormatError):
+                export_act("ACT_A.txt", invalid)
+
+    def test_line_capacity_comes_from_compiled_range(self):
+        members = fixture()
+        lines = members["ACT_A.txt"].decode("cp932").split("\r\n")
+        lines[3:6] = ["一行。", "二行。", "三行。", "四行。", "五行。"]
+        members["ACT_A.txt"] = "\r\n".join(lines).encode("cp932")
+        dat = bytearray(members["ACT_A.DAT"])
+        struct.pack_into("<i", dat, 88, 12)
+        members["ACT_A.DAT"] = bytes(dat)
+        spt = bytearray(members["A0000_00.spt"])
+        struct.pack_into("<7i", spt, 40, 2, 0, -1, 3, 5, 7, 0)
+        struct.pack_into("<i", spt, 84, 9)
+        members["A0000_00.spt"] = bytes(spt)
+        rows, meta = export_act("ACT_A.txt", members)
+        changed = deepcopy(rows)
+        changed[0]["message"] = "第一行。\n第二行。\n第三行。\n第四行。"
+        out = inject_act("ACT_A.txt", members, rows, meta, changed)
+        self.assertEqual(out.split(b"\r\n")[7], b"")
+        actual, new_meta = export_act("ACT_A.txt", dict(members, **{"ACT_A.txt": out}))
+        self.assertEqual(actual, changed)
+        self.assertEqual(new_meta["records"], meta["records"])
+
     def test_name_context_line_ranges_and_length_change(self):
         members = fixture()
         rows, meta = export_act("ACT_A.txt", members)
@@ -190,7 +276,9 @@ class ScriptTests(unittest.TestCase):
     def test_workspace_cli_flow(self):
         with tempfile.TemporaryDirectory() as temp:
             game = Path(temp)
-            original = archive(fixture())
+            members = fixture()
+            members["ACT_A.txt"] = members["ACT_A.txt"].replace(b"$S", b"").replace(b"$L", b"")
+            original = archive(members)
             (game / "data.fpk").write_bytes(original)
             work = game / "extract"
             report = extract(game, work, verify_edits=True)
@@ -198,12 +286,15 @@ class ScriptTests(unittest.TestCase):
             self.assertEqual(report["unreferenced_spt"], ["orphan.spt"])
             self.assertTrue(pack(work, work / "no_translation")["byte_identical"])
             translated = json.loads((work / "gt_input/ACT_A.json").read_text(encoding="utf-8"))
-            translated[1]["message"] = "地の文を変更。"
+            translated[0]["message"] = "合併後の正文。"
             (work / "gt_output/ACT_A.json").write_text(json.dumps(translated, ensure_ascii=False), encoding="utf-8")
             result = pack(work, work / "translated")
             self.assertEqual(result["changed_rows"], 1)
+            self.assertTrue(result["compiled_members_unchanged"])
             _, packed = unpack_fpk((work / "translated/data.fpk").read_bytes())
             self.assertEqual(export_act("ACT_A.txt", packed)[0], translated)
+            self.assertEqual(packed["ACT_A.txt"].split(b"\r\n")[5], b"")
+            self.assertTrue(all(packed[name] == data for name, data in members.items() if name != "ACT_A.txt"))
             self.assertEqual((game / "data.fpk").read_bytes(), original)
             with self.assertRaises(FileExistsError):
                 extract(game, work)

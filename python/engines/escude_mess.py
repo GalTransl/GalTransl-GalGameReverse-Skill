@@ -10,6 +10,8 @@ import codecs
 import re
 import struct
 
+from ..common.line_layout import drops_only_line_breaks
+
 
 REFERENCE = "escude-mess-haison/1"
 _PARAM_COUNTS = (
@@ -241,8 +243,8 @@ def extract_pair(code_data: bytes, mess_data: bytes, *,
     return tuple(records)
 
 
-def protected_tokens(text: str) -> tuple[str, ...]:
-    """Keep exact control tags, ruby attributes and variable references in order."""
+def _tokens(text: str) -> tuple[str, ...]:
+    """All literal controls in order, including the ``<r>`` line-break tag."""
     tokens = tuple(_TOKENS.findall(text))
     remainder = _TOKENS.sub("", text)
     if "<" in remainder or ">" in remainder or "%{" in remainder:
@@ -250,11 +252,22 @@ def protected_tokens(text: str) -> tuple[str, ...]:
     return tokens
 
 
+def protected_tokens(text: str) -> tuple[str, ...]:
+    """Keep exact control tags, ruby attributes and variable references in order.
+
+    ``<r>`` is a display line break, so a translation may use fewer of them;
+    the manifest inventory therefore omits it and ``patch_mess`` checks the
+    delete-only rule itself.
+    """
+    return tuple(token for token in _tokens(text) if token != "<r>")
+
+
 def patch_mess(data: bytes, replacements: dict[int, str], *, encoding: str = "cp932") -> bytes:
     """Rebuild offsets/size/XOR; keep unmodified raw bytes and every pool slot.
 
-    Controls stay literal (including <r>); physical newlines are rejected.
-    Only message bytes change. The paired @code file must remain unchanged.
+    Controls stay literal; the ``<r>`` line break may only be removed, not
+    added or moved, and physical newlines are rejected. Only message bytes
+    change. The paired @code file must remain unchanged.
     """
     if codecs.lookup(encoding).name != "cp932":
         raise ValueError("Haison profile only validates CP932 message encoding")
@@ -271,8 +284,9 @@ def patch_mess(data: bytes, replacements: dict[int, str], *, encoding: str = "cp
             if len(value) > (64 << 20):
                 raise ValueError("replacement message exceeds budget")
             original = raw.decode("cp932", errors="strict")
-            if protected_tokens(value) != protected_tokens(original):
-                raise ValueError("message control tokens changed/reordered")
+            if not drops_only_line_breaks(_tokens(original), _tokens(value),
+                                          lambda token: token == "<r>"):
+                raise ValueError("message controls changed or line breaks added/moved")
             if value != original:
                 raw = value.encode(encoding, errors="strict")
                 if b"\0" in raw:

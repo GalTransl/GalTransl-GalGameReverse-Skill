@@ -166,7 +166,7 @@ def extract(source, output, *, dependencies=(), target=None):
         "gt_input：平铺 UTF-8 JSON；只含有文本的剧本表。\n"
         "gt_output：译文按同名放回后告诉 agent，由 agent 校验、回写和打包。\n"
         "当前只回写 message；name 是只读上下文，保留原样，避免改坏角色资源键。\n"
-        "保留条数、顺序、换行、富文本标签和变量（包括 ruby 标签的参数）。\n"
+        "保留条数、顺序、富文本标签和变量（包括 ruby 标签的参数）；换行可减少但不可新增或跨标签移动。\n"
         "original 与 metadata 不要修改；误改 gt_input 先让 agent 保存修改再恢复。\n"
         "rebuilt/roundtrip 是经实际 writer 重建并逐字节核对的原文归档。\n"
         "源文件名与实际部署文件名可以不同，目标相对路径见 extraction.json 的 target。\n"

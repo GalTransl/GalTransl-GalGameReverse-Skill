@@ -11,6 +11,7 @@ import re
 import struct
 
 from ..common.contract import make_manifest, validate_translation
+from ..common.line_layout import drops_only_line_breaks
 from .exhibit import Op, extract_dialogue, name_table
 
 PROFILE = "rld-v3-tag256/1"
@@ -144,8 +145,9 @@ def _check_text(before, after):
     if any(c in before + after for c in "\\[]{}<>$%"):
         raise ValueError("unclassified RLD display syntax; adapt controls before editing")
     controls = lambda s: tuple(c for c in s if ord(c) < 32)
-    if controls(before) != controls(after):
-        raise ValueError("RLD display control sequence changed")
+    if not drops_only_line_breaks(controls(before), controls(after),
+                                  lambda c: c == "\n"):
+        raise ValueError("RLD display controls changed or line breaks added/moved")
 
 
 def patch(script, recs, rows, codec=None):
@@ -230,7 +232,8 @@ def export_rld(raw, seed, *, filename="script.rld", definitions=None, definition
                              sources=sources, rows=rows, encoding="cp932", locators=[r[1] for r in recs],
                              name_policies=[r[2] for r in recs], settings={"seed": seed,
                              "definition_seed": definition_seed if definitions is not None else None},
-                             protected_tokens=[list(dict.fromkeys(c for c in r[0]["message"] if ord(c) < 32))
+                             protected_tokens=[list(dict.fromkeys(c for c in r[0]["message"]
+                                                                  if ord(c) < 32 and c != "\n"))
                                                for r in recs])
     return rows, manifest
 

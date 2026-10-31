@@ -45,7 +45,7 @@ python -m python.engines.nexas_extract extract /path/to/game --output /path/to/g
 python -m python.engines.nexas_extract pack /path/to/game/game_extract --output /path/to/game/game_extract/rebuilt
 ~~~
 
-pack 验证原 PAC 哈希，并重新从 PAC 解析原文、定位器和 manifest；按文件名读取译文，缺少译文的成员保持原压缩 payload，未匹配 JSON 列入报告。译文只写回成员实际所属的高优先级包；底包旧版本不会被改成补丁版本。每个生成 PAC 都重读索引、解压被替换成员并比对，其余成员的压缩 payload 逐字节核对。--translations 只用于显式测试目录，正常流程使用 gt_output。
+pack 验证原 PAC 哈希，并重新从 PAC 解析原文、定位器和 manifest；按文件名读取译文，缺少译文的成员保持原压缩 payload，未匹配 JSON 列入报告。译文只写回成员实际所属的高优先级包；底包旧版本不会被改成补丁版本。每个生成 PAC 都重读索引、解压被替换成员并比对，其余成员的压缩 payload 逐字节核对。--translations 只用于显式测试目录，正常流程使用 gt_output。换行保护项调整后，旧 metadata 无法通过 manifest 比对；应从哈希验证通过的原 PAC 重新提取到新目录，再放回同名译文。
 
 只生成副本，不覆盖安装目录。roundtrip 是原文验证产物，rebuilt 才是用户译文的候选包，两者都不自动部署或启动游戏。没有译文时 changed_scripts=0，不应称为汉化包。
 
@@ -68,7 +68,7 @@ BIN writer 不重排原字符串池、指令或 EXTRA 表。原文回填重新�
 
 ## 控制码与编码
 
-- JSON 保留 @v 八位语音号、@t 四位延时、@h 资源标识、@n/@k/@d、@m 两位参数、@i 两位参数；回填校验**完整序列与参数**，禁止增删或重排。
+- JSON 保留 @v 八位语音号、@t 四位延时、@h 资源标识、@n/@k/@d、@m 两位参数、@i 两位参数；回填校验**完整序列与参数**。@n 换行可以比原文少，但其余控制码禁止增删或重排，@n 也不能跨到其他控制码之前。
 - @h 参数可为空，不能吞掉紧随其后的正文。
 - 不把真实 CR/LF、TAB、NUL 写进字符串，换行用 @n。本 profile 未验证 Ruby 等其他标签，遇到时核查，不猜测跳过。
 - 新文本须严格 CP932 编码且可反向解码为同一 Unicode 文本，不替换、不截断。中文字符集、字体与运行时适配是另一个阶段；已有汉化 EXE 不证明 writer 可以直接改用 GBK。

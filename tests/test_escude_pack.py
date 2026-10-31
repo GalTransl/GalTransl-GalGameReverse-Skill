@@ -75,7 +75,7 @@ class EscudePackTests(unittest.TestCase):
                     elif case == 'encoding':
                         rows[0]['message'] = '简体中文<r>测试'
                     else:
-                        rows[0]['message'] = '本文'
+                        rows[0]['message'] += '<r>'
                     (work / 'gt_output/scene.json').write_text(json.dumps(rows), encoding='utf-8')
                 with self.assertRaises(ValueError):
                     pack(work, root / 'failed')

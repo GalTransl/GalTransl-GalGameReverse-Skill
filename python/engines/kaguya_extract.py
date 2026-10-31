@@ -58,8 +58,8 @@ def export(data: bytes) -> tuple[list[dict], dict]:
     rows, locators = _rows(doc)
     policies = ["absent" if "name" not in row else "context" if row["name"] == "％" else "writable"
                 for row in rows]
-    # Keep line structure and the engine's special F040/percent codepoint.
-    tokens = [[t for t in ("\n", "％") if t in row["message"]] for row in rows]
+    # The F040/percent codepoint is protected; line breaks may only be removed.
+    tokens = [["％"] if "％" in row["message"] else [] for row in rows]
     manifest = make_manifest(
         engine="kaguya", variant=VARIANT, reference="python/engines/kaguya_extract.py",
         sources={"message.dat": data}, rows=rows, locators=locators, encoding="cp932",
@@ -85,10 +85,12 @@ def inject(data: bytes, original_rows: list[dict], manifest: dict, translated_ro
                 continue
             if any(ord(c) < 32 and c != "\n" for c in text):
                 raise FormatError("unsupported Kaguya text control")
-            if text.count("\n") != before[field].count("\n"):
-                raise FormatError("Kaguya line count changed")
-            if text.endswith("\n") != before[field].endswith("\n"):
-                raise FormatError("Kaguya final newline changed")
+            if text.count("\n") > before[field].count("\n"):
+                raise FormatError("Kaguya translation uses more lines than the source")
+            # Do not create an empty first/last line that the source lacked.
+            if ((text.startswith("\n") and not before[field].startswith("\n"))
+                    or (text.endswith("\n") and not before[field].endswith("\n"))):
+                raise FormatError("Kaguya translation adds a blank edge line")
             if text.count("％") != before[field].count("％"):
                 raise FormatError("Kaguya special percent codepoint changed")
             encoded = kaguya._encode(text)

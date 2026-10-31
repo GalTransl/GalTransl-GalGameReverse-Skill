@@ -5,6 +5,7 @@ Source evidence and deployment limits: engines/kirikiri/kag-text.md.
 """
 import re
 from python.common.contract import make_manifest, validate_translation
+from python.common.line_layout import drops_only_line_breaks
 from .kirikiri_kag import decode, tokenize, attributes
 
 PROFILE = 'kag-alter-nm-np/1'
@@ -18,10 +19,41 @@ def prose(body):
 
 
 def restore_comments(old, new):
-    lines=iter(new.splitlines(keepends=True));out=[]
-    for line in old.splitlines(keepends=True):
-        out.append(line if line.lstrip(' \t').startswith(';') else next(lines))
-    if next(lines,None) is not None:raise ValueError('KAG physical line count changed')
+    """Reinsert comments; drop prose lines the translation no longer uses.
+
+    A shorter translation may occupy fewer physical lines. Comments are kept in
+    place, and any prose line left over after the translated lines run out is
+    removed with its line ending. Extra translated lines are still rejected.
+    """
+    old_lines=old.splitlines(keepends=True)
+    translated=list(new.splitlines(keepends=True))
+    prose=[i for i,line in enumerate(old_lines) if not line.lstrip(' \t').startswith(';')]
+    if not translated or not prose:
+        raise ValueError('KAG page has no translatable prose line')
+    if len(translated)>len(prose):
+        raise ValueError('KAG translation uses more physical lines than the source')
+    if len(translated)<len(prose):
+        last=prose[len(translated)-1]
+        if any(old_lines[i].lstrip(' \t').startswith(';')
+               for i in range(last+1,len(old_lines))):
+            raise ValueError('KAG shorter page ends before a comment; keep the line '
+                             'count or move that comment')
+    lines=iter(enumerate(translated));out=[]
+    for i,line in enumerate(old_lines):
+        if line.lstrip(' \t').startswith(';'):
+            out.append(line)
+        else:
+            pair=next(lines,None)
+            if pair is not None:
+                index,value=pair
+                ending=line[len(line.rstrip('\r\n')):]
+                # JSON text has no trailing EOL. Intermediate lines need one to
+                # stay separate; the last line keeps the ending only when the
+                # translation itself ends with a line break.
+                if value.endswith(('\r','\n')) or index<len(translated)-1:
+                    out.append(value if value.endswith(('\r','\n')) else value+ending)
+                else:
+                    out.append(value)
     return ''.join(out)
 
 
@@ -132,7 +164,9 @@ def rebuild_script(raw,translated,manifest):
     for rec,before,after in zip(recs,original,translated):
         a,b=rec['message'];value=after['message']
         if rec['kind']=='message':
-            if signature(before['message'])!=signature(value):raise ValueError('KAG controls/ruby/newlines changed')
+            if not drops_only_line_breaks(signature(before['message']),signature(value),
+                                          lambda item:item[0]=='newline'):
+                raise ValueError('KAG controls/ruby changed or line breaks added/moved')
             old=text[a:b]
             if '\r\n' in old:value=value.replace('\n','\r\n')
             value=restore_comments(old,value)

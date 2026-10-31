@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-only
-"""SystemC Mamakano UTF-8 TXD/PTR with ACT/DAT/SPT identity evidence.
+"""SystemC UTF-8 TXD/PTR with ACT/DAT/SPT identity evidence.
 
 New implementation based on actual file structure. Runtime tables are edited;
 source ACT line numbers and compiled SPT/voice/control records stay unchanged.
@@ -8,8 +8,9 @@ import re
 import struct
 from ..common.binary import FormatError
 from ..common.contract import make_manifest, validate_translation
+from ..common.line_layout import drops_only_line_breaks
 
-VARIANT = 'mamakano-utf8-txd-ptr12'
+VARIANT = 'utf8-txd-ptr12'
 TOKENS = re.compile(r'\\n|\$[A-Za-z]+|&[A-Za-z]+;')
 ALLOWED = {'\\n', '$S', '$L', '$M', '&heart;', '&aseri;', '&ikari;', '&namida;',
            '&nakigao;', '&kirari;', '&egao;', '&kaminari;', '&dokuro;'}
@@ -93,8 +94,8 @@ def export_table(stem,members):
             elif voice or chars[char-1]!='ナレーション':raise FormatError('missing speaker header')
             expected['message']='\n'.join(part)
             if expected!=row:
-                # Three source lines contain a leading ideographic indent which
-                # the runtime table omits. Record it; do not normalize TXD text.
+                # Source text may have a leading ideographic indent omitted
+                # by the runtime table. Record it; do not normalize TXD text.
                 if expected.get('name')!=row.get('name') or expected['message'].lstrip('　')!=row['message']:
                     raise FormatError(f'ACT/TXD text mismatch at {stem} ID {identity}')
                 trimmed.append(identity)
@@ -120,7 +121,15 @@ def inject_table(stem,members,translated,manifest):
     for before,after,record in zip(rows,translated,manifest['records']):
         for field in before:
             old=before[field].replace('\n','\\n');new=after[field].replace('\n','\\n')
-            if TOKENS.findall(old)!=TOKENS.findall(new):raise FormatError('ordered display controls changed')
+            if not drops_only_line_breaks(TOKENS.findall(old),TOKENS.findall(new),
+                                          lambda token:token=='\\n'):
+                raise FormatError('display controls changed or line breaks added/moved')
+            # $S/$L apply to a whole display line; do not merge two styled lines
+            # whose groups would then override each other.
+            styles=[re.findall(r'\$[SL]',line) for line in before[field].split('\n')]
+            new_styles=[re.findall(r'\$[SL]',line) for line in after[field].split('\n')]
+            if list(filter(None,styles))!=list(filter(None,new_styles)):
+                raise FormatError('per-line font-control groups changed')
             if re.search(r'[\\$&]',TOKENS.sub('',new)) or any(ord(c)<32 for c in new):raise FormatError('unknown control or literal newline')
         if 'name' in after and (not after['name'] or any(c in after['name'] for c in ',\n')):
             raise FormatError('invalid name delimiter')

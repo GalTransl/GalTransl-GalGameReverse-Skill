@@ -152,6 +152,11 @@ class NexasScriptTests(unittest.TestCase):
         self.assertEqual(new.raw_commands[5], old.raw_commands[5])
         self.assertEqual(new.trailer, old.trailer)
         self.assertEqual(nexas.records(new)[0], translated)
+        # A shorter translation may drop @n but must keep the voice tag.
+        one_line = copy.deepcopy(rows)
+        one_line[0] = {"name": "長い名前", "message": "@v12345678一行にまとめた本文"}
+        shortened = nexas.inject(data, rows, manifest, one_line, source_name="scene.bin")
+        self.assertEqual(nexas.records(nexas.parse(shortened))[0], one_line)
 
     def test_custom_special_choice_continuation(self):
         strings = ["", "名前", "@v12345678本文", "@d@m32", "@k", "選択肢", "続き@nです"]

@@ -12,6 +12,7 @@ import struct
 
 from ..archives.unity_serialized import Reader, MAX_OBJECT
 from ..common.binary import FormatError
+from ..common.line_layout import drops_only_line_breaks
 
 PROFILE = "utage-book-v0-empty-entities"
 
@@ -222,6 +223,7 @@ def character_names(chapters):
 NON_TEXT = frozenset({"Wait", "Bg", "Bgm", "BgEvent", "Jump", "Se", "StopSe", "CharacterOff"})
 TEXT_COMMANDS = frozenset({"", "Text", "Character", "Selection"})
 TOKEN = re.compile(r'<[^<>\r\n]+>|\{[^{}\r\n]+\}|\[[^\[\]\r\n]+\]|\\(?:[A-Za-z]+|.)|\r\n|[\r\n\t<>{}\[\]\\]')
+LINE_BREAKS = frozenset({"\r\n", "\r", "\n"})
 
 
 def controls(text):
@@ -289,8 +291,9 @@ def patch_book(data, translations, names=None):
                 raise FormatError("Utage name is read-only context; do not translate resource keys")
             message = target["message"]
             if (not isinstance(message, str) or (not message.strip() and message != source["message"])
-                    or controls(message) != controls(source["message"])):
-                raise FormatError(f"Utage translation is empty or changes controls/newlines: {item['name']} row {loc['row']}")
+                    or not drops_only_line_breaks(controls(source["message"]), controls(message),
+                                                  lambda token: token in LINE_BREAKS)):
+                raise FormatError(f"Utage translation is empty or changes controls/line breaks: {item['name']} row {loc['row']}")
             if len(message.encode("utf-8")) > 1 << 20:
                 raise FormatError("Utage translation string exceeds budget")
             footprint = lambda s: (len(s.encode("utf-8")) + 3) // 4 * 4

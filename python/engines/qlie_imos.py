@@ -112,18 +112,27 @@ def rows(script: str) -> list[dict]:
     return [record.row() for record in scan(script)]
 
 
+def _whole_line(script: str, span: Span) -> tuple[int, int]:
+    """Return the full physical line containing ``span``."""
+    start = script.rfind('\n', 0, span.start) + 1
+    end = script.find('\n', span.end)
+    return start, len(script) if end < 0 else end + 1
+
+
 def patch(script: str, translated: list[dict]) -> str:
     """Reparse source, patch spans, and compare semantic rows and structure.
 
     Names keep the internal voice identity: translating 【Alice】 to 艾丽丝
-    produces 【Alice＠艾丽丝】. Physical multiline sentences keep their line
-    count; a single physical line may use [n] for translated display breaks.
+    produces 【Alice＠艾丽丝】. A physical multiline sentence may use fewer
+    lines: surplus trailing message lines are removed from the script. A single
+    physical line may use [n] for translated display breaks. Line breaks may
+    not be added, and [pc] parameter lines are never removed.
     Byte encoding and manifest validation belong to the caller.
     """
     records = scan(script)
     if not isinstance(translated, list) or len(records) != len(translated):
         raise ValueError('ImoScripter translation count mismatch')
-    edits = []
+    edits, expected = [], []
     for record, row in zip(records, translated):
         source = record.row()
         if not isinstance(row, dict) or set(row) != set(source) or not all(isinstance(v, str) for v in row.values()):
@@ -132,8 +141,11 @@ def patch(script: str, translated: list[dict]) -> str:
         if any(c in message for c in '\r\0\v\f\x85\u2028\u2029[]'):
             raise ValueError('unsupported ImoScripter text/control injection')
         pieces = message.split('\n') if len(record.parts) > 1 else [message]
-        if len(pieces) != len(record.parts):
-            raise ValueError('physical multiline sentence requires the same line count')
+        if len(pieces) > len(record.parts):
+            raise ValueError('ImoScripter translation adds physical lines')
+        dropped = record.parts[len(pieces):]
+        if any(span.kind != 'message' for span in dropped):
+            raise ValueError('ImoScripter can only drop trailing message lines')
         for span, text in zip(record.parts, pieces):
             if span.kind in ('pc', 'choice', 'save-title') and any(c in text for c in ',\n'):
                 raise ValueError('ImoScripter parameter delimiter injection')
@@ -141,6 +153,10 @@ def patch(script: str, translated: list[dict]) -> str:
                     or text.startswith(('^', '@', '\\', '％', '【', '　'))):
                 raise ValueError('translation changes ImoScripter line role/whitespace')
             edits.append((span.start, span.end, text.replace('\n', '[n]')))
+        for span in dropped:
+            start, end = _whole_line(script, span)
+            edits.append((start, end, ''))
+        expected.append([p.kind for p in record.parts[:len(pieces)]])
         if record.speaker:
             name = row['name']
             raw_name = record.speaker.raw
@@ -155,6 +171,6 @@ def patch(script: str, translated: list[dict]) -> str:
     rebuilt = scan(result)
     if [r.row() for r in rebuilt] != translated:
         raise ValueError('ImoScripter reparse differs from requested rows')
-    if [[p.kind for p in r.parts] for r in records] != [[p.kind for p in r.parts] for r in rebuilt]:
+    if expected != [[p.kind for p in r.parts] for r in rebuilt]:
         raise ValueError('ImoScripter record structure changed')
     return result

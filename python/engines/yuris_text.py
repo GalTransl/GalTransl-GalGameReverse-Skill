@@ -10,6 +10,7 @@ import re
 import struct
 from .yuris import YSCM_PARSE_VERSIONS, toggle_ybn_sections, read_command_list, convert_control_bytes
 from ..common.contract import make_manifest, validate_translation
+from ..common.line_layout import drops_only_line_breaks
 
 
 @dataclass(frozen=True)
@@ -244,8 +245,11 @@ def rebuild_script(raw, ysc, translated, manifest, profile=Profile()):
         for field in before:
             if "\0" in after[field] or "\r" in after[field]:
                 raise ValueError("NUL/CR in translated text")
-            if re.findall(r'\\[pcu]|\n', before[field]) != re.findall(r'\\[pcu]|\n', after[field]):
-                raise ValueError("control-code order/count changed")
+            pattern = r'\\[pcu]|\n'
+            if not drops_only_line_breaks(re.findall(pattern, before[field]),
+                                          re.findall(pattern, after[field]),
+                                          lambda token: token == "\n"):
+                raise ValueError("control codes changed or line breaks added/moved")
         if "name" in after and (not after["name"] or any(c in after["name"] for c in "【】\n")):
             raise ValueError("invalid speaker name")
         value = ("【" + after["name"] + "】" if "name" in after else "") + after["message"]

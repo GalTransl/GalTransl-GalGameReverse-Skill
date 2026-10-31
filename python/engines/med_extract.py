@@ -88,7 +88,7 @@ def extract(source, output):
         "MED/MDN0 文本工作区\n\n"
         "gt_input：UTF-8 JSON，姓名在正文上方；只含非空脚本。\n"
         "gt_output：译文按同名放回后告诉 agent，由 agent 校验、回写并生成新归档。\n"
-        "保持行数、顺序、姓名字段和控制符；物理分行保持独立，不合并条目。\n"
+        "保持顺序、姓名字段和控制符；换行可减少但不可新增，物理分行保持独立，不合并条目。\n"
         "同一姓名指令覆盖的多条正文须使用一致译名；关联见 metadata 中的 name_frame。\n"
         "章节/存档标题也已导出，角色见 metadata；不要修改 original、metadata 或 gt_input。\n"
         "original 保存原归档和脚本；rebuilt/roundtrip 经过完整读写并逐字节核对。\n"

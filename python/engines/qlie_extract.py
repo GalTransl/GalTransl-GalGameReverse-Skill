@@ -152,7 +152,7 @@ def extract(game: Path, output: Path, *, archives: list[str], exe: str,
                                  sources={item['original']: raw}, rows=rows, encoding='cp932',
                                  locators=[asdict(record) for record in records], name_policies=policies,
                                  settings={'archive': item['archive'], 'member': item['name'],
-                                           'physical_multiline': 'preserve-line-count',
+                                           'physical_multiline': 'allow-fewer-trailing-message-lines',
                                            'name_write': 'preserve-identity-and-write-display-alias',
                                            'container_writer': 'template-pack3.0-hash1.3'})
         validate_translation(manifest, {item['original']: raw}, rows, rows)

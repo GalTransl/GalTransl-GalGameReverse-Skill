@@ -28,7 +28,7 @@ python -m python.engines.med_extract pack "GAME/GAME_extract" "NEW_REBUILD"
 | `rebuilt/roundtrip/<原归档名>` | 实际重建且逐字节一致的原文归档 |
 | `reports/extraction.json` | 数量、角色、指令分布和排除范围 |
 
-`pack` 从原归档重新推导成员、JSON 和 manifest，核对原文及元数据后按文件名配对译文。名字不匹配的文件记录为 `unmatched_translation_files`，不会猜配。完整重封包及实际资源回读 JSON 写入新目录；不要把单个脚本或代理 JSON 当作已回注结果。
+`pack` 从原归档重新推导成员、JSON 和 manifest，核对原文及元数据后按文件名配对译文。名字不匹配的文件记录为 `unmatched_translation_files`，不会猜配。完整重封包及实际资源回读 JSON 写入新目录；不要把单个脚本或代理 JSON 当作已回注结果。换行保护项调整后，旧 metadata 无法通过 manifest 比对；应从哈希验证通过的原件重新提取到新目录，再放回同名译文。
 
 交付依主流程用 Markdown 表格说明实际数量及验证状态，推荐具体开场文件。标题可能是文件第一条，应按 metadata 的 `kind` 找前几条正文试注；不要只按排序认定剧情入口。告诉用户：译文放回同名 `gt_output` 后通知 agent，由 agent 完成回写。
 
@@ -69,7 +69,7 @@ python -m python.engines.med_extract pack "GAME/GAME_extract" "NEW_REBUILD"
 
 **定义表也可能含 `01 + 00`，不能仅凭这对指令认定对白。** 首条 `02` 引用 `#RULE_DEFINE` 标记时，核对指令集合及连续 TAB 分隔的两列标识符映射，按规则表整体保留；标识符允许包含日文，不能依语言判定。记录 `rule_definition_literals`，不生成其翻译 JSON。未知规则标记或出现不符合表结构的 literal 则停止。这一识别依赖内容结构，不依赖成员恰好叫 `_DEF`，也不普遍排除 ASCII 对白。
 
-保护字面 `\N`、制表符及标记符顺序，拒绝新增 NUL、未知反斜线转义、空译文和改变字段/条数。原文与译文相同行数的重排无法自动识别，仍须保持顺序。
+保护字面 `\N` 以外的控制符、制表符及标记符顺序；`\N` 与物理换行都可减少，但不能新增或跨其他控制符移动。拒绝新增 NUL、未知反斜线转义、空译文和改变字段/条数。原文与译文相同行数的重排无法自动识别，仍须保持顺序。
 
 ## 变长回写原则
 

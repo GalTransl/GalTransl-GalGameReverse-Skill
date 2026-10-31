@@ -171,6 +171,11 @@ class Yuris482Tests(unittest.TestCase):
         self.assertEqual(rows,[{'message':'A\nB'}])
         changed=rebuild_script(raw,self.ysc,[{'message':'AA\nBB'}],meta)
         self.assertIn(b'\xef\xf0',Scenario(changed,commands_from(self.ysc),self.profile.key).value(0))
+        # Fewer display lines are allowed.
+        shorter=rebuild_script(raw,self.ysc,[{'message':'AA'}],meta)
+        self.assertEqual(export_script(shorter,self.ysc)[0],[{'message':'AA'}])
+        with self.assertRaises(ValueError):
+            rebuild_script(raw,self.ysc,[{'message':'AA\nBB\nCC'}],meta)
 
     def test_archive_roundtrip_changed_sizes_and_hashes(self):
         raw=archive({'ysbin\\ysc.ybn':self.ysc,'ysbin\\yst00000.ybn':self.raw})

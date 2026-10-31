@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-only
-"""Tomefure SystemC FPK -> ACT dialogue JSON -> rebuilt FPK, never in place."""
+"""SystemC FPK -> CP932 ACT dialogue JSON -> rebuilt FPK, never in place."""
 import argparse
 import json
 from pathlib import Path

@@ -435,9 +435,10 @@ def _verify_rebuild(before: Script, after: Script, rows) -> None:
     if len(after.records) != len(before.records):
         raise ScpError("verification_failed", "record count changed after rebuild", "verify")
     for original, rebuilt, row in zip(before.records, after.records, rows):
-        if (original.kind, original.line_start, original.line_end) != \
-                (rebuilt.kind, rebuilt.line_start, rebuilt.line_end):
-            raise ScpError("verification_failed", "record boundaries shifted after rebuild", "verify")
+        # A message may use fewer or more text lines than the source, so the
+        # physical span is expected to move; the record identity may not.
+        if original.kind != rebuilt.kind:
+            raise ScpError("verification_failed", "record kind changed after rebuild", "verify")
         if rebuilt.text != row["message"]:
             raise ScpError("verification_failed", "rebuilt message differs from the translation", "verify")
         if original.name_policy == "writable" and rebuilt.name != row.get("name"):

@@ -11,6 +11,7 @@ import struct
 
 from ..common.binary import FormatError, Reader
 from ..common.contract import make_manifest, validate_translation
+from ..common.line_layout import drops_only_line_breaks
 
 PROFILE = "aikiss3-extras-v1"
 KNOWN_OPCODES = {0, 4, 5, 6, 7, 8, 9, 10, 11, 14, 16, 17, 21, 23, 24,
@@ -184,7 +185,8 @@ def export(data: bytes, *, source_name: str) -> tuple[list[dict], dict]:
         engine="nexas", variant=PROFILE, reference="python/engines/nexas_bin.py",
         sources={source_name: data}, rows=rows, locators=locators, encoding="cp932",
         name_policies=["writable" if "name" in row else "absent" for row in rows],
-        protected_tokens=[list(dict.fromkeys(controls(row["message"]))) for row in rows])
+        protected_tokens=[list(dict.fromkeys(token for token in controls(row["message"])
+                                             if token != "@n")) for row in rows])
     return rows, manifest
 
 
@@ -202,8 +204,9 @@ def inject(data: bytes, original_rows: list[dict], manifest: dict, translated_ro
         for field in ("message", "name"):
             if field not in before:
                 continue
-            if controls(before[field]) != controls(after[field]):
-                raise FormatError(f"NeXAS {field} controls changed in order or content")
+            if not drops_only_line_breaks(controls(before[field]), controls(after[field]),
+                                          lambda token: token == "@n"):
+                raise FormatError(f"NeXAS {field} controls changed or line breaks added/moved")
             if before[field] == after[field]:
                 continue
             raw = after[field].encode("cp932", errors="strict")

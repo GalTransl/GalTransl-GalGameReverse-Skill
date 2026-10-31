@@ -42,10 +42,20 @@ class KagTextTests(unittest.TestCase):
     def test_injection_controls_and_tampering_rejected(self):
         source=raw(SAMPLE);rows,meta=export_script(source)
         for message in [';comment','@eval exp="1"',rows[0]['message'].replace('time=1','time=2'),
-                        rows[0]['message'].replace('よみ','new'), rows[0]['message'].replace('\n',''),
+                        rows[0]['message'].replace('よみ','new'), rows[0]['message']+'\n追加',
                         rows[0]['message']+'[emb exp="1"]']:
             changed=[dict(r) for r in rows];changed[0]['message']=message
             with self.subTest(message=message),self.assertRaises(ValueError):rebuild_script(source,changed,meta)
+        # A shorter translation may use fewer physical lines.
+        page=raw('@nm t="人物"\n一行目\n二行目\n[np]\n')
+        page_rows,page_meta=export_script(page)
+        one=[dict(r) for r in page_rows];one[0]['message']='一行にまとめた'
+        result=rebuild_script(page,one,page_meta)
+        self.assertEqual(export_script(result)[0],one)
+        # A comment after the last kept line would become trailing display text.
+        joined=[dict(r) for r in rows];joined[0]['message']=rows[0]['message'].replace('\n','')
+        with self.assertRaisesRegex(ValueError,'comment'):
+            rebuild_script(source,joined,meta)
         changed=[dict(r) for r in rows];changed[2]['message']='" target="evil'
         with self.assertRaises(ValueError):rebuild_script(source,changed,meta)
         bad=json.loads(json.dumps(meta));bad['records'][0]['locator']['message'][0]+=1

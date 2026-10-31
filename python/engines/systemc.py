@@ -2,10 +2,10 @@
 # Adapted from SExtractor tools/SystemC/fpk_pack_SystemB3.py and src/reg.yaml:_BIN_SystemC
 # Source commit: 8d8d976fd04ae54e7c677705af937273d04a376a
 # Upstream attribution: satan53x / SExtractor contributors.
-"""SystemC name headers and Tomefure ACT/DAT/SPT line-reference text dialect.
+"""SystemC CP932 ACT/DAT156/SPT32 line-reference text dialect.
 
-The ACT/DAT/SPT implementation is based on structural examination of Tomefure.
-Only opcode 1 exposes text; all compiled records and line counts are preserved.
+Only opcode 1 exposes text. Shorter translations retain their original
+physical line slots through empty trailing padding; DAT/SPT stay unchanged.
 """
 # Layer split: engines; format algorithms and original notices retained.
 # Companion module: python/archives/systemc.py
@@ -15,7 +15,7 @@ import struct
 from ..common.binary import FormatError
 from ..common.contract import make_manifest, validate_translation
 
-VARIANT = "tomefure-act-dat156-spt32-cp932"
+VARIANT = "act-dat156-spt32-cp932"
 MAX_BYTES = 64 << 20
 KNOWN_OPCODES = frozenset({1, 2, 3, 4, 6, 7, 8, 9, 10, 11, 13, 14, 15, 18,
                          19, 20, 22, 24, 26, 27, 29, 33, 34, 35, 36, 37, 38, 40, 41, 42})
@@ -130,7 +130,13 @@ def _parse(act_name, members):
                 message_line += 1
             elif voice != 0 or characters[char_id - 1] != "ナレーション":
                 raise FormatError("SystemC non-narrator text lacks a name header")
-            for line in part:
+            message_lines = len(part)
+            # Empty trailing slots preserve SPT counts without display text.
+            # Internal/whitespace-only lines are still not accepted as prose.
+            message = "\n".join(part).rstrip("\n")
+            if not message:
+                raise FormatError("SystemC text reference has no message")
+            for line in message.split("\n"):
                 if not line.strip() or line.startswith(("//", "***")) or re.match(r"[A-Za-z]+_", line):
                     raise FormatError("SystemC text reference points into a command/blank line")
                 if any(ord(c) < 32 for c in line):
@@ -139,14 +145,14 @@ def _parse(act_name, members):
                 stripped = CONTROL.sub("", line)
                 if any(c in stripped for c in "$&\\<>[]{}@#%^|~"):
                     raise FormatError("unknown SystemC text control syntax")
-            tokens = CONTROL.findall("\n".join(part))
+            tokens = CONTROL.findall(message)
             if set(tokens) - {"$S", "$L", "&heart;"}:
                 raise FormatError("unknown SystemC text control token")
-            row["message"] = "\n".join(part)
+            row["message"] = message
             rows.append(row)
             locators.append({"spt": spt_name, "record": ri, "kind": "selection" if label[1] == "SS" else "message",
                              "header_line": first if header else None, "message_line": message_line,
-                             "message_lines": len(part), "character_id": char_id, "voice": voice})
+                             "message_lines": message_lines, "character_id": char_id, "voice": voice})
             section_rows += 1
         sections.append({"spt": spt_name, "kind": label[1], "rows": section_rows})
     # Only source text covered by compiled records is exported. Remaining visible
@@ -159,18 +165,19 @@ def _parse(act_name, members):
 
 def export_act(act_name, members):
     rows, locators, sources, sections, _ = _parse(act_name, members)
-    tokens = [list(dict.fromkeys(CONTROL.findall(row["message"]) + (["\n"] if "\n" in row["message"] else [])))
+    tokens = [list(dict.fromkeys(CONTROL.findall(row["message"])))
               for row in rows]
     manifest = make_manifest(engine="systemc", variant=VARIANT,
         reference="python/engines/systemc.py", sources=sources, rows=rows, locators=locators,
         encoding="cp932", protected_tokens=tokens,
         settings={"act": act_name, "sections": sections, "line_endings": "CRLF",
                   "name": "context-only; preserve header and compiled character/voice IDs",
-                  "newline_policy": "same line count and ordered controls per line"})
+                  "newline_policy": "pad fewer message lines with empty trailing slots; preserve DAT/SPT and font-control groups"})
     return rows, manifest
 
 
 def inject_act(act_name, members, original_rows, manifest, translated_rows, *, text_codec=None):
+    """Rewrite ACT only, padding shorter messages to preserve compiled bindings."""
     expected_rows, expected_manifest = export_act(act_name, members)
     if expected_rows != original_rows or expected_manifest != manifest:
         raise FormatError("SystemC export/manifest differs from source parser")
@@ -185,29 +192,40 @@ def inject_act(act_name, members, original_rows, manifest, translated_rows, *, t
     for before, after, rec in zip(original_rows, translated, manifest["records"]):
         old_lines = before["message"].split("\n")
         new_lines = after["message"].split("\n")
-        if len(old_lines) != len(new_lines):
-            raise FormatError("SystemC message line count changed")
-        for i, (old, new) in enumerate(zip(old_lines, new_lines)):
-            if old == new:
-                continue
+        slot_count = rec["locator"]["message_lines"]
+        if len(new_lines) > slot_count:
+            raise FormatError("SystemC translation exceeds original message line slots")
+        if CONTROL.findall(before["message"]) != CONTROL.findall(after["message"]):
+            raise FormatError("SystemC ordered control tokens changed")
+        # Font controls apply to the whole physical line, not a character span.
+        # Unstyled lines may be added/removed, but separate styled lines must
+        # not be merged into a line whose last style overrides an earlier one.
+        styles = [re.findall(r"\$[SL]", line) for line in old_lines]
+        new_styles = [re.findall(r"\$[SL]", line) for line in new_lines]
+        if list(filter(None, styles)) != list(filter(None, new_styles)):
+            raise FormatError("SystemC per-line font-control groups changed")
+        for i, new in enumerate(new_lines):
             if not new.strip() or any(ord(c) < 32 for c in new):
                 raise FormatError("blank line or new SystemC control character")
-            if CONTROL.findall(old) != CONTROL.findall(new):
-                raise FormatError("SystemC ordered control tokens changed line")
             if NAME.match(new) or new.startswith(("//", "***")) or re.match(r"[A-Za-z]+_", new):
                 raise FormatError("translation introduces SystemC command/name syntax")
             if any(c in CONTROL.sub("", new) for c in "$&\\<>[]{}@#%^|~"):
                 raise FormatError("translation introduces unknown SystemC text controls")
-            encoded = text_codec.encode(new) if text_codec is not None else new.encode("cp932", errors="strict")
+            unchanged = i < len(old_lines) and old_lines[i] == new
+            encoded = raw[rec["locator"]["message_line"] + i] if unchanged else (
+                text_codec.encode(new) if text_codec is not None else new.encode("cp932", errors="strict"))
             decoded = encoded.decode("cp932")
             if text_codec is not None:
                 decoded = text_codec.display(decoded)
             if len(encoded) > 4096 or decoded != new:
                 raise FormatError("SystemC line exceeds budget or is not lossless CP932")
             raw[rec["locator"]["message_line"] + i] = encoded
+        start = rec["locator"]["message_line"]
+        raw[start + len(new_lines):start + slot_count] = [b""] * (slot_count - len(new_lines))
     rebuilt = b"\r\n".join(raw)
-    updated = dict(members, **{act_name: rebuilt})
-    parsed_rows, parsed_manifest = export_act(act_name, updated)
+    if len(rebuilt) > MAX_BYTES:
+        raise FormatError("SystemC rebuilt ACT exceeds budget")
+    parsed_rows, parsed_manifest = export_act(act_name, dict(members, **{act_name: rebuilt}))
     if text_codec is not None:
         parsed_rows = [{key: text_codec.display(value) for key, value in row.items()} for row in parsed_rows]
     if parsed_rows != translated or parsed_manifest["records"] != manifest["records"]:

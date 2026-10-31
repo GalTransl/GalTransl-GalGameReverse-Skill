@@ -2,7 +2,7 @@
 # Adapted from SExtractor tools/SystemC/fpk_pack_SystemB3.py and src/reg.yaml:_BIN_SystemC
 # Source commit: 8d8d976fd04ae54e7c677705af937273d04a376a
 # Upstream attribution: satan53x / SExtractor contributors.
-"""SystemC ZLC2 and encrypted-tail-index FPK (Tomefure variant).
+"""SystemC ZLC2 and encrypted-tail-index FPK.
 
 FPK/ZLC2 layout informed by GARbro-Mod ArcFormats/Interheart/ArcFPK.cs,
 commit bc26d991ef5cdc0e1ecb32122ee9a48c3375750c.
@@ -181,7 +181,7 @@ def unpack_fpk(data, *, limits=Limits()):
 def rebuild_fpk(data, replacements, *, limits=Limits()):
     """Rebuild layout and encrypted index, preserving gaps, order and opaque u32s.
 
-    Index can be in the middle of the data (observed in Tomefure). Original
+    Index can be in the middle of the data. Original
     compressed streams survive unchanged members; edits use one literal layer.
     Sizes include the 8-byte ZLC2 header. Does not write any filesystem path.
     """

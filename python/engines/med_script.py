@@ -12,9 +12,12 @@ import struct
 
 from ..common.binary import FormatError
 from ..common.contract import make_manifest, validate_rows, validate_translation
+from ..common.line_layout import drops_only_line_breaks
 
 PROFILE = "med-framed-ordinal-v1"
 MAX_FILE = 8 << 20
+# A physical newline or the engine's literal \N escape both start a new line.
+LINE_BREAKS = frozenset({"\n", "\\N"})
 # Explicit frame lengths are verified independently of this profile inventory.
 # Non-display operands remain opaque and byte-exact; no relocation is needed
 # because frames and original string ordinals never move.
@@ -191,7 +194,8 @@ def export(data):
     manifest = make_manifest(engine="med", variant=PROFILE, reference="engines/med.md",
         sources={"script": data}, rows=rows, locators=locators, encoding="cp932",
         name_policies=["writable" if "name" in r else "absent" for r in rows],
-        protected_tokens=[list(dict.fromkeys(controls(r["message"]))) for r in rows])
+        protected_tokens=[list(dict.fromkeys(t for t in controls(r["message"])
+                                             if t not in LINE_BREAKS)) for r in rows])
     return rows, manifest
 
 
@@ -205,8 +209,10 @@ def rebuild(data, translated, manifest=None):
     for before, after, record in zip(original, translated, expected["records"]):
         loc = record["locator"]
         for key in before:
-            if not after[key] or controls(before[key]) != controls(after[key]):
-                raise FormatError("MED empty text or changed control sequence")
+            if not after[key] or not drops_only_line_breaks(
+                    controls(before[key]), controls(after[key]),
+                    lambda token: token in LINE_BREAKS):
+                raise FormatError("MED empty text or changed controls/line breaks")
             if key == "name" and any(c in after[key] for c in "【】"):
                 raise FormatError("MED name must exclude display brackets")
         edits[loc["frame"]] = after["message"].encode("cp932", "strict")

@@ -34,7 +34,7 @@ python -m python.engines.kaguya_extract pack /path/to/game/game_extract --output
 
 CLI 只选择输入目录根部的 `message.dat`。没有 SCR 调用点到对白的映射时，保留 `message.json`，不猜章节名拆分。`--verify-edits` 在内存中进行变长回填、重解析，不把测试句混入原文产物。
 
-回填校验原始文件哈希及重新解析所得 manifest；未提供译文时报告 `translation_provided=false`，不当作翻译完成。独立文本表仍输出为独立文件，不重新塞进 `scr.arc`。
+回填校验原始文件哈希及重新解析所得 manifest；未提供译文时报告 `translation_provided=false`，不当作翻译完成。独立文本表仍输出为独立文件，不重新塞进 `scr.arc`。换行保护项调整后，旧 metadata 无法通过 manifest 比对；应从哈希验证通过的原件重新提取到新目录，再放回同名译文。
 
 交付时建议先试注 `message.json` 的少量正文，说明开场触发位置是否已确认。告诉用户：“译文按同名文件放回 `gt_output` 后告诉我，我来回写。”
 
@@ -149,7 +149,7 @@ patched = patch_tblstr(data, archive, {0: "译文"}, encoding="gbk")
 
 ## 编码与中文显示
 
-ver4 正文、姓名和选项使用严格 CP932，语音名使用 UTF-16LE。`F040` 与全角百分号相互映射，按 SJIS 字符边界处理。单独的"％"姓名是不可改上下文；改写字段保持特殊百分号数量、LF 数量及结尾换行状态。姓名也可能含 LF。
+ver4 正文、姓名和选项使用严格 CP932，语音名使用 UTF-16LE。`F040` 与全角百分号相互映射，按 SJIS 字符边界处理。单独的"％"姓名是不可改上下文；改写字段保持特殊百分号数量，LF 可以比原文少但不能新增，也不得凭空增加空白首尾行。姓名也可能含 LF。
 
 中文超出 CP932 时优先使用[公共 JIS 替换流程](../guides/jis-substitution.md)，将代理 JSON 交给现有 writer，不逐引擎实现编码器。重读输出后验证代理文本及还原中文，再交付对应映射和字体或 hook 配置。字节回填成功不等于已验证游戏显示。
 
