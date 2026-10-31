@@ -7,10 +7,14 @@ import io
 import json
 from pathlib import Path, PurePosixPath, PureWindowsPath
 import runpy
+import sys
 import unittest
 
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+from python.common.source_catalog import load_formats
+
 BUILDER = runpy.run_path(str(ROOT / "tools/build_source_catalog.py"))
 
 
@@ -31,7 +35,7 @@ def walk(value):
 class StaticCatalogTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.formats = load("catalog/formats.json")
+        cls.formats = load_formats(ROOT / "catalog/formats.json")
         cls.registry = load("catalog/source-registries.json")
         cls.provenance = load("provenance/catalog.json")
         cls.entries = cls.formats["formats"]

@@ -16,7 +16,7 @@ description: 识别 galgame/visual novel 引擎与资源格式，解包并提取
    python /path/to/GalTransl-GalGameReverse-Skill/python/detect.py /path/to/game
    ```
    探测结果只作候选，继续核对文件头、结构、版本和配套文件。
-3. 从[引擎索引](#引擎索引)加载对应页面及必要指南。未识别格式可查询 [catalog](catalog/formats.json)；`source_only` 仅表示来源注册状态，能力以随包实现与测试为准。
+3. 从[引擎索引](#引擎索引)加载对应页面及必要指南。未识别格式用 [目录查询器](tools/query_catalog.py) 按 Tag、扩展名或魔数筛选，见[查询方法](guides/detection.md#搜索资料目录)，不要整份读取目录 JSON；`source_only` 仅表示来源注册状态，能力以随包实现与测试为准。
 4. 证据冲突或算法缺失时，保留诊断，继续有界分析，按[增补指南](guides/extending-engines.md)补齐实现与合成测试后重试。没有真实样本时只报告合成验证；移植保留许可，GPL 来源本身不是阻塞理由。
 
 ## 输出目录与 GalTransl 交接
@@ -98,7 +98,7 @@ JIS 交付可将随包 [UIF x86 winmm.dll](assets/uif/README.md) 与配置一并
 - [独立 Python API 与运行约定](guides/python-reference-api.md)
 - [通用集成步骤：导出 JSON、保存 manifest、回填新脚本](guides/worked-roundtrip.md)
 - [增补未知引擎或游戏变体](guides/extending-engines.md)
-- [完整归档/脚本格式 catalog](catalog/formats.json)：资料目录，不是 Python 支持列表。
+- [归档/脚本格式 catalog](catalog/formats.json)：无损去重的资料目录，用[查询器](tools/query_catalog.py)分页读取，不是 Python 支持列表。
 - [归档布局与解密资料](catalog/archive-notes.md)：按格式查阅索引、key 派生和成员解码规则；资料不代表已实现。
 - [脚本与字库格式研究资料](catalog/format-research.md)：补充 VM、字符串池、显示控制和位图字库的方言证据与待核条件，不是运行支持列表。
 - [上游实际注册清单](catalog/source-registries.json)：含预设、工具线索及禁用/不完整实现的区分。

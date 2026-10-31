@@ -12,11 +12,15 @@ import hashlib
 import json
 from pathlib import Path, PurePosixPath
 import re
+import sys
 import textwrap
 
 from build_source_catalog import Repository, TOKEN_RE, lex, pairs, parse_cs, require
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+from python.common.source_catalog import load_formats
+
 DEST = ROOT / "engines" / "garbro"
 SKIP_MEMBERS = {
     "Tag", "Description", "Signature", "Signatures", "Extensions", "CanWrite",
@@ -196,9 +200,24 @@ def render_source(source, classes, formats, dependencies, enums, aliases):
     return "\n".join(out)
 
 
+def render_notices(records):
+    """Group identical complete notices while retaining every source mapping."""
+    groups = defaultdict(list)
+    for path, notice in sorted(records):
+        groups[notice].append(path)
+    lines = ["# 归档算法摘录的原版权与许可通知", "",
+             "完全相同的源文件头通知合并展示，下面列出的每个文件均适用其所在组的完整通知。"
+             "没有单独文件通知的组件仍须核对根许可与来源记录，不能据此推断无条件授权。", ""]
+    for index, (notice, paths) in enumerate(groups.items(), 1):
+        lines.extend([f"## 通知 {index}", ""])
+        lines.extend(f"- `{path}`" for path in paths)
+        lines.extend(["", "```text", notice, "```", ""])
+    return "\n".join(lines)
+
+
 def build(source_root):
     repo = Repository("garbro", source_root)
-    catalog = json.loads((ROOT / "catalog/formats.json").read_text(encoding="utf-8"))
+    catalog = load_formats(ROOT / "catalog/formats.json")
     require(catalog["source_commit"] == repo.commit, "Catalog/source version mismatch")
     formats = [fmt for fmt in catalog["formats"] if fmt["kind"] == "archive"]
     projects = catalog["projects"]
@@ -281,7 +300,7 @@ def build(source_root):
                         if not re.match(r"\s*//!|\s*//\s*\[\d", line)]
         notice = "\n".join(notice_lines).strip()
         if notice:
-            notices.extend([f"## {path}", "", "```text", notice, "```", ""])
+            notices.append((path, notice))
         source_records.append({"path": path, "decoded_utf8_sha256": hashlib.sha256(source.encode("utf-8")).hexdigest(),
                                "document": document_path(path), "classes": [cls.qualified for cls in classes]})
     records = [{"assembly": fmt["assembly"], "class": fmt["qualified_class"],
@@ -297,8 +316,7 @@ def build(source_root):
         "changes": "Comments and UI/registration/writer/cleanup members omitted; fixed filename-list resource literals replaced with name_list_parameter; trailing line whitespace removed; original reading and decoding expressions otherwise retained",
         "license": "Per-file original notices in garbro-archive-notices.md; root MIT is not a blanket license",
         "sources": source_records}, ensure_ascii=False, indent=2) + "\n"
-    artifacts["provenance/garbro-archive-notices.md"] = "# 归档算法摘录的原版权与许可通知\n\n" + \
-        "源文件头通知按原文保留；没有单独文件通知的组件仍须核对根许可与来源记录，不能据此推断无条件授权。\n\n" + "\n".join(notices)
+    artifacts["provenance/garbro-archive-notices.md"] = render_notices(notices)
     families = defaultdict(list)
     for fmt in formats:
         p = PurePosixPath(fmt["source"]["path"])

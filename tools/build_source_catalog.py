@@ -21,6 +21,9 @@ import sys
 import xml.etree.ElementTree as ET
 from urllib.parse import quote
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from python.common.source_catalog import dump_formats
+
 PINS = {
     "garbro": "bc26d991ef5cdc0e1ecb32122ee9a48c3375750c",
     "msg-tool": "f72716cee88554d40c1cdface2812493b14ca653",
@@ -961,7 +964,9 @@ def main(argv=None):
         repos = {name: Repository(name, getattr(args, name.replace("-", "_") + "_root")) for name in PINS}
         artifacts = generate(repos)
         for relative, document in artifacts.items():
-            payload = (json.dumps(document, ensure_ascii=False, indent=2) + "\n").encode("utf-8")
+            text = (dump_formats(document) if relative == "catalog/formats.json" else
+                    json.dumps(document, ensure_ascii=False, indent=2) + "\n")
+            payload = text.encode("utf-8")
             target = args.output_root / relative
             if args.check:
                 require(target.is_file() and target.read_bytes() == payload, f"Generated artifact differs: {relative}")

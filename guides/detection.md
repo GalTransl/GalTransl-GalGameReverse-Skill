@@ -31,6 +31,18 @@ python /path/to/GalTransl-GalGameReverse-Skill/python/detect.py /path/to/game --
 
 [formats.json](../catalog/formats.json) 保存上游有效编译/注册来源。目录行数不是支持引擎数：它包含同引擎变体、归档资源集合和某些只读格式。`CanWrite`、`Create` 的源声明不等于所有读取版本都可重封包。
 
+用随包[查询器](../tools/query_catalog.py)筛选，默认每页 20 项；`--details` 展开当前页的原始表达式、继承和来源证据。条件同时使用时取交集；`--text` 可搜索别名、源路径和描述。返回 `total`、`returned` 和 `next_offset`，用 `--offset` 接续；不要把一页结果当完整目录。
+
+```text
+python /path/to/skill/tools/query_catalog.py --tag XP3 --details
+python /path/to/skill/tools/query_catalog.py --extension .dat --limit 10 --offset 0
+python /path/to/skill/tools/query_catalog.py --magic 5850330d
+```
+
+魔数为文件顺序的四字节十六进制。无固定魔数的格式不会由 `--magic` 命中，仍需结合其他证据。
+
+存储 schema 2 保留原字段与全部证据：`shared` 中的对象由 `{"$ref":索引}` 引用；`{"$source":[路径,行号,可选符号]}` 复用顶层来源版本。条目内 `null` 路径表示该条目的源路径，空符号或以 `.` 开头的符号相对 `qualified_class`。每个条目的根 `source` 总保留路径。程序读取请用 [load_formats](../python/common/source_catalog.py)，它兼容旧 schema 1 并还原完整 schema 1 对象；生成工具直接写去重格式，无需外部源码即可查询。
+
 优先按完整魔数、格式 Tag、别名、扩展名的组合查找，接着读随包的具体引擎页及对应 Python 模块；`source_file` / 源符号仅作历史出处记录，不要求访问其指向的外部代码。`family_hint` 或上游源码目录名只是线索；同一目录可能收录多个格式族，不可机械合并为同一引擎。
 
 `source-registries.json` 中的 `source_only` 表示记录来自上游注册，不表示当前 Python 没有实现，也不表示已有可用 writer。能力需对照引擎页/模块，缺口按 [增补指南](extending-engines.md) 根据随包资料与样本继续只读研究并补齐实现。

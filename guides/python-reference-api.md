@@ -73,4 +73,4 @@ entries = [("scenario/example.txt", b"synthetic example")]
 
 按 [增补指南](extending-engines.md) 核实来源与许可、记录布局和限制、实现有界算法、补充正负例及往返验证，再更新引擎页和来源记录。
 
-直接使用随包 `catalog/*.json`；提取、回填与适配不要求重建来源目录或访问外部源码。
+来源格式目录优先用 [query_catalog.py](../tools/query_catalog.py) 分页查询；程序通过 [load_formats](../python/common/source_catalog.py) 读取 `catalog/formats.json`，不要将其中去重引用当作完整记录。其他 `catalog/*.json` 可直接读取；提取、回填与适配不要求重建来源目录或访问外部源码。

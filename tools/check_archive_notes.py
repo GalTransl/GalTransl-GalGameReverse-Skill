@@ -2,12 +2,15 @@
 import json
 from pathlib import Path
 import re
+import sys
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+from python.common.source_catalog import load_formats
 
 
 def check():
-    catalog = json.loads((ROOT / "catalog/formats.json").read_text(encoding="utf-8"))
+    catalog = load_formats(ROOT / "catalog/formats.json")
     index = json.loads((ROOT / "catalog/archive-notes.json").read_text(encoding="utf-8"))
     source = json.loads((ROOT / "provenance/garbro-archive-excerpts.json").read_text(encoding="utf-8"))
     formats = [fmt for fmt in catalog["formats"] if fmt["kind"] == "archive"]

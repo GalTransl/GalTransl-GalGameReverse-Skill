@@ -12,6 +12,9 @@ import sys
 from urllib.parse import unquote
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+from python.common.source_catalog import load_formats
+
 REQUIRED_ENGINES = {
     "willplus", "artemis", "bgi", "catsystem2", "kirikiri", "musica", "qlie",
     "silky", "softpal", "yuris", "circus", "entis-gls", "escude", "exhibit",
@@ -161,6 +164,12 @@ def check() -> tuple[list[str], dict]:
                      "provenance/NOTICE.md", "LICENSE"):
         if not (ROOT / required).is_file():
             errors.append(f"missing {required}")
+    try:
+        catalog = load_formats(ROOT / "catalog/formats.json")
+        if len(catalog["formats"]) != catalog["counts"]["total"]:
+            errors.append("source catalog count does not match expanded entries")
+    except (OSError, ValueError, KeyError, TypeError, RecursionError) as exc:
+        errors.append(f"invalid source catalog: {exc}")
     return errors, stats
 
 
