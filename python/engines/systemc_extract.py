@@ -9,6 +9,7 @@ import stat
 from ..archives.systemc import unpack_fpk, rebuild_fpk
 from ..common.binary import FormatError
 from ..common.contract import dump_rows, load_json, sha256
+from ..common.jis_workflow import preflight_translations
 from ..common.safety import write_new_tree, validate_new_tree_destination
 from .systemc import MAX_BYTES, VARIANT, export_act, inject_act
 
@@ -117,13 +118,19 @@ def extract(game, destination, *, verify_edits=False):
     return report
 
 
-def pack(workspace, destination, *, translations=None, jis_mode="auto"):
+def pack(workspace, destination=None, *, translations=None, jis_mode="auto", jis_preflight=False):
     from python.common.jis_substitution import JisSubstitution
 
     if jis_mode not in ("auto", "off"):
         raise FormatError("unsupported JIS mode")
-    workspace, destination = Path(workspace), Path(destination)
-    validate_new_tree_destination(destination)
+    if jis_preflight and jis_mode != "auto":
+        raise FormatError("JIS preflight requires --jis-mode auto")
+    workspace = Path(workspace)
+    if not jis_preflight:
+        if destination is None:
+            raise FormatError("SystemC pack requires an output destination")
+        destination = Path(destination)
+        validate_new_tree_destination(destination)
     report = load_json(_read(workspace / "reports/extraction.json"), max_bytes=MAX_BYTES)
     if report.get("schema") != "systemc-workspace/1" or report.get("variant") != VARIANT:
         raise FormatError("unsupported SystemC workspace")
@@ -145,6 +152,7 @@ def pack(workspace, destination, *, translations=None, jis_mode="auto"):
               "translations": [], "missing_translations": [], "changed_rows": 0,
               "runtime_verified": False, "compiled_members_unchanged": True}
     expected_json = set()
+    originals, translated = {}, {}
     for name in _acts(members):
         rows, manifest = export_act(name, members)
         if not rows:
@@ -158,10 +166,20 @@ def pack(workspace, destination, *, translations=None, jis_mode="auto"):
         path = translated_dir / json_name
         provided = path.exists()
         after = load_json(_read(path), max_bytes=MAX_BYTES) if provided else original
-        rewritten[name] = inject_act(name, members, original, metadata, after, text_codec=text_codec)
+        if jis_preflight:
+            originals[json_name] = original
+            if provided:
+                translated[json_name] = after
+        if not jis_preflight:
+            rewritten[name] = inject_act(name, members, original, metadata, after, text_codec=text_codec)
         result["changed_rows"] += sum(a != b for a, b in zip(original, after))
         result["translations" if provided else "missing_translations"].append(json_name)
     result["unmatched_json"] = sorted(p.name for p in translated_dir.glob("*.json") if p.name not in expected_json)
+    if jis_preflight:
+        extra = {f"original/members/{name}": members[name].decode("cp932")
+                 for name in [*_acts(members), "charaid.tbl"]}
+        return dict(result, schema="systemc-jis-preflight/1", jis_preflight=preflight_translations(
+            originals, translated, encoding="cp932", extra_texts=extra))
     repacked = rebuild_fpk(raw, rewritten)
     _verify_archive(repacked, rewritten)
     result.update(output_sha256=sha256(repacked), size=len(repacked), reparsed_exactly=True,
@@ -182,15 +200,24 @@ def main():
     ex.add_argument("--verify-edits", action="store_true")
     pk = commands.add_parser("pack")
     pk.add_argument("workspace", type=Path)
-    pk.add_argument("--output", type=Path, required=True)
+    pk.add_argument("--output", type=Path)
     pk.add_argument("--translations", type=Path)
     pk.add_argument("--jis-mode", choices=("auto", "off"), default="auto")
+    pk.add_argument("--jis-preflight", action="store_true", help="report JIS proxy conflicts without writing a package")
     args = parser.parse_args()
+    if args.command == "pack":
+        if not args.jis_preflight and args.output is None:
+            parser.error("pack requires --output unless --jis-preflight is selected")
+        if args.jis_preflight and args.jis_mode != "auto":
+            parser.error("--jis-preflight requires --jis-mode auto")
     result = (extract(args.game, args.output, verify_edits=args.verify_edits) if args.command == "extract"
-              else pack(args.workspace, args.output, translations=args.translations, jis_mode=args.jis_mode))
+              else pack(args.workspace, args.output, translations=args.translations,
+                        jis_mode=args.jis_mode, jis_preflight=args.jis_preflight))
     # Full per-member detail is saved in reports; keep console output compact.
     print(json.dumps({k: v for k, v in result.items() if k not in {"scripts", "loose_data"}},
                      ensure_ascii=True, indent=2))
+    if args.command == "pack" and args.jis_preflight and not result["jis_preflight"]["ok"]:
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":

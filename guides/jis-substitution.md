@@ -4,13 +4,30 @@
 
 ## 入口与适用条件
 
-- [jis_workflow.py](../python/common/jis_workflow.py)：通用 `prepare` / `finalize` CLI，以及不依赖引擎的 `prepare_translations` API。没有引擎分支或注册表，不修改全局 codec。
+- [jis_workflow.py](../python/common/jis_workflow.py)：通用 `prepare` / `finalize` CLI，`prepare --jis-preflight` 只读预检，以及不依赖引擎的 `preflight_translations` / `prepare_translations` API。没有引擎分支或注册表，不修改全局 codec。
 - [jis_substitution.py](../python/common/jis_substitution.py)：SExtractor 固定映射、冲突检测、可选私用字符分配、配置及 hook 产物。仅依赖标准库，无需安装外部项目。
 - 工作区采用主 Skill 的 `original/metadata/reports/gt_input/gt_output` 结构；引擎接受 UTF-8 的最小 name/names/message JSON，并已有严格 CP932 writer 与真实重提取能力。
 - 必须确认**存储编码**。JSON 本身是 UTF-8，某些 manifest 的 encoding 也是交换层 UTF-8；都不能代替脚本编码证据。严格 shift_jis、UTF-8、UTF-16、GBK 不使用此流程，Kirikiri PSB/SCN 不因 XP3 文件名编码而触发它。
 - 原脚本已使用 UIF 替换或 tunneling 时先识别原映射。工作区声明已有 source/target 字符表或已启用旧映射时，公共准备器拒绝直接叠加；应先制定合并/还原方案。游戏目录已有 hook 也需检查，不能用新子集配置覆盖仍在使用的旧映射。
 
 `prepare` / `finalize` 的输出父目录须已存在，目标须不存在或为普通空目录；非空目录、文件和链接拒绝。
+
+## 打包前只读预检
+
+任何满足上述交换契约的 CP932 引擎工作区，先用同一个公共入口检查固定映射：
+
+```text
+python -m python.common.jis_workflow prepare "原工作区" --encoding cp932 --jis-preflight
+python -m python.common.jis_workflow prepare "原工作区" --encoding cp932 --jis-preflight --extra-text "已解码文本/ui.txt"
+```
+
+无需输出目录；即使提供也不创建或写入。预检不生成代理 JSON、配置或 DLL，不回写脚本、不重封包。默认读取 `gt_output`，可用 `--translations "译文目录"` 改选；该参数也适用于正式 `prepare`。
+
+控制台 JSON 的 `conflicts` 一次列出所有冲突中文字符、固定代理字、`translation_locations` 与 `literal_locations`。JSON 位置包括文件、记录号、`name`/`names`/`message` 字段，多人名另含槽号；额外文本按物理行定位。记录号、槽号和行号从 1 开始，记录号不是 JSON 文件的物理行号。CLI 的额外文本来源标签为 `<序号>-<文件名>`，纯 API 可提供相对来源名与解码文本的字典。
+
+`missing_characters` 列出缺少映射的字符，`missing_translations` 列出仍保留原文的 JSON；未翻译文件的原文及姓名也参与预留。存在冲突或缺映射时退出码为 1，否则为 0。预检针对固定映射，与 `--proxy-policy unused` 不组合；根据诊断决定保留固定映射或另行生成私用字符映射。
+
+预检和正式准备共用文件集合、记录数、字段及多人名槽数校验，并拒绝声明已有映射的工作区。预检不自行解码原始二进制资源；未导出的姓名表、UI 或其他显示文本必须由原 parser 正确解码后传入 `--extra-text` / `extra_texts`。它不能代替引擎的源哈希、控制码、姓名可写性、容量、封包或游戏显示验证。
 
 ## Agent 完成的四步
 
@@ -48,7 +65,13 @@ SystemC、ExHibit 已有的内联 JIS 接口保留兼容；走公共准备流程
 ## 公共 API
 
 ```python
-from python.common.jis_workflow import prepare_translations
+from python.common.jis_workflow import preflight_translations, prepare_translations
+
+diagnostics = preflight_translations(
+    original_rows_by_filename, translated_rows_by_filename,
+    encoding="cp932", extra_texts=decoded_ui_texts,
+)
+# 先检查 diagnostics["conflicts"] 和 diagnostics["missing_characters"]。
 
 plan = prepare_translations(
     original_rows_by_filename, translated_rows_by_filename,
@@ -93,4 +116,4 @@ agent 最终必须给出实际目录和操作说明。使用兼容 UIF 的 `winm
 
 ## 来源与验证
 
-固定表和低层语义的来源见 [jis-substitution.json](../provenance/jis-substitution.json)，私用字符规划和 JSON 公共流程为本项目新增实现。测试位于 [test_jis_substitution.py](../tests/test_jis_substitution.py) 与 [test_jis_workflow.py](../tests/test_jis_workflow.py)：覆盖冲突、稳定分配、快照篡改、姓名/多人名、引擎控制码拒绝，以及两个不同引擎的原 writer、重提取和公共交付。游戏运行记录只放各游戏结果目录。
+固定表和低层语义的来源见 [jis-substitution.json](../provenance/jis-substitution.json)，私用字符规划和 JSON 公共流程为本项目新增实现。测试位于 [test_jis_substitution.py](../tests/test_jis_substitution.py)、[test_jis_workflow.py](../tests/test_jis_workflow.py) 与 [test_jis_preflight.py](../tests/test_jis_preflight.py)：覆盖公共只读预检与定位、冲突、稳定分配、快照篡改、姓名/多人名、引擎控制码拒绝，以及不同引擎的原 writer、重提取和公共交付。游戏运行记录只放各游戏结果目录。

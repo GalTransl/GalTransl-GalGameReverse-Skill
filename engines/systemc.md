@@ -43,11 +43,14 @@ CP932 ACT/DAT/SPT 工作区通过 [systemc_extract.pack](../python/engines/syste
 
 ```text
 python -m python.engines.systemc_extract extract "<游戏目录>" --output "<新输出目录>" --verify-edits
+python -m python.engines.systemc_extract pack "<新输出目录>" --jis-preflight
 python -m python.engines.systemc_extract pack "<新输出目录>" --output "<新输出目录>/rebuilt/translated-01"
 ```
 
+- `pack --jis-preflight` 保留为[公共预检](../guides/jis-substitution.md#打包前只读预检)的适配入口，调用共享 `preflight_translations`，输出在 `jis_preflight` 中。它先校验 SystemC 源快照、JSON 与 manifest，再将原始 ACT/`charaid.tbl` 的解码文本一并传入公共层，因此未翻译脚本、姓名头及注释中的代理字也参与检查。无需 `--output`，不写出文件，与 `--jis-mode off` 不兼容，支持 `--translations`。
 - 使用结构与编码标识重新导出元数据；旧 manifest 保护换行数量或使用旧标识时，应从哈希验证通过的原包导出到新工作区。核对原文 JSON 的字段、条数和顺序后保留同名 `gt_output` 译文，不修改旧 manifest 绕过校验或覆盖已有输入。
 - [test_systemc.py](../tests/test_systemc.py) 覆盖原文往返、少换行补齐、多个空槽、已有补齐脚本再次往返、按编译引用确定容量、变长中文/JIS 回读、非文本成员保留、坏译文拒绝与工作区封包。
+- [test_jis_preflight.py](../tests/test_jis_preflight.py) 覆盖公共预检及 SystemC 的跨脚本、人物表和源快照适配。
 
 ## UTF-8 TXD/PTR 工作流
 

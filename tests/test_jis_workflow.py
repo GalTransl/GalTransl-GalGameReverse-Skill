@@ -97,6 +97,8 @@ class WorkspaceTests(unittest.TestCase):
             root = Path(tmp)
             work, profile = self.fixture(root)
             before = {p.relative_to(work).as_posix(): p.read_bytes() for p in work.rglob('*') if p.is_file()}
+            preflight = prepare(work, encoding="cp932", jis_preflight=True)
+            self.assertEqual({item["character"] for item in preflight["conflicts"]}, {"测", "试", "译"})
             with self.assertRaises(ValueError):
                 prepare(work, root / "fixed", encoding="cp932")
             self.assertFalse((root / "fixed").exists())
@@ -124,6 +126,8 @@ class WorkspaceTests(unittest.TestCase):
             (root / "game/rld/start.rld").write_bytes(rld(op(28, ("N", "測"))))
             ex(root / "game", root / "work")
             (root / "work/gt_output/start.json").write_bytes(dump_rows([{"name": "N", "message": "测试"}]))
+            preflight = prepare(root / "work", encoding="cp932", jis_preflight=True)
+            self.assertEqual([item["character"] for item in preflight["conflicts"]], ["测"])
             prepare(root / "work", root / "prepared", encoding="cp932", proxy_policy="unused")
             pack(root / "prepared/workspace", root / "packed", jis_mode="off")
             ex(root / "packed", root / "readback")

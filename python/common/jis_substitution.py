@@ -95,6 +95,23 @@ class JisSubstitution:
         self._check_collision(direct, self._used)
         self._direct = direct
 
+    def preflight(self, texts):
+        """Report all fixed-mapping conflicts before encoding, without mutation."""
+        if self._used:
+            raise FormatError("cannot preflight JIS proxies after encoding has started")
+        direct = set(self._direct)
+        characters = set()
+        for text in texts:
+            direct.update(self._direct_chars(text))
+            characters.update(text)
+        needed = sorted(characters - direct)
+        missing = [char for char in needed if char not in self._mapping]
+        conflicts = [{"character": char, "proxy": self._mapping[char]}
+                     for char in needed if char in self._mapping and self._mapping[char] in direct]
+        return {"mapping_sha256": MAPPING_SHA256, "required_count": len(needed),
+                "conflicts": conflicts, "missing_characters": missing,
+                "ok": not conflicts and not missing}
+
     def plan(self, texts, *, remap_conflicts=False):
         """Plan all translations before encoding; optionally use unused CP932 PUA.
 
