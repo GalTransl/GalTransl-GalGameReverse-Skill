@@ -14,7 +14,7 @@ from python.archives.qlie import read_index, read_member, PACK_KEY_NAME
 from python.archives.qlie_keys import game_key_from_pe
 from python.archives.qlie_writer import rebuild
 from python.common.contract import load_json, validate_translation
-from python.common.safety import Limits, validate_names, write_new_tree
+from python.common.safety import Limits, validate_names, write_new_tree, validate_new_tree_destination
 from python.engines.qlie_imos import REFERENCE, scan, patch
 from python.engines.qlie_extract import _small, _ordinary, _json
 
@@ -27,8 +27,7 @@ def repack(game: Path, extracted: Path, output: Path, *, source_roundtrip: bool 
     use the separate streaming rebuild API instead of this bounded recipe.
     """
     game, extracted, output = map(lambda p: Path(os.path.abspath(p)), (game, extracted, output))
-    if os.path.lexists(output):
-        raise FileExistsError(f'refusing to replace output: {output}')
+    validate_new_tree_destination(output)
     report = load_json(_small(extracted / 'reports/extraction.json', 16 << 20))
     if (report.get('schema') != 'qlie-extract/1' or report.get('variant') != REFERENCE
             or report.get('status') != 'complete' or report.get('crypto') != 'keyed'):

@@ -34,10 +34,12 @@ class TxdTests(unittest.TestCase):
         from python.archives.systemc import unpack_fpk
         with tempfile.TemporaryDirectory() as temp:
             root=Path(temp);m=fixture();raw=archive(m);(root/'data.fpk').write_bytes(raw)
+            (root / 'work').mkdir()
             report=extract(root,root/'work',verify_edits=True)
             self.assertEqual(report['rows'],1)
             rows=[{'name':'姓名','message':'测试\n第二行'}]
             (root/'work/gt_output/ACT_A_JA.json').write_bytes(dump_rows(rows))
+            (root / 'patch').mkdir()
             pack(root/'work',root/'patch')
             _,result=unpack_fpk((root/'patch/data.fpk').read_bytes())
             self.assertEqual(read_table(result['ACT_A_JA.TXD'],result['ACT_A_JA.PTR'])[1],rows)

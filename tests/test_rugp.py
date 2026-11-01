@@ -259,6 +259,7 @@ class WorkspaceTests(unittest.TestCase):
             root = Path(temp)
             source, original = self.make_source(root)
             output = root / "analysis"
+            output.mkdir()
             report = analyze_archive(source, output, limits=AnalysisLimits(chunk_bytes=11))
             self.assertEqual(source.read_bytes(), original)
             self.assertEqual(report["source_sha256"], hashlib.sha256(original).hexdigest())

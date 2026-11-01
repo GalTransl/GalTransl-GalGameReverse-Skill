@@ -212,10 +212,12 @@ class WorkspaceTests(unittest.TestCase):
             (game / "rld/start.rld").write_bytes(raw)
             (game / "rld/system.rld").write_bytes(crypt(script(op(0x1234), tag=b""), 23))
             work = root / "extracted"
+            work.mkdir()
             info = extract(game, work, exe=game / "engine.exe", seed=23, smoke_test=True)
             self.assertEqual((info["json_files"], info["rows"], info["identity_verified"]), (1, 3, 2))
             self.assertEqual(len(list((work / "gt_input").glob("*.json"))), 1)
             self.assertEqual((work / "rebuilt/roundtrip/rld/start.rld").read_bytes(), raw)
+            (root / 'empty').mkdir()
             self.assertEqual(rebuild(work, root / "empty")["changed_members"], [])
             with self.assertRaises(FileExistsError):
                 extract(game, work, seed=23)

@@ -13,7 +13,7 @@ from python.archives import xp3
 from python.archives.kirikiri_hxv4 import derive, read_index, name_hash, path_hash
 from python.archives.kirikiri_hxv4_names import inspect
 from python.archives.kirikiri_hxv4_payload import Cipher, read_member, build
-from python.common.safety import write_new_tree, Limits, validate_names
+from python.common.safety import write_new_tree, Limits, validate_names, validate_new_tree_destination
 from .kirikiri_psb import Psb
 from . import kirikiri_extract as shared
 
@@ -54,7 +54,7 @@ def extract(archive, exe, output, *, paths=('', 'scn/', 'scenario/'), language_i
     cumulative budget counts only inspected payload bytes and remains a hard stop.
     """
     archive, output = Path(archive), Path(output)
-    if output.exists(): raise FileExistsError(output)
+    validate_new_tree_destination(output)
     if (type(max_member_bytes) is not int or type(max_scan_bytes) is not int
             or not 0 < max_member_bytes <= max_scan_bytes): raise ValueError('Hx scan budgets')
     report = inspect(archive, exe, [])
@@ -140,7 +140,7 @@ def extract(archive, exe, output, *, paths=('', 'scn/', 'scenario/'), language_i
 
 def pack(workspace, output):
     workspace, output = Path(workspace), Path(output)
-    if output.exists(): raise FileExistsError(output)
+    validate_new_tree_destination(output)
     evidence = json.loads(shared.read_file(workspace/'reports/hxv4.json', 16<<20))
     if evidence['schema'] != 'kirikiri-hxv4-text/1': raise ValueError('Hx text workspace schema')
     # Source index remains authority for keys/IDs, independent of editable metadata.

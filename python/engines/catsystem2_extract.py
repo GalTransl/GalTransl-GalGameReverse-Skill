@@ -10,7 +10,8 @@ from pathlib import Path
 import re
 
 from python.common.contract import dump_rows, make_manifest
-from python.common.safety import Limits, logical_path, write_new_tree
+from python.common.binary import FormatError
+from python.common.safety import Limits, logical_path, write_new_tree, validate_new_tree_destination
 from python.engines.catsystem2 import export_cst, patch_dialogue, read_cst
 from python.archives.catsystem2_int import extract_exe_password, probe_member, read_int, read_member
 
@@ -32,8 +33,13 @@ def _next_destination(root: Path) -> Path:
     destination = root / f"{root.name}_extract"
     suffix = 2
     while os.path.lexists(destination):
-        destination = root / f"{root.name}_extract_{suffix}"
-        suffix += 1
+        try:
+            validate_new_tree_destination(destination)
+        except (FileExistsError, FormatError):
+            destination = root / f"{root.name}_extract_{suffix}"
+            suffix += 1
+            continue
+        return destination
     return destination
 
 

@@ -81,7 +81,7 @@ python -m python.engines.kirikiri_extract pack "提取目录" "新的打包目�
 | `--language-index` | 从 0 开始选择已有语言槽，默认 0；语言含义须核对内容，不由编号推断 |
 | `--verify-edits` | 额外进行中文前缀的变长回写验证；生成的 smoke-test 包不是正式译文 |
 
-新输出目录必须不存在。正文按成员预算读取，原包哈希按流核对；不要为提取剧情把整个媒体包载入内存。平铺 JSON 的重名映射、来源、覆盖关系与选择的语言槽保存在报告中，`pack` 沿用原提取配置。
+输出目录须不存在或为普通空目录，且父目录已存在。正文按成员预算读取，原包哈希按流核对；不要为提取剧情把整个媒体包载入内存。平铺 JSON 的重名映射、来源、覆盖关系与选择的语言槽保存在报告中，`pack` 沿用原提取配置。
 
 ### 文本定位与回写规则
 
@@ -138,7 +138,7 @@ python -m python.engines.kirikiri_tlg convert <目录> <新的输出目录>
 python -m python.engines.kirikiri_tlg encode <编辑后.png> <输出.tlg>
 ```
 
-目录模式递归处理 `*.tlg`，输出目录必须不存在。`encode` 需要 Pillow 读取 PNG；解码路径只用标准库。格式布局、LZSS/差分还原、预算与验证状态见 [TLG5 子页](kirikiri/tlg.md)。
+目录模式递归处理 `*.tlg`，输出目录须不存在或为普通空目录，且父目录已存在。`encode` 需要 Pillow 读取 PNG；解码路径只用标准库。格式布局、LZSS/差分还原、预算与验证状态见 [TLG5 子页](kirikiri/tlg.md)。
 
 ## 有限 KS 接口
 

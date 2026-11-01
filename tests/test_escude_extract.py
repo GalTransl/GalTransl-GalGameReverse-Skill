@@ -25,6 +25,7 @@ class EscudeExtractTests(unittest.TestCase):
             game = self.setup_game(root)
             originals = {p.name: p.read_bytes() for p in game.iterdir()}
             output = root / 'output'
+            output.mkdir()
             report = extract(game, output)
             self.assertEqual(report['totals']['rows'], 1)
             self.assertEqual(report['totals']['original_roundtrip_pass'], 1)

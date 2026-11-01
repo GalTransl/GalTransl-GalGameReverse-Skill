@@ -42,7 +42,7 @@
 
 ### 可复现命令与产物
 
-在技能根目录运行；路径仅作示例，`<输出目录>` 应是游戏内新建的 `<游戏名>_extract`，已有目录不能覆盖。
+在技能根目录运行；路径仅作示例，`<输出目录>` 应是游戏内新建的 `<游戏名>_extract`，可复用已存在的普通空目录，父目录须已存在；已有非空目录不能覆盖。
 
 ```text
 python -m python.engines.yuris_extract extract "<游戏目录>" "<输出目录>" --archive pac/update1.ypf --loose ysbin --uif-config uif_config.json --reference-archive pac/ysbin.ypf --reference-archive update1.ypf --smoke-test

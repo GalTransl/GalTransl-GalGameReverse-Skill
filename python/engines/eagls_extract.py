@@ -8,7 +8,7 @@ from pathlib import Path
 
 from ..archives.eagls import DEFAULT_INDEX_KEY, pack_archive, read_index
 from ..common.contract import dump_rows, load_json, sha256
-from ..common.safety import Limits, validate_names, write_new_tree, _check_existing_ancestors
+from ..common.safety import Limits, validate_names, write_new_tree, _check_existing_ancestors, validate_new_tree_destination
 from .eagls_text import Profile, export_script, parse_script, rebuild_script
 
 
@@ -44,8 +44,7 @@ def load_profile(config=None, **kwargs):
 def extract(source, output, *, profile=Profile(), key=DEFAULT_INDEX_KEY,
             long_offsets=True, config=None, smoke_test=False):
     source, output = Path(source), Path(output)
-    if output.exists():
-        raise FileExistsError(output)
+    validate_new_tree_destination(output)
     index = read_bounded(source / "SCPACK.idx")
     # Validate the bounded index against PAK size before reading PAK.
     _, entries = read_index(index, (source / "SCPACK.pak").stat().st_size,

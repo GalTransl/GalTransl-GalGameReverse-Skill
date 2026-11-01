@@ -39,7 +39,9 @@ class EscudePackTests(unittest.TestCase):
             root = Path(tmp)
             game = fixture.EscudeExtractTests().setup_game(root)
             work = root / 'work'
+            work.mkdir()
             extract(game, work)
+            (root / 'roundtrip').mkdir()
             result = pack(work, root / 'roundtrip')
             self.assertTrue(result['byte_identical'])
             rows = json.loads((work / 'gt_input/scene.json').read_bytes())

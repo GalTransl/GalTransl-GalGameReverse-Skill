@@ -51,7 +51,7 @@ key = ~(((key >> 15) AND 1) + key * 2 + 0xA3B376C9) AND 0xFFFFFFFF
 
 ## 只读分析命令与结果
 
-在 Skill 根目录运行，输入为用户提供的普通文件，输出父目录须已存在、目的目录须全新：
+在 Skill 根目录运行，输入为用户提供的普通文件，输出父目录须已存在，目的目录须不存在或为普通空目录：
 
 ```text
 python -m python.engines.rugp /path/to/game/scenario.rio -o /path/to/work/rugp-analysis

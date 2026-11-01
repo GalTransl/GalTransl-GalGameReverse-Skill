@@ -8,13 +8,12 @@ from collections import Counter
 from dataclasses import asdict
 import hashlib
 import json
-import os
 from pathlib import Path
 import stat
 
 from python.archives.escude import read_index, read_member
 from python.common.contract import dump_rows, make_manifest, validate_translation
-from python.common.safety import Limits, validate_names, write_new_tree
+from python.common.safety import Limits, validate_names, write_new_tree, validate_new_tree_destination
 from python.engines.escude_mdb import read_names
 from python.engines.escude_mess import (
     REFERENCE, extract_pair, patch_mess, protected_tokens, read_code, read_mess,
@@ -41,8 +40,7 @@ def extract(game: Path, output: Path) -> dict:
     Unknown members, broken pairs and duplicate flat basenames fail closed.
     """
     game, output = Path(game), Path(output)
-    if os.path.lexists(output):
-        raise FileExistsError(f'refusing to replace output: {output}')
+    validate_new_tree_destination(output)
     payloads, sources, inventories, members = [], [], {}, {}
     decoded_total = 0
     for archive_name in ('data.bin', 'script.bin'):

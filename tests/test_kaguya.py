@@ -160,11 +160,13 @@ class KaguyaWorkflowTests(unittest.TestCase):
             (root / "scr.arc").write_bytes(link_file([("開始.scr", 0, b"[SCR-Ver5.1]test")]))
             (root / "params.dat").write_bytes(b"opaque-params")
             out = root / "extract"
+            out.mkdir()
             report = extract(root, out, verify_edits=True)
             self.assertEqual(report["json_rows"], 5)
             self.assertEqual(report["unused_message_indexes"], [2])
             self.assertEqual(report["link6"]["members"], 1)
             self.assertEqual((out / "roundtrip/message.dat").read_bytes(), original)
+            (out / 'empty-pack').mkdir()
             result = pack(out, out / "empty-pack")
             self.assertFalse(result["translation_provided"])
             self.assertEqual(result["changed_rows"], 0)

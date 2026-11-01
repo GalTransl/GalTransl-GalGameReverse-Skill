@@ -1,8 +1,10 @@
 """Synthetic TJS2100 bytecode for the bounded decompiler; no game data used."""
 import struct
+import tempfile
 import unittest
+from pathlib import Path
 
-from python.engines.kirikiri_tjs_decompile import Unsupported, decompile, info, strings
+from python.engines.kirikiri_tjs_decompile import Unsupported, decompile, info, strings, main
 from python.engines.kirikiri_tjs_inspect import OPS, parse
 
 OP = {name: number for number, name in enumerate(OPS)}
@@ -188,6 +190,23 @@ class TjsDecompileTests(unittest.TestCase):
         with self.assertRaises(Unsupported) as raised:
             decompile(data)
         self.assertIn('EVAL', str(raised.exception))
+
+    def test_directory_cli_accepts_empty_output(self):
+        data = program(ins('RET'), name='f', args=0)
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / 'source'
+            source.mkdir()
+            (source / 'scene.tjs').write_bytes(data)
+            for existing in (False, True):
+                destination = root / str(existing)
+                if existing:
+                    destination.mkdir()
+                with self.subTest(existing=existing):
+                    self.assertEqual(main([str(source), '-o', str(destination)]), 0)
+                    self.assertEqual((destination / 'scene.tjs').read_text(encoding='utf-8'), decompile(data))
+                    self.assertEqual(main([str(source), '-o', str(destination)]), 1)
+                    self.assertEqual((destination / 'scene.tjs').read_text(encoding='utf-8'), decompile(data))
 
     def test_parse_keeps_object_metadata(self):
         top, objects = parse(program(ins('RET'), name='f', args=2))

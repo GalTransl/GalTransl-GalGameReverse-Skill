@@ -60,7 +60,7 @@ python /path/to/skill/tools/query_catalog.py --magic 5850330d
 - 拒绝绝对路径、盘符/UNC、`..`、NUL、Windows ADS、设备名、尾随点/空格，以及大小写/NFC 归一化后的重复输出。
 - 不跟随 symlink、hardlink、junction/reparse point。输出根及其父级必须可信，不能由恶意并发进程替换。
 - 加密层和压缩层顺序必须符合格式。仅看到“解包成功”不能确认返回的是明文；若上游在解码失败时回退原始字节，不能照搬并标为成功。
-- `write_new_tree()` 只写新目录且会检查所有输出；它无法补救 parser 在调用前就无界分配内存。叶子参考的参数限额同样必须设置。
+- `write_new_tree()` 只写不存在或已存在的普通空目录，且会检查所有输出；它无法补救 parser 在调用前就无界分配内存。叶子参考的参数限额同样必须设置。
 - 索引含 Pickle 时只能解释允许的数据 opcode，禁止不受限 `pickle.loads`。GARbro `Formats.dat` 是 .NET BinaryFormatter 对象图，不是 JSON 或运行时依赖。
 
 对纯资源格式，不要因为能解包图片或声音就宣称已找到对白。需要对实际剧本做下一层证据检查。

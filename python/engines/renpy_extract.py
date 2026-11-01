@@ -11,7 +11,7 @@ import stat
 
 from ..archives import rpa
 from ..common.contract import dump_rows, load_json, sha256
-from ..common.safety import _check_existing_ancestors, validate_names, write_new_tree
+from ..common.safety import _check_existing_ancestors, validate_names, write_new_tree, validate_new_tree_destination
 from . import renpy_rpyc as rpyc
 from .renpy_pickle import attributes, class_name, scalar
 
@@ -140,8 +140,7 @@ def json_names(entries):
 
 def extract(directory, output, *, archives, smoke_test=False):
     directory, output = Path(directory), Path(output)
-    if output.exists():
-        raise FileExistsError(output)
+    validate_new_tree_destination(output)
     sources, entries = load_archives(directory, list(archives))
     print(f"Reading character/translation context from {sum(e.name.endswith('.rpyc') for _, e in entries)} RPYC files", flush=True)
     ctx = context(entries)
@@ -221,8 +220,7 @@ def extract(directory, output, *, archives, smoke_test=False):
 
 def pack(workspace, output):
     workspace, output = Path(workspace), Path(output)
-    if output.exists():
-        raise FileExistsError(output)
+    validate_new_tree_destination(output)
     report = load_json(read_bounded(workspace / "reports/extraction.json"))
     if report["engine"] != "renpy" or report["profile"] != rpyc.PROFILE:
         raise ValueError("unsupported Ren'Py workspace profile")

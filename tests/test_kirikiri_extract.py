@@ -20,13 +20,16 @@ class SharedKirikiriTests(unittest.TestCase):
             (game/'base.assets').write_bytes(xp3.build([('left/scene.scn',scene()),('empty.scn',empty)],filter_name='none'))
             (game/'update.assets').write_bytes(xp3.build([('right/scene.scn',scene('別の本文'))],filter_name='none'))
             work=root/'work'
+            work.mkdir()
             report=extract(game,work,archives=('base.assets','update.assets'),verify_edits=True)
             self.assertEqual(report['output_format'],'plain')
             self.assertEqual(report['totals']['files'],2)
             self.assertEqual(len(list((work/'gt_input').iterdir())),2)
             self.assertTrue(all('__a' in e['json'] for e in report['exports']))
             self.assertEqual(report['non_target'][0]['role'],'empty-story')
-            output=root/'pack';self.assertEqual(pack(work,output)['members'],3)
+            output=root/'pack'
+            output.mkdir()
+            self.assertEqual(pack(work,output)['members'],3)
             self.assertEqual((output/'scenario.xp3').read_bytes(),(work/'rebuilt/roundtrip/scenario.xp3').read_bytes())
             overlay=root/'overlay'
             report=extract(game,overlay,archives=('base.assets','update.assets'),overlay='basename')

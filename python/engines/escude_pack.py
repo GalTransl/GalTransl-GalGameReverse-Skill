@@ -15,7 +15,7 @@ import tempfile
 
 from python.archives.escude import read_index, read_member, repack
 from python.common.contract import load_json, validate_translation
-from python.common.safety import Limits, validate_names, write_new_tree
+from python.common.safety import Limits, validate_names, write_new_tree, validate_new_tree_destination
 from python.engines.escude_extract import digest, extract, json_bytes, require
 from python.engines.escude_mdb import read_names
 from python.engines.escude_mess import extract_pair, patch_mess
@@ -36,8 +36,7 @@ def read_file(path, limit=16 << 20):
 
 def pack(workspace: Path, output: Path, *, verify_edits=False) -> dict:
     workspace, output = Path(workspace), Path(output)
-    if os.path.lexists(output):
-        raise FileExistsError(f'refusing to replace output: {output}')
+    validate_new_tree_destination(output)
     # Derive all member paths, locators and manifests from archived source bytes,
     # never from mutable sidecar addresses. Fresh extraction also checks coverage.
     with tempfile.TemporaryDirectory(prefix='escude-pack-') as tmp:

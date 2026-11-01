@@ -228,6 +228,79 @@ class SafetyTests(unittest.TestCase):
                 write_new_tree(link / "new", [("x", b"x")])
             self.assertFalse((real / "new").exists())
 
+    def test_existing_empty_tree_accepts_output(self):
+        with tempfile.TemporaryDirectory() as root:
+            destination = Path(root) / "gt_input"
+            destination.mkdir()
+            entries = [("scene.json", b"[]"), ("nested/data.bin", b"data")]
+            self.assertEqual(write_new_tree(destination, entries), [name for name, _ in entries])
+            self.assertEqual((destination / "scene.json").read_bytes(), b"[]")
+            self.assertEqual((destination / "nested/data.bin").read_bytes(), b"data")
+            self.assertEqual(list(Path(root).iterdir()), [destination])
+
+    def test_existing_nonempty_tree_and_file_rejected(self):
+        with tempfile.TemporaryDirectory() as root:
+            directory = Path(root) / "with-subdirectory"
+            directory.mkdir()
+            (directory / "empty").mkdir()
+            hidden = Path(root) / "with-hidden-file"
+            hidden.mkdir()
+            (hidden / ".keep").write_bytes(b"original")
+            file = Path(root) / "file"
+            file.write_bytes(b"original")
+            for destination in (directory, hidden, file):
+                with self.subTest(destination=destination.name):
+                    with self.assertRaises((FileExistsError, FormatError)):
+                        write_new_tree(destination, [("new.bin", b"new")])
+            self.assertEqual(list(directory.iterdir()), [directory / "empty"])
+            self.assertEqual((hidden / ".keep").read_bytes(), b"original")
+            self.assertEqual(file.read_bytes(), b"original")
+
+    def test_existing_empty_tree_preserved_on_validation_failure(self):
+        cases = [
+            ([("../escape", b"x")], Limits()),
+            ([("a", b"x"), ("A", b"x")], Limits()),
+            ([("a", "not bytes")], Limits()),
+            ([("a", b"ab")], Limits(max_file_bytes=1)),
+            ([("a", b"a"), ("b", b"b")], Limits(max_total_bytes=1)),
+        ]
+        with tempfile.TemporaryDirectory() as root:
+            destination = Path(root) / "empty"
+            destination.mkdir()
+            for entries, limits in cases:
+                with self.subTest(entries=entries, limits=limits), self.assertRaises(FormatError):
+                    write_new_tree(destination, entries, limits)
+                self.assertTrue(destination.is_dir())
+                self.assertEqual(list(destination.iterdir()), [])
+                self.assertEqual(list(Path(root).iterdir()), [destination])
+
+    def test_existing_empty_tree_preserved_on_staging_failure(self):
+        with tempfile.TemporaryDirectory() as root:
+            destination = Path(root) / "empty"
+            destination.mkdir()
+            with self.assertRaises(OSError):
+                write_new_tree(destination, [("first.bin", b"first"), ("x" * 300, b"second")])
+            self.assertTrue(destination.is_dir())
+            self.assertEqual(list(destination.iterdir()), [])
+            self.assertEqual(list(Path(root).iterdir()), [destination])
+
+    def test_symlink_destination_rejected_if_supported(self):
+        with tempfile.TemporaryDirectory() as root:
+            real = Path(root) / "real"
+            real.mkdir()
+            link = Path(root) / "link"
+            dangling = Path(root) / "dangling"
+            try:
+                link.symlink_to(real, target_is_directory=True)
+                dangling.symlink_to(Path(root) / "missing", target_is_directory=True)
+            except (OSError, NotImplementedError):
+                self.skipTest("platform does not permit creating symlinks")
+            for destination in (link, dangling):
+                with self.subTest(destination=destination.name), self.assertRaises(FormatError):
+                    write_new_tree(destination, [("x", b"x")])
+                self.assertTrue(destination.is_symlink())
+            self.assertEqual(list(real.iterdir()), [])
+
 
 if __name__ == "__main__":
     unittest.main()

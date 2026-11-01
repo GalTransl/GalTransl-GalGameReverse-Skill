@@ -125,7 +125,7 @@ python -m python.engines.eagls_extract extract "<游戏目录>/script" "<游戏�
 python -m python.engines.eagls_extract rebuild "<游戏目录>/game_extract" "<游戏目录>/game_extract/rebuilt/translated-01"
 ```
 
-输出目录必须不存在且父目录已存在。回填按原成员真名匹配；未提供译文的成员保持原字节，未知译文文件名拒绝，不猜配。原始包、原文 JSON 与 manifest 必须保留。输出为配套 `script/SCPACK.idx` 和 `script/SCPACK.pak`；这两个文件必须一起使用，不能只换 PAK。
+输出目录须不存在或为普通空目录，且父目录已存在。回填按原成员真名匹配；未提供译文的成员保持原字节，未知译文文件名拒绝，不猜配。原始包、原文 JSON 与 manifest 必须保留。输出为配套 `script/SCPACK.idx` 和 `script/SCPACK.pak`；这两个文件必须一起使用，不能只换 PAK。
 
 ## 验证与局限
 - 合成测试有 MSVCRT 已知向量，不只测自身加解密互逆。

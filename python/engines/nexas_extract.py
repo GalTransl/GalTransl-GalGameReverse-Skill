@@ -10,7 +10,7 @@ import stat
 from ..archives import nexas as pac
 from ..common.binary import FormatError
 from ..common.contract import dump_rows, load_json, sha256
-from ..common.safety import Limits, logical_path, validate_names, write_new_tree
+from ..common.safety import Limits, logical_path, validate_names, write_new_tree, validate_new_tree_destination
 from . import nexas_bin as script
 
 LIMITS = Limits()
@@ -56,8 +56,7 @@ def verify_archive(original: bytes, rebuilt: bytes, replacements: dict[str, byte
 
 def extract(game: Path, destination: Path, archives: list[str]) -> dict:
     """archives is an explicit low-to-high priority list, not a filename guess."""
-    if destination.exists() or destination.is_symlink():
-        raise FileExistsError(f"refusing to replace output: {destination}")
+    validate_new_tree_destination(destination)
     validate_names(archives)
     if not archives or any(Path(name).name != name for name in archives):
         raise FormatError("provide archive basenames in low-to-high priority order")
@@ -139,8 +138,7 @@ def extract(game: Path, destination: Path, archives: list[str]) -> dict:
 
 
 def pack(workspace: Path, destination: Path, translations: Path | None = None) -> dict:
-    if destination.exists() or destination.is_symlink():
-        raise FileExistsError(f"refusing to replace output: {destination}")
+    validate_new_tree_destination(destination)
     translations = translations or workspace / "gt_output"
     report = load_json(_file(workspace / "reports/extraction.json"))
     if report.get("schema") != SCHEMA or report.get("profile") != script.PROFILE:

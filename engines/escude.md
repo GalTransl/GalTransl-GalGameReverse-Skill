@@ -160,7 +160,7 @@ PAGE、分支合流或不能证明的调用结束局部姓名证据。**这不�
 python -m python.engines.escude_extract "游戏目录" "新的输出目录"
 ```
 
-[escude_extract.py](../python/engines/escude_extract.py) 只读取根目录的 `script.bin`、`data.bin`，不递归扫描旧 `_extract`，不载入图片、音频包或汉化 PK02。这是上述 Haison profile 的入口，不是所有 Escu:de 游戏的自动适配器。目标必须不存在；已有结果时另选新目录，绝不覆盖。每个源包上限 8 MiB、成员解码上限 16 MiB、累计解码上限 128 MiB；更大的其他游戏应先核对格式和预算。
+[escude_extract.py](../python/engines/escude_extract.py) 只读取根目录的 `script.bin`、`data.bin`，不递归扫描旧 `_extract`，不载入图片、音频包或汉化 PK02。这是上述 Haison profile 的入口，不是所有 Escu:de 游戏的自动适配器。目标须不存在或为普通空目录；已有非空结果时另选新目录，绝不覆盖。每个源包上限 8 MiB、成员解码上限 16 MiB、累计解码上限 128 MiB；更大的其他游戏应先核对格式和预算。
 
 入口校验整个脚本包的类型、配对、代码边界、消息引用和人物表，逐文件执行原文及变长回填测试，全部通过后才用 `write_new_tree` 发布。遗漏配对、未知成员及平铺文件名冲突会拒绝本次发布，不能把部分结果宣称完整；发生重名时需补充带归档/成员序号的映射后重试。原包与成员、三份配套源 manifest、每个输出映射及本次统计一起保存到新目录。报告不复用旧提取目录里的测试数或统计常量。
 
@@ -218,7 +218,7 @@ assert rebuilt == message_bytes
 python -m python.engines.escude_pack "提取工作区" "新的打包输出目录"
 ```
 
-输出目录的父目录必须存在、目标必须不存在。入口读取工作区 `gt_output/` 的同名 JSON，缺少译文的剧本仍经过原文 parser/writer 校验；不认识的文件名拒绝，`.keep` 可忽略。所有译文必须保留数组顺序、姓名上下文与控制标签。输出 `script.bin` 和 `verification.json`，不会安装、替换游戏文件或处理 PK02 汉化补丁。
+输出目录的父目录必须存在，目标须不存在或为普通空目录。入口读取工作区 `gt_output/` 的同名 JSON，缺少译文的剧本仍经过原文 parser/writer 校验；不认识的文件名拒绝，`.keep` 可忽略。所有译文必须保留数组顺序、姓名上下文与控制标签。输出 `script.bin` 和 `verification.json`，不会安装、替换游戏文件或处理 PK02 汉化补丁。
 
 回填前在临时目录重新解析工作区保存的两个原始归档，核对报告、全部已保存成员、原文 JSON 和重新生成的完整 manifest。这样不依赖可编辑 sidecar 中的地址，也不会静默忽略人物库或零消息代码文件的变化。译文逐条通过 CP932、姓名、控制码与池索引检查，回填后重新解析配对代码，比较消息与非文本绑定。最终新归档的全部成员再次解包核对。换行保护项调整后，旧 metadata 无法通过 manifest 比对；应从哈希验证通过的原件重新提取到新目录，再放回同名译文。
 

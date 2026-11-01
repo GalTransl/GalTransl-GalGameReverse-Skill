@@ -14,7 +14,7 @@
 |---|---|---|
 | [binary.py](../python/common/binary.py) | `Reader`, `checked_slice`, `bounded_zlib`, `Edit`, `apply_edits`, `OffsetMap`, `relocate_u32` | 引擎识别、opcode推断、完整重定位、校验/外壳重建 |
 | [contract.py](../python/common/contract.py) | `load_json`, `validate_rows`, `dump_rows`, `make_manifest`, `validate_translation` | 从脚本寻找对白、检测等长译文重排、全部控制语法/混合编码 |
-| [safety.py](../python/common/safety.py) | `Limits`, `logical_path`, `validate_names`, `write_new_tree` | 约束调用前已经发生的内存分配、抵抗能并发替换可信目录的恶意进程 |
+| [safety.py](../python/common/safety.py) | `Limits`, `logical_path`, `validate_names`, `validate_new_tree_destination`, `write_new_tree` | 约束调用前已经发生的内存分配、抵抗能并发替换可信目录的恶意进程 |
 | [detect.py](../python/detect.py) | `detect_directory` / CLI；`candidates` 与 `candidate_stats` | 完整解析器、全格式识别、密钥匹配、自动选择writer |
 
 不强制让每个已独立化的叶子模块依赖公共层；这样单个算法也能阅读和试验。但写出前仍必须套用统一契约和安全规则，不能因叶子函数没有文件 IO 就跳过验证。
@@ -27,13 +27,13 @@ from python.common.safety import Limits, write_new_tree
 
 # 假设真正的格式 parser 已在限额内解压，且未把重名 entry 丢进字典。
 entries = [("scenario/example.txt", b"synthetic example")]
-# 父目录必须已经存在且可信，目的目录必须尚不存在。
+# 父目录必须已经存在且可信，目的目录须不存在或为普通空目录。
 # 下面只演示调用，不会在阅读/import本文件时执行。
 # write_new_tree(Path("/existing/work/new-output"), entries,
 #                Limits(max_file_bytes=16 * 1024 * 1024))
 ```
 
-`write_new_tree()` 先验证所有名字和预算、在临时同级目录中生成，再只发布到新的目的目录；拒绝替换已有路径。使用普通用户拥有的工作目录，避免链接/重解析点。该函数不是文件系统沙箱，也不应被用来覆盖原游戏。
+`write_new_tree()` 先验证所有名字和预算、在临时同级目录中生成，再发布到不存在或已存在的普通空目录；拒绝非空目录（包括仅含空子目录）、文件、链接和重解析点。已有工作区可分别向空的 `gt_input/`、`original/` 等目录写出，无需另建暂存工作区再手动合并；非空工作区根目录不能直接作为目标。使用普通用户拥有的工作目录。该函数不是文件系统沙箱，也不应被用来覆盖原游戏。入口在解析资源前调用 `validate_new_tree_destination()` 预检查目录，写出时仍核对目标状态；预检查不会创建、清空或删除目录。
 
 ## 预算分层
 

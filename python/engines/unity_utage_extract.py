@@ -15,7 +15,7 @@ import unicodedata
 from ..archives import unity_serialized as archive
 from ..common.binary import FormatError
 from ..common.contract import dump_rows, load_json, sha256
-from ..common.safety import _check_existing_ancestors, logical_path, validate_names, write_new_tree
+from ..common.safety import _check_existing_ancestors, logical_path, validate_names, write_new_tree, validate_new_tree_destination
 from . import unity_utage as script
 
 
@@ -117,8 +117,7 @@ def inventory(data, dependencies):
 
 def extract(source, output, *, dependencies=(), target=None):
     source, output = Path(source), Path(output)
-    if output.exists():
-        raise FileExistsError(output)
+    validate_new_tree_destination(output)
     flat(source.name)
     target = logical_path(target or source.name)
     data, _ = archive.read_file(source)
@@ -179,8 +178,7 @@ def extract(source, output, *, dependencies=(), target=None):
 
 def pack(workspace, output):
     workspace, output = Path(workspace), Path(output)
-    if output.exists():
-        raise FileExistsError(output)
+    validate_new_tree_destination(output)
     report = load_json(bounded(workspace / "reports/extraction.json"))
     if report.get("engine") != "unity-utage" or report.get("profile") != script.PROFILE:
         raise FormatError("unsupported Unity workspace")

@@ -52,10 +52,12 @@ class HxTextTests(unittest.TestCase):
             source.write_bytes(build(members,keys))
             evidence=dict(key_package=package,source_sha256=hashlib.sha256(source.read_bytes()).hexdigest(),exe_sha256='test')
             with patch('python.engines.kirikiri_hxv4_text.inspect',return_value=evidence):
+                work.mkdir()
                 result=extract(source,root/'not-executed.exe',work)
             self.assertEqual(result['totals']['rows'],1)
             self.assertTrue(result['scan_complete'])
             self.assertEqual(len(list((work/'gt_input').iterdir())),1)
+            (root / 'unchanged').mkdir()
             self.assertEqual(pack(work,root/'unchanged')['changed_files'],0)
             rows=[dict(message='中文变长测试内容')]
             (work/'gt_output/main.txt.json').write_text(json.dumps(rows),encoding='utf-8')

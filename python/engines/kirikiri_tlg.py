@@ -31,6 +31,8 @@ import sys
 import zlib
 from pathlib import Path
 
+from python.common.safety import validate_new_tree_destination
+
 MAGIC5 = b"TLG5.0\x00raw\x1a"
 MAGIC6 = b"TLG6.0\x00raw\x1a"
 HEADER5 = 20
@@ -397,8 +399,7 @@ def from_rgba_png(path: Path) -> TlgImage:
 
 
 def _convert_tree(source: Path, destination: Path) -> list[Path]:
-    if destination.exists():
-        raise FileExistsError(f"refusing existing output: {destination}")
+    validate_new_tree_destination(destination)
     files = sorted(p for p in source.rglob("*") if p.is_file() and p.suffix.lower() == ".tlg")
     if not files or len(files) > MAX_FILES:
         raise ValueError("TLG file count budget")
@@ -408,14 +409,15 @@ def _convert_tree(source: Path, destination: Path) -> list[Path]:
         total_pixels += header["width"] * header["height"]
         if total_pixels > MAX_TOTAL_PIXELS:
             raise ValueError("TLG cumulative pixel budget")
-    destination.mkdir(parents=True)
+    destination.mkdir(exist_ok=True)
     written = []
     for path in files:
         relative = path.relative_to(source).with_suffix(".png")
         target = destination / relative
         target.parent.mkdir(parents=True, exist_ok=True)
         image = decode_file(path)
-        target.write_bytes(encode_png(image))
+        with target.open("xb") as stream:
+            stream.write(encode_png(image))
         written.append(target)
     return written
 

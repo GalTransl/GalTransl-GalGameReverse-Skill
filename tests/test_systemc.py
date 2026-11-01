@@ -281,9 +281,11 @@ class ScriptTests(unittest.TestCase):
             original = archive(members)
             (game / "data.fpk").write_bytes(original)
             work = game / "extract"
+            work.mkdir()
             report = extract(game, work, verify_edits=True)
             self.assertEqual(report["json_rows"], 2)
             self.assertEqual(report["unreferenced_spt"], ["orphan.spt"])
+            (work / 'no_translation').mkdir()
             self.assertTrue(pack(work, work / "no_translation")["byte_identical"])
             translated = json.loads((work / "gt_input/ACT_A.json").read_text(encoding="utf-8"))
             translated[0]["message"] = "合併後の正文。"

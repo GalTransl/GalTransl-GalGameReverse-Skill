@@ -58,7 +58,7 @@ python -m python.engines.kirikiri_tlg convert <目录> <新的输出目录>
 python -m python.engines.kirikiri_tlg encode <编辑后.png> <输出.tlg>
 ```
 
-目录模式递归查找 `*.tlg`，按相对路径写出同名 `.png`；输出目录必须不存在，不会覆盖已有文件。单文件与 `encode` 模式同样拒绝已存在的输出路径。`encode` 需要 Pillow 读取 PNG；解码路径只用标准库。
+目录模式递归查找 `*.tlg`，按相对路径写出同名 `.png`；输出目录须不存在或为普通空目录，且父目录已存在，不会覆盖已有文件。单文件与 `encode` 模式同样拒绝已存在的输出路径。`encode` 需要 Pillow 读取 PNG；解码路径只用标准库。
 
 ## 预算与失败处理
 

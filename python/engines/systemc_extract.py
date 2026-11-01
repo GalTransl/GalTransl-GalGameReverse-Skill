@@ -9,7 +9,7 @@ import stat
 from ..archives.systemc import unpack_fpk, rebuild_fpk
 from ..common.binary import FormatError
 from ..common.contract import dump_rows, load_json, sha256
-from ..common.safety import write_new_tree
+from ..common.safety import write_new_tree, validate_new_tree_destination
 from .systemc import MAX_BYTES, VARIANT, export_act, inject_act
 
 
@@ -47,8 +47,7 @@ def _verify_archive(archive, expected):
 
 def extract(game, destination, *, verify_edits=False):
     game, destination = Path(game), Path(destination)
-    if destination.exists() or destination.is_symlink():
-        raise FileExistsError(f"refusing existing output: {destination}")
+    validate_new_tree_destination(destination)
     raw = _read(game / "data.fpk")
     index, members = unpack_fpk(raw)
     outputs = [("original/data.fpk", raw)]
@@ -124,8 +123,7 @@ def pack(workspace, destination, *, translations=None, jis_mode="auto"):
     if jis_mode not in ("auto", "off"):
         raise FormatError("unsupported JIS mode")
     workspace, destination = Path(workspace), Path(destination)
-    if destination.exists() or destination.is_symlink():
-        raise FileExistsError(f"refusing existing output: {destination}")
+    validate_new_tree_destination(destination)
     report = load_json(_read(workspace / "reports/extraction.json"), max_bytes=MAX_BYTES)
     if report.get("schema") != "systemc-workspace/1" or report.get("variant") != VARIANT:
         raise FormatError("unsupported SystemC workspace")

@@ -235,12 +235,14 @@ class RPAAndWorkspaceTests(unittest.TestCase):
             original = archive({"chapters/intro.rpyc": sample(), "empty.rpyc": envelope(program([])), "media": b"same"})
             (game / "story.arc").write_bytes(original)
             work, packed = root / "work", root / "packed"
+            work.mkdir()
             report = workflow.extract(game, work, archives=["story.arc"], smoke_test=True)
             self.assertEqual((report["scripts"], report["json_files"], report["empty_scripts"]), (2, 1, 1))
             self.assertFalse((work / "gt_input/empty.json").exists())
             rows = json.loads((work / "gt_input/intro.json").read_text(encoding="utf-8"))
             rows[0]["message"] += " 新句子"
             (work / "gt_output/intro.json").write_text(json.dumps(rows), encoding="utf-8")
+            packed.mkdir()
             result = workflow.pack(work, packed)
             self.assertEqual(result["changed"][0]["changed_rows"], 1)
             rebuilt = (packed / "changed-archives/game/story.arc").read_bytes()

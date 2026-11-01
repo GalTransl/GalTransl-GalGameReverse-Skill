@@ -75,10 +75,12 @@ class KagTextTests(unittest.TestCase):
             root=Path(tmp);source=raw(SAMPLE)
             archive=xp3.build([('scenario/main.ks',source),('system.ks',raw('@jump storage="main.ks"'))],'plain',spec)
             (root/'data.bin').write_bytes(archive);work=root/'work'
+            work.mkdir()
             report=extract(root,work,archives=['data.bin'],filter_spec=spec)
             self.assertEqual(report['counts'],{'files':1,'rows':3,'choices':1,'named':1})
             rows,_=export_script(source);rows[1]['message']='中文旁白。'
             (work/'gt_output/main.json').write_bytes(dump_rows(rows))
+            (root/'out').mkdir()
             packed=pack(work,root/'out',flat=True)
             self.assertEqual(packed['changed_members'],['scenario/main.ks'])
             with (root/'out/patch.xp3').open('rb') as f:

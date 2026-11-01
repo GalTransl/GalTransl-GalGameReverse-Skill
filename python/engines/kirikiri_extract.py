@@ -16,7 +16,7 @@ import stat
 
 from python.archives import kirikiri_xp3 as xp3
 from python.common.contract import make_manifest, validate_translation, dump_rows, load_json
-from python.common.safety import Limits, validate_names, write_new_tree
+from python.common.safety import Limits, validate_names, write_new_tree, validate_new_tree_destination
 from .kirikiri_psb import Psb
 from .kirikiri_scn import writable_records, patch, controls, fingerprint
 
@@ -78,7 +78,7 @@ def extract(game,output,*,archives=('data.xp3',),overlay='path',archive_profile=
     if type(speaker_name) is not bool: raise ValueError('invalid speaker_name flag')
     if filter_spec is not None: filter_spec=xp3.validate(filter_spec)
     game,output=Path(game),Path(output)
-    if os.path.lexists(output):raise FileExistsError(output)
+    validate_new_tree_destination(output)
     if overlay not in ('path','basename'):raise ValueError('unknown overlay mode')
     archive_names=validate_names(list(archives))
     if not archive_names:raise ValueError('select at least one input archive')
@@ -186,7 +186,7 @@ def extract(game,output,*,archives=('data.xp3',),overlay='path',archive_profile=
 
 def pack(workspace,output):
     workspace,output=Path(workspace),Path(output)
-    if os.path.lexists(output):raise FileExistsError(output)
+    validate_new_tree_destination(output)
     report=load_json(read_file(workspace/'reports/extraction.json'));profile=report.get('profile')
     if profile!=PROFILE and profile not in LEGACY:raise ValueError('unknown workspace profile')
     filter_spec=report.get('filter_spec')

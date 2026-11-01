@@ -1,5 +1,7 @@
 # CatSystem2：KIF/INT、CST 对话与安全提取
 
+默认输出可复用已存在的普通空目录；遇到非空目录、文件或链接时换名。显式指定输出目录时遵循 [公共安全写出约定](../guides/python-reference-api.md#安全写出示例)，父目录须已存在，目标须不存在或为普通空目录。
+
 ## 能力边界
 - 引擎 ID：`catsystem2`。
 - CST 模块：[python/engines/catsystem2.py](../python/engines/catsystem2.py)。

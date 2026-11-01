@@ -13,7 +13,7 @@ import stat
 from ..archives import med as archive
 from ..common.binary import FormatError
 from ..common.contract import dump_rows, load_json, sha256
-from ..common.safety import _check_existing_ancestors, validate_names, write_new_tree
+from ..common.safety import _check_existing_ancestors, validate_names, write_new_tree, validate_new_tree_destination
 from . import med_script as script
 
 
@@ -45,8 +45,7 @@ def member_info(entry, data):
 
 def extract(source, output):
     source, output = Path(source), Path(output)
-    if output.exists():
-        raise FileExistsError(output)
+    validate_new_tree_destination(output)
     validate_names([source.name])
     data, entries = archive.read_archive(source)
     files = {"original/" + source.name: data, "gt_output/.keep": b""}
@@ -101,8 +100,7 @@ def extract(source, output):
 
 def pack(workspace, output):
     workspace, output = Path(workspace), Path(output)
-    if output.exists():
-        raise FileExistsError(output)
+    validate_new_tree_destination(output)
     report = load_json(read_bounded(workspace / "reports/extraction.json"))
     if report.get("engine") != "med" or report.get("profile") != script.PROFILE:
         raise FormatError("unsupported MED workspace profile")

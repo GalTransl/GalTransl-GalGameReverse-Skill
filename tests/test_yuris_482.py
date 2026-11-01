@@ -201,10 +201,12 @@ class Yuris482Tests(unittest.TestCase):
             (root/'ysbin/ysc.ybn').write_bytes(self.ysc)
             (root/'ysbin/yst00000.ybn').write_bytes(self.raw)
             (root/'pac/update.ypf').write_bytes(archive({'ysbin\\ysc.ybn':self.ysc,'ysbin\\yst00000.ybn':self.raw}))
+            (root / 'work').mkdir()
             report=extract(root,root/'work',archive='pac/update.ypf',loose='ysbin',smoke_test=True)
             self.assertEqual(report['counts']['rows'],2)
             rows,_=export_script(self.raw,self.ysc);rows[0]['message']='ABC'
             (root/'work/gt_output/yst00000.json').write_bytes(dump_rows(rows))
+            (root / 'patch').mkdir()
             result=rebuild(root/'work',root/'patch')
             self.assertEqual(result['translated_members'],['ysbin/yst00000.ybn'])
             self.assertEqual(archive_members((root/'patch/ysbin.ypf').read_bytes())['ysbin\\yst00000.ybn'],(root/'patch/ysbin/yst00000.ybn').read_bytes())

@@ -15,7 +15,7 @@ import stat
 from .binary import FormatError
 from .contract import dump_rows, load_json, sha256, validate_rows
 from .jis_substitution import JisSubstitution, is_cp932
-from .safety import Limits, _check_existing_ancestors, validate_names, write_new_tree
+from .safety import Limits, _check_existing_ancestors, validate_names, write_new_tree, validate_new_tree_destination
 
 SCHEMA = "jis-json-workflow/1"
 ROOTS = ("original", "metadata", "reports", "gt_input")
@@ -178,8 +178,7 @@ def prepare(workspace, output, *, encoding, extra_texts=(), include_hook=False, 
     actual engine readback. No changes to engine files, profiles or manifests.
     """
     workspace, output = Path(workspace), Path(output)
-    if output.exists():
-        raise FileExistsError(output)
+    validate_new_tree_destination(output)
     original, translated = _rows(workspace / "gt_input"), _rows(workspace / "gt_output")
     payloads, copied_bytes = {}, 0
     for name in ROOTS:
@@ -232,8 +231,7 @@ def finalize(prepared, rebuilt, readback, output):
     archive formats or claim a generic checksum validates an engine.
     """
     prepared, rebuilt, readback, output = map(Path, (prepared, rebuilt, readback, output))
-    if output.exists():
-        raise FileExistsError(output)
+    validate_new_tree_destination(output)
     settings = load_json(_read(prepared / "jis-plan.json"))
     if settings.get("schema") != SCHEMA:
         raise FormatError("unsupported JIS workflow")

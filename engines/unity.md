@@ -1,5 +1,7 @@
 # Unity：Utage 剧情表、serialized asset 与 .bin/.idx 容器
 
+目录输出遵循 [公共安全写出约定](../guides/python-reference-api.md#安全写出示例)：父目录须已存在，目标须不存在或为普通空目录；非空目录、文件和链接拒绝。
+
 ## 选择路径
 
 本页支持多层能力，不代表任意 Unity 游戏都使用同一种剧情格式。

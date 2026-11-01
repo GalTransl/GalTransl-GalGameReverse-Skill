@@ -10,14 +10,14 @@ from pathlib import Path
 
 from python.archives import kirikiri_xp3 as xp3
 from python.common.contract import dump_rows, load_json, sha256
-from python.common.safety import Limits, validate_names, write_new_tree
+from python.common.safety import Limits, validate_names, write_new_tree, validate_new_tree_destination
 from .kirikiri_extract import read_file, js, verify_archive
 from .kirikiri_kag_text import PROFILE, export_script, rebuild_script
 
 
 def extract(game,output,*,archives,patterns=('scenario/*.ks',),filter_spec=None):
     game,output=Path(game),Path(output)
-    if output.exists():raise FileExistsError(output)
+    validate_new_tree_destination(output)
     if filter_spec is not None:filter_spec=xp3.validate(filter_spec)
     names=validate_names(list(archives)); selected={}; sources=[];total=0
     for name in names:
@@ -65,7 +65,7 @@ def extract(game,output,*,archives,patterns=('scenario/*.ks',),filter_spec=None)
 
 def pack(workspace,output,*,flat=False):
     workspace,output=Path(workspace),Path(output)
-    if output.exists():raise FileExistsError(output)
+    validate_new_tree_destination(output)
     report=load_json(read_file(workspace/'reports/extraction.json'))
     if report['profile']!=PROFILE:raise ValueError('unsupported KAG workspace')
     exports=report['exports'];expected={e['json'] for e in exports if e['json']}

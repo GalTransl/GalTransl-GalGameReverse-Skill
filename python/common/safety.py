@@ -1,4 +1,4 @@
-"""Conservative archive path checks and no-overwrite output to a NEW tree.
+"""Conservative archive path checks and no-overwrite output to a new or empty tree.
 
 New implementation for this skill; standard library only. Use a trusted,
 user-owned output parent, not a directory another process can maliciously
@@ -79,20 +79,37 @@ def _check_existing_ancestors(path: Path) -> None:
             raise FormatError(f"output ancestor is not an ordinary directory: {component}")
 
 
-def write_new_tree(destination: Path, entries: list[tuple[str, bytes]],
-                   limits: Limits = Limits()) -> list[str]:
-    """Validate all entries, stage them, then publish to a new directory only.
+def validate_new_tree_destination(destination: Path) -> tuple[int, int] | None:
+    """Check the output parent and target before parsing or writing resources.
 
-    Returned names are relative to destination. The parent must exist. Never
-    point this at a game directory or a previous output. The caller must bound
-    decompression BEFORE building entries; these checks cannot undo an earlier
-    excessive allocation. No output file is opened in overwrite mode.
+    Return the identity of an existing ordinary empty directory, or None when
+    the target is absent. This check neither creates nor removes directories.
     """
     destination = Path(os.path.abspath(destination))
     logical_path(destination.name)
     _check_existing_ancestors(destination.parent)
-    if os.path.lexists(destination):
-        raise FileExistsError(f"refusing to replace output: {destination}")
+    if not os.path.lexists(destination):
+        return None
+    _check_existing_ancestors(destination)
+    if any(destination.iterdir()):
+        raise FileExistsError(f"refusing to replace non-empty output: {destination}")
+    info = destination.lstat()
+    return info.st_dev, info.st_ino
+
+
+def write_new_tree(destination: Path, entries: list[tuple[str, bytes]],
+                   limits: Limits = Limits()) -> list[str]:
+    """Validate all entries, stage them, then publish to a new or empty directory.
+
+    Returned names are relative to destination. The parent must exist; an
+    existing destination must be an ordinary empty directory. Never point this
+    at a game directory or a previous output. The caller must bound
+    decompression BEFORE building entries; these checks cannot undo an earlier
+    excessive allocation. No output file is opened in overwrite mode.
+    """
+    destination = Path(os.path.abspath(destination))
+    identity = validate_new_tree_destination(destination)
+    existing = identity is not None
     names = validate_names([entry[0] for entry in entries], limits)
     total = 0
     for _, payload in entries:
@@ -103,25 +120,25 @@ def write_new_tree(destination: Path, entries: list[tuple[str, bytes]],
             raise FormatError("archive output exceeds total budget")
     staging = Path(tempfile.mkdtemp(prefix=".galgame-stage-", dir=destination.parent))
     reserved = False
-    identity = None
     try:
         for name, (_, payload) in zip(names, entries):
             target = staging.joinpath(*name.split("/"))
             target.parent.mkdir(parents=True, exist_ok=True)
             with target.open("xb") as stream:
                 stream.write(payload)
-        # Reserve with exclusive mkdir so POSIX rename cannot replace somebody
-        # else's pre-existing empty directory. Only our empty reservation moves.
-        destination.mkdir()
-        reserved = True
-        info = destination.lstat()
-        identity = (info.st_dev, info.st_ino)
+        # Reserve absent destinations exclusively; reuse only a verified empty
+        # directory. Failure cleanup removes only reservations created here.
+        if not existing:
+            destination.mkdir()
+            reserved = True
+            info = destination.lstat()
+            identity = (info.st_dev, info.st_ino)
         current = destination.lstat()
         if (current.st_dev, current.st_ino) != identity or any(destination.iterdir()):
             raise FormatError("output reservation changed during staging")
         if os.name == "nt":
             # Windows rename does not replace an empty directory. In the trusted
-            # parent, remove our reservation; os.rename still refuses collisions.
+            # parent, remove the empty target; os.rename still refuses collisions.
             destination.rmdir()
             reserved = False
             os.rename(staging, destination)

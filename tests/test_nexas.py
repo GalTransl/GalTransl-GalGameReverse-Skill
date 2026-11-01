@@ -206,6 +206,7 @@ class NexasWorkflowTests(unittest.TestCase):
             (root / "Script.pac").write_bytes(base)
             (root / "Update3.pac").write_bytes(patch)
             out = root / "extract"
+            out.mkdir()
             summary = extract(root, out, ["Script.pac", "Update3.pac"])
             self.assertEqual(summary["exported_files"], 1)
             self.assertEqual(summary["empty_scripts"], 1)
@@ -213,6 +214,7 @@ class NexasWorkflowTests(unittest.TestCase):
             self.assertEqual(sorted(p.name for p in (out / "gt_input").iterdir()), ["scene.json"])
             translated = [{"name": "名前", "message": "少し長い翻訳の文"}]
             (out / "gt_output/scene.json").write_bytes(dump_rows(translated))
+            (out / 'packed').mkdir()
             result = pack(out, out / "packed")
             self.assertEqual(result["changed_scripts"], 1)
             built = (out / "packed/Update3.pac").read_bytes()

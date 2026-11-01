@@ -116,12 +116,14 @@ class EaglsTextTests(unittest.TestCase):
             idx, pak = archive([("sc01.dat", self.raw), ("system.dat", script('$Start\n$End\n43()\n', self.profile))])
             (root / "SCPACK.idx").write_bytes(idx)
             (root / "SCPACK.pak").write_bytes(pak)
+            (root / 'work').mkdir()
             report = extract(root, root / "work", profile=self.profile, key=b"key", smoke_test=True)
             self.assertEqual(report["rows"], 4)
             self.assertFalse((root / "work/gt_input/system.json").exists())
             rows, _ = export_script(self.raw, self.profile)
             rows[0]["message"] = "changed"
             (root / "work/gt_output/sc01.json").write_bytes(dump_rows(rows))
+            (root / 'patch').mkdir()
             result = rebuild(root / "work", root / "patch")
             self.assertEqual(result["translated_members"], ["sc01.dat"])
             with self.assertRaises(FileExistsError):

@@ -289,7 +289,9 @@ class WorkflowTests(unittest.TestCase):
             raw = fixture()
             (source / 'image.ydg').write_bytes(raw)
             work = root / 'extract'
+            work.mkdir()
             flow.extract(source, work)
+            (root / 'roundtrip').mkdir()
             flow.pack(work, root / 'roundtrip')
             self.assertEqual((root / 'roundtrip/image.ydg').read_bytes(), raw)
             image_path = work / 'images/image.ydg.png'

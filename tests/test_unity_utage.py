@@ -261,12 +261,14 @@ class WorkspaceTests(unittest.TestCase):
         return workflow.extract(self.source, self.work, target="Game_Data/sharedassets0.assets")
 
     def test_extract_pack_and_readback(self):
+        self.work.mkdir()
         report = self.extract()
         self.assertEqual((report["book_count"], report["rows"]), (1, 2))
         self.assertEqual((self.work / "rebuilt/roundtrip/Game_Data/sharedassets0.assets").read_bytes(), self.source.read_bytes())
         rows = json.loads((self.work / "gt_input/opening.json").read_text(encoding="utf-8"))
         rows[0]["message"] = "中文<param=x>\n不同长度的第二行。"
         (self.work / "gt_output/opening.json").write_bytes(workflow.json_bytes(rows))
+        (self.root / "pack").mkdir()
         result = workflow.pack(self.work, self.root / "pack")
         self.assertEqual(result["changed_objects"], [10])
         self.assertEqual(json.loads((self.root / "pack/readback/gt_input/opening.json").read_bytes()), rows)

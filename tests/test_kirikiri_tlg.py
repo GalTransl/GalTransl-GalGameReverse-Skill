@@ -7,7 +7,7 @@ from pathlib import Path
 
 from python.engines.kirikiri_tlg import (MAGIC5, TlgImage, decode, encode,
                                          encode_png, from_rgba_png, info,
-                                         _lzss_decompress)
+                                         _lzss_decompress, _convert_tree)
 
 
 def _pack_tlg5(width, height, channels, pixels, *, block_height=None, lzss=False):
@@ -232,6 +232,24 @@ class Tlg5EncodeTests(unittest.TestCase):
 
 
 class PngWriterTests(unittest.TestCase):
+    def test_directory_conversion_accepts_empty_output_and_refuses_nonempty(self):
+        image = TlgImage(width=1, height=1, channels=4, pixels=b"\x01\x02\x03\xff")
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "source"
+            source.mkdir()
+            (source / "scene.tlg").write_bytes(encode(image))
+            for existing in (False, True):
+                destination = root / str(existing)
+                if existing:
+                    destination.mkdir()
+                with self.subTest(existing=existing):
+                    self.assertEqual(_convert_tree(source, destination), [destination / "scene.png"])
+                    self.assertEqual((destination / "scene.png").read_bytes(), encode_png(image))
+                    with self.assertRaises(FileExistsError):
+                        _convert_tree(source, destination)
+                    self.assertEqual((destination / "scene.png").read_bytes(), encode_png(image))
+
     def test_png_roundtrip(self):
         pixels = bytes([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16])
         image = TlgImage(width=2, height=2, channels=4, pixels=pixels)

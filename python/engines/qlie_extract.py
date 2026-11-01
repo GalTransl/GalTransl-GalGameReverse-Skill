@@ -16,7 +16,7 @@ import stat
 from python.archives.qlie import PACK_KEY_NAME, read_index, read_member
 from python.archives.qlie_keys import game_key_from_pe
 from python.common.contract import dump_rows, make_manifest, validate_translation
-from python.common.safety import Limits, validate_names, write_new_tree
+from python.common.safety import Limits, validate_names, write_new_tree, validate_new_tree_destination
 from python.engines.qlie_imos import REFERENCE, scan, patch
 
 
@@ -54,8 +54,7 @@ def extract(game: Path, output: Path, *, archives: list[str], exe: str,
     key are decrypted. The entire batch is bounded before publishing output.
     """
     game, output = Path(os.path.abspath(game)), Path(os.path.abspath(output))
-    if os.path.lexists(output):
-        raise FileExistsError(f'refusing to replace output: {output}')
+    validate_new_tree_destination(output)
     paths = validate_names([*archives, exe, key_file])
     archives, exe, key_file = paths[:-2], paths[-2], paths[-1]
     exe_data = _small(game / exe, 64 << 20)

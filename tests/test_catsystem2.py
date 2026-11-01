@@ -289,8 +289,11 @@ class CatSystemDialogueTests(unittest.TestCase):
             (root / "scene.int").write_bytes(base)
             (root / "update01.int").write_bytes(update)
             (root / "broken.int").write_bytes(b"not-kif")
+            destination = root / f"{root.name}_extract"
+            destination.mkdir()
             summary = extract_game(root)
             output = Path(summary["output"])
+            self.assertEqual(output, destination)
             self.assertEqual(summary["overridden_cst_members"], 1)
             self.assertEqual(summary["scripts_exported"], 1)
             self.assertEqual(summary["parse_failures"], 1)
@@ -327,6 +330,7 @@ class CatSystemDialogueTests(unittest.TestCase):
             relative_root = root.relative_to(Path.cwd())
             (root / "scene.int").write_bytes(archive)
             (root / "cs2.exe").write_bytes(make_password_pe("test-pass"))
+            (root / "result").mkdir()
             summary = extract_game(relative_root, output="result")
             output = root / "result"
             self.assertEqual(Path(summary["output"]), output)

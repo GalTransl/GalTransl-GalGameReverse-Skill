@@ -7,7 +7,7 @@ import stat
 
 from ..common.contract import dump_rows, load_json, sha256
 from ..common.jis_substitution import JisSubstitution
-from ..common.safety import _check_existing_ancestors, validate_names, write_new_tree
+from ..common.safety import _check_existing_ancestors, validate_names, write_new_tree, validate_new_tree_destination
 from .exhibit_keys import PE, recover_def_seed, scenario_seed
 from .exhibit_rld import MAX_FILE, PROFILE, crypt, export_rld, parse, rebuild_rld
 
@@ -45,8 +45,7 @@ def _kwargs(name, sources, seeds):
 def extract(source, output, *, exe=None, ini=None, resident=None, scripts_dir=None,
             seed=None, def_seed=None, smoke_test=False):
     source, output = Path(source), Path(output)
-    if output.exists():
-        raise FileExistsError(output)
+    validate_new_tree_destination(output)
     directory = Path(scripts_dir) if scripts_dir else source / "rld"
     _check_existing_ancestors(directory)
     paths = sorted((p for p in directory.iterdir() if p.suffix.lower() == ".rld"), key=lambda p: p.name.casefold())

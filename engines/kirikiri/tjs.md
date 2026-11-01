@@ -25,7 +25,7 @@ python -m python.engines.kirikiri_tjs_decompile "游戏/scenario.tjs" --mode dis
 | `--mode strings` | 列出被指令引用的字符串常量及对象、地址和 opcode；用于在反编译失败时先定位文本 |
 | `--mode decompile`（默认） | 输出重建的 TJS2 源码 |
 | `--mode disasm` | 输出指令级反汇编；未知形状的最终依据 |
-| `-o` | 文件模式写出单个文件；目录模式必须给出不存在的新目录 |
+| `-o` | 文件模式写出单个文件；目录模式须给出不存在或已存在的普通空目录，且父目录已存在 |
 | `-r` / `-f` | 递归子目录；输出平铺到同一目录 |
 | `--encoding` | `utf-8`（默认）、`utf-8-bom`、`utf-16le-bom`、`shift_jis`、`gbk` |
 

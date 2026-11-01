@@ -4,7 +4,7 @@ import argparse
 from pathlib import Path
 from ..archives.systemc import unpack_fpk,rebuild_fpk,read_fpk_index
 from ..common.contract import dump_rows,load_json,sha256
-from ..common.safety import write_new_tree,logical_path
+from ..common.safety import write_new_tree, logical_path, validate_new_tree_destination
 from .systemc_extract import _read,_json,_verify_archive
 from .systemc_txd import VARIANT,export_table,inject_table
 
@@ -17,7 +17,7 @@ def stems(members):
 
 def extract(game,output,*,verify_edits=False,references=()):
     game,output=Path(game),Path(output)
-    if output.exists():raise FileExistsError(output)
+    validate_new_tree_destination(output)
     raw=_read(game/'data.fpk');index,members=unpack_fpk(raw)
     files=[('original/data.fpk',raw),('gt_output/.keep',b'')]
     files.extend((f'original/members/{n}',v) for n,v in members.items())
@@ -64,7 +64,7 @@ def extract(game,output,*,verify_edits=False,references=()):
 
 def pack(workspace,output):
     workspace,output=Path(workspace),Path(output)
-    if output.exists():raise FileExistsError(output)
+    validate_new_tree_destination(output)
     report=load_json(_read(workspace/'reports/extraction.json'))
     raw=_read(workspace/'original/data.fpk')
     if report['variant']!=VARIANT or sha256(raw)!=report['source_sha256']:raise ValueError('workspace/source identity changed')

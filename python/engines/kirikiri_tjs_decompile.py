@@ -1420,8 +1420,11 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.output is None:
         parser.error('directory input requires -o/--output')
-    if args.output.exists():
-        print(f'refusing to replace existing output: {args.output}', file=sys.stderr)
+    from python.common.safety import validate_new_tree_destination, write_new_tree
+    try:
+        validate_new_tree_destination(args.output)
+    except (OSError, ValueError) as error:
+        print(str(error), file=sys.stderr)
         return 1
 
     entries: list[tuple[str, bytes]] = []
@@ -1440,7 +1443,6 @@ def main(argv: list[str] | None = None) -> int:
         payload = encode_source(text, args.encoding) if args.mode == 'decompile' else text.encode('utf-8')
         entries.append((name, payload))
     if entries:
-        from python.common.safety import write_new_tree
         write_new_tree(args.output, entries)
     return 1 if failures else 0
 

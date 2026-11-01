@@ -15,7 +15,7 @@ import stat
 from ..archives import kaguya_link as link
 from ..common.binary import FormatError
 from ..common.contract import dump_rows, load_json, make_manifest, sha256, validate_translation
-from ..common.safety import write_new_tree
+from ..common.safety import write_new_tree, validate_new_tree_destination
 from . import kaguya
 
 VARIANT = "ver4-cp932-preserved-suffix"
@@ -134,8 +134,7 @@ def inject(data: bytes, original_rows: list[dict], manifest: dict, translated_ro
 
 
 def extract(game: Path, destination: Path, *, verify_edits: bool = False) -> dict:
-    if destination.exists() or destination.is_symlink():
-        raise FileExistsError(f"refusing existing output: {destination}")
+    validate_new_tree_destination(destination)
     data = _read(game / "message.dat")
     doc = kaguya.read_message_dat(data, allow_trailer=True)
     rows, manifest = export(data)
@@ -205,8 +204,7 @@ def extract(game: Path, destination: Path, *, verify_edits: bool = False) -> dic
 
 
 def pack(workspace: Path, destination: Path, *, translations: Path | None = None) -> dict:
-    if destination.exists() or destination.is_symlink():
-        raise FileExistsError(f"refusing existing output: {destination}")
+    validate_new_tree_destination(destination)
     report = load_json(_read(workspace / "reports/extraction.json"), max_bytes=MAX_BYTES)
     if report.get("schema") != "kaguya-workspace/1" or report.get("variant") != VARIANT:
         raise FormatError("unsupported Kaguya workspace")

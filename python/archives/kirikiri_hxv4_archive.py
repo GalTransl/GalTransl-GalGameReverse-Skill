@@ -10,13 +10,13 @@ import json
 from pathlib import Path
 from python.archives.kirikiri_hxv4 import derive, read_index
 from python.archives.kirikiri_hxv4_payload import Cipher, read_member, build
-from python.common.safety import Limits, validate_names, write_new_tree
+from python.common.safety import Limits, validate_names, write_new_tree, validate_new_tree_destination
 from python.archives.kirikiri_hxv4_names import inspect, resolve
 
 
 def run(archive, exe, output, names_report=None, replacements=None, *, candidate_reader=None):
     archive, exe = Path(archive), Path(exe)
-    if Path(output).exists(): raise FileExistsError('refusing existing output')
+    validate_new_tree_destination(Path(output))
     if replacements and not Path(replacements).is_dir(): raise ValueError('replacement directory does not exist')
     report = inspect(archive, exe, [])
     keys = derive(report['key_package']); cipher = Cipher(keys)

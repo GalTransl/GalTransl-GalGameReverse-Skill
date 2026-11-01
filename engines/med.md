@@ -10,7 +10,7 @@
 
 ## Agent 操作流程
 
-先读取索引及预算，再解析剧情包所有成员。无需执行 EXE/DLL；不要顺手提取图像、音频或修改原文件。以下命令供 agent 执行，输出必须是不存在的新目录：
+先读取索引及预算，再解析剧情包所有成员。无需执行 EXE/DLL；不要顺手提取图像、音频或修改原文件。以下命令供 agent 执行，输出目录须不存在或为普通空目录，且父目录已存在：
 
 ```console
 python -m python.engines.med_extract extract "GAME/md_scr.med" "GAME/GAME_extract"

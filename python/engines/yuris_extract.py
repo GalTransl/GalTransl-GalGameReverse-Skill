@@ -7,7 +7,7 @@ from pathlib import Path
 import stat
 from ..archives.yuris_482 import read_index, decode_member, pack_archive
 from ..common.contract import load_json, dump_rows, sha256
-from ..common.safety import logical_path, validate_names, write_new_tree, _check_existing_ancestors
+from ..common.safety import logical_path, validate_names, write_new_tree, _check_existing_ancestors, validate_new_tree_destination
 from .yuris_text import (PARSE_VERSIONS, WRITE_VERSION, Profile, Scenario, commands_from,
                          export_script, rebuild_script, ystb_version)
 
@@ -51,8 +51,7 @@ def archive_members(raw):
 
 def extract(game, output, *, archive, loose, uif_config=None, reference_archives=(), smoke_test=False):
     game, output = Path(game), Path(output)
-    if output.exists():
-        raise FileExistsError(output)
+    validate_new_tree_destination(output)
     archive, loose = logical_path(archive), logical_path(loose)
     config = read_file(game / logical_path(uif_config)) if uif_config else None
     profile = profile_from(config)

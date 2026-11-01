@@ -9,7 +9,7 @@ import re
 import stat
 
 from ..common.contract import load_json
-from ..common.safety import write_new_tree, validate_names, _check_existing_ancestors
+from ..common.safety import write_new_tree, validate_names, _check_existing_ancestors, validate_new_tree_destination
 from .yuris_ydg import MAX_BYTES, read_ydg, rebuild_ydg, png_bytes, read_png
 from .yuris_font import Grid, render_page, reverse_mapping, cp932_pages
 
@@ -57,8 +57,7 @@ def _add(entries, name, data):
 def extract(source, destination):
     source = Path(source).resolve()
     destination = Path(destination).absolute()
-    if destination.exists():
-        raise FileExistsError(f"refusing to replace output: {destination}")
+    validate_new_tree_destination(destination)
     if source.is_file():
         root, paths = source.parent, [source]
     elif source.is_dir():

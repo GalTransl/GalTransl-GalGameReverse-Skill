@@ -100,10 +100,12 @@ class WorkspaceTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 prepare(work, root / "fixed", encoding="cp932")
             self.assertFalse((root / "fixed").exists())
+            (root / "prepared").mkdir()
             info = prepare(work, root / "prepared", encoding="cp932", proxy_policy="unused", include_hook=True)
             self.assertEqual(info["remapped_count"], 3)
             eagls_extract.rebuild(root / "prepared/workspace", root / "engine-output")
             eagls_extract.extract(root / "engine-output/script", root / "readback", profile=profile, key=b"key")
+            (root / "delivery").mkdir()
             report = finalize(root / "prepared", root / "engine-output", root / "readback/gt_input", root / "delivery")
             self.assertEqual(report["verified_files"], 2)
             self.assertTrue(report["display_rows_verified"])

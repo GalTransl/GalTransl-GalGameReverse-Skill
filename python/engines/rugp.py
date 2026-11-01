@@ -17,7 +17,7 @@ import stat
 
 from ..archives import rugp as archive
 from ..common.binary import FormatError
-from ..common.safety import Limits, write_new_tree
+from ..common.safety import Limits, write_new_tree, validate_new_tree_destination
 
 
 @dataclass(frozen=True)
@@ -110,8 +110,7 @@ def analyze_archive(source, output, *, key: int = archive.RIO_KEY,
     source, output = Path(source), Path(output)
     if type(key) is not int or not 0 <= key <= 0xFFFFFFFF:
         raise FormatError("invalid key")
-    if os.path.lexists(output):
-        raise FileExistsError(output)
+    validate_new_tree_destination(output)
     initial = source.lstat()
     if (not stat.S_ISREG(initial.st_mode) or source.is_symlink()
             or getattr(initial, "st_file_attributes", 0) & 0x400):

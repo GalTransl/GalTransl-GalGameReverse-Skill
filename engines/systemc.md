@@ -1,5 +1,7 @@
 # SystemC / SystemB3：FPK、ACT 与 UTF-8 TXD/PTR
 
+目录输出遵循 [公共安全写出约定](../guides/python-reference-api.md#安全写出示例)：父目录须已存在，目标须不存在或为普通空目录；非空目录、文件和链接拒绝。
+
 CP932 ACT/DAT/SPT 工作区通过 [systemc_extract.pack](../python/engines/systemc_extract.py) 回注时，默认优先使用 [公共 JIS 替换](../guides/jis-substitution.md) 处理无法编码的中文；`--jis-mode off` 保留严格 CP932。替换会话覆盖整个输出包，结果目录自动包含随包 x86 `winmm.dll`、`uif_config.json`、`jis-mapping.json` 和 `JIS-部署说明.txt`（没有实际替换则不生成）。最终提醒用户按说明部署兼容 hook 或匹配映射的替换字体，并实测加载和显示。低层 `inject_act(..., text_codec=codec)` 支持显式接入；UTF-8 TXD/PTR 不走此方案。
 
 ## 模块分工

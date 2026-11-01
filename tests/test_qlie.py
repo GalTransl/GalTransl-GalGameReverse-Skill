@@ -293,6 +293,7 @@ class QlieWorkflowTests(unittest.TestCase):
             (game / 'a.pack').write_bytes(archive(files))
             (game / 'b.pack').write_bytes(archive([('scenario/scene.s', b'Another version\r\n')]))
             output = game / 'extract'
+            output.mkdir()
             report = extract(game, output, archives=['a.pack', 'b.pack'], exe='game.exe', key_file='key.fkey')
             self.assertEqual(report['counts']['exported_scripts'], 2)
             self.assertEqual(report['counts']['empty_scripts'], 1)
@@ -302,6 +303,7 @@ class QlieWorkflowTests(unittest.TestCase):
             rows[0] = {'name': 'エリス', 'message': 'Longer message'}
             rows[-1]['message'] = 'Longer save title'
             (output / 'gt_output' / Path(first['json']).name).write_text(json.dumps(rows), encoding='utf-8')
+            (game / 'rebuilt').mkdir()
             result = repack(game, output, game / 'rebuilt')
             self.assertEqual(len(result['archives']), 1)
             self.assertEqual(result['archives'][0]['changed'], 1)
