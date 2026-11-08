@@ -10,6 +10,7 @@ import argparse
 from dataclasses import dataclass
 import json
 from pathlib import Path
+import re
 import stat
 
 from .binary import FormatError
@@ -19,6 +20,9 @@ from .safety import Limits, _check_existing_ancestors, validate_names, write_new
 
 SCHEMA = "jis-json-workflow/1"
 ROOTS = ("original", "metadata", "reports", "gt_input")
+# CLI --hook value -> bundled x86 hook; plain "x86" stays the UIF alias.
+HOOK_CHOICES = {"none": None, "x86": "uif", "uif-x86": "uif", "ciallohook-x86": "ciallohook"}
+CIALLOHOOK_INI_NAMES = {"ciallohook.ini", "version.ini", "winmm.ini"}
 
 
 def _json(value):
@@ -231,8 +235,15 @@ def _reject_mapping(value):
             _reject_mapping(child)
 
 
+def _reject_ciallohook_map(raw):
+    """An enabled CialloHook glyph map already substitutes characters."""
+    text = raw.decode("utf-8-sig", "replace")
+    if re.search(r"^[ \t]*EnableCnJpMap[ \t]*=[ \t]*(true|1)\b", text, re.I | re.M):
+        raise FormatError("existing CialloHook EnableCnJpMap cannot be stacked")
+
+
 def prepare(workspace, output=None, *, encoding, extra_texts=(), include_hook=False,
-            proxy_policy="fixed", jis_preflight=False, translations=None):
+            hook="uif", proxy_policy="fixed", jis_preflight=False, translations=None):
     """Create a bounded private workspace; original gt_output stays real Chinese.
 
     Copy original/metadata/reports/gt_input byte-for-byte, not earlier rebuilt
@@ -258,12 +269,13 @@ def prepare(workspace, output=None, *, encoding, extra_texts=(), include_hook=Fa
         payloads["workspace/gt_output/" + name] = dump_rows(rows)
         payloads["chinese/" + name] = dump_rows(translated[name])
     payloads["workspace/gt_output/.keep"] = b""
-    for name, raw in plan.codec.artifacts(include_hook=include_hook):
+    for name, raw in plan.codec.artifacts(include_hook=include_hook, hook=hook):
         payloads["support/" + name] = raw
     # Retain the exact source rows in the immutable snapshot; verification never
     # trusts a generic transformation as proof the game writer worked.
     config = dict(plan.codec.summary(), schema=SCHEMA, files=sorted(original), translated_files=sorted(translated),
-                  include_hook=include_hook, proxy_policy=proxy_policy,
+                  include_hook=include_hook, hook=hook if include_hook else None,
+                  proxy_policy=proxy_policy,
                   snapshot={n: sha256(raw) for n, raw in payloads.items()},
                   support=[n for n in payloads if n.startswith("support/")],
                   status="prepared-only; engine rebuild and re-extraction still required")
@@ -296,6 +308,8 @@ def _workspace_payloads(workspace):
                 _reject_mapping(load_json(raw))
             if name == "original" and Path(relative).name.casefold() == "uif_config.json":
                 _reject_mapping(load_json(raw))
+            if name == "original" and Path(relative).name.casefold() in CIALLOHOOK_INI_NAMES:
+                _reject_ciallohook_map(raw)
     return payloads
 
 
@@ -373,7 +387,9 @@ def main():
     command.add_argument("--extra-text", action="append", default=[], help="UTF-8 file of additional decoded UI/source text")
     command.add_argument("--translations", help="translation JSON directory; default: workspace/gt_output")
     command.add_argument("--jis-preflight", action="store_true", help="report fixed JIS proxy conflicts without writing a workspace")
-    command.add_argument("--hook", choices=("none", "x86"), default="none", help="x86 only after verifying the game EXE architecture")
+    command.add_argument("--hook", choices=tuple(HOOK_CHOICES), default="none",
+                         help="x86/uif-x86: UIF winmm.dll; ciallohook-x86: CialloHook version.dll+ini; "
+                              "only after verifying the game EXE is 32-bit")
     command.add_argument("--proxy-policy", choices=("fixed", "unused"), default="fixed",
                          help="unused: resolve preset collisions with private CP932 proxies; requires matching hook/custom font")
     command = commands.add_parser("finalize")
@@ -388,7 +404,9 @@ def main():
             parser.error("--jis-preflight requires --proxy-policy fixed")
         args["extra_texts"] = {f"{i}-{Path(p).name}": _read(p).decode("utf-8-sig", "strict")
                                for i, p in enumerate(args.pop("extra_text"), 1)}
-        args["include_hook"] = args.pop("hook") == "x86"
+        args["hook"] = HOOK_CHOICES[args["hook"]]
+        args["include_hook"] = args["hook"] is not None
+        args["hook"] = args["hook"] or "uif"
         result = prepare(**args)
     else:
         result = finalize(**args)

@@ -10,7 +10,7 @@ import unittest
 from python.common.binary import FormatError
 from python.common.contract import make_manifest, validate_translation, dump_rows
 from python.common.jis_substitution import (
-    HOOK_SHA256, JisSubstitution, MAPPING_SHA256, is_cp932, mapping_sha256)
+    CIALLOHOOK_SHA256, HOOK_SHA256, JisSubstitution, MAPPING_SHA256, is_cp932, mapping_sha256)
 from python.engines.systemc import export_act, inject_act
 from python.engines.systemc_extract import extract, pack
 from python.archives.systemc import unpack_fpk
@@ -49,6 +49,35 @@ class JisTests(unittest.TestCase):
             sub["source_characters"], sub["target_characters"])), text)
         self.assertFalse(config["font_manager"]["enable"])
         self.assertFalse(config["tunnel_decoder"]["enable"])
+
+    def test_ciallohook_reads_same_uif_config(self):
+        codec = JisSubstitution()
+        text = "你好，说这句话。"
+        raw = codec.encode(text)
+        artifacts = dict(codec.artifacts(hook="ciallohook"))
+        self.assertNotIn("winmm.dll", artifacts)
+        self.assertEqual(artifacts["uif_config.json"], dict(codec.artifacts())["uif_config.json"])
+        dll = artifacts["version.dll"]
+        self.assertEqual(hashlib.sha256(dll).hexdigest(), CIALLOHOOK_SHA256)
+        pe = struct.unpack_from("<I", dll, 60)[0]
+        self.assertEqual(dll[pe:pe+4], b"PE\0\0")
+        self.assertEqual(struct.unpack_from("<H", dll, pe+4)[0], 0x14c)
+        ini = artifacts["version.ini"].decode("utf-8")
+        self.assertFalse(artifacts["version.ini"].startswith(b"\xef\xbb\xbf"))
+        for line in ("EnableCnJpMap = true", "CnJpMapJson = uif_config.json",
+                     "CnJpMapReadEncoding = 932", "Font =", "Charset = 0x00", "Mode = proxy"):
+            self.assertIn(line + "\n", ini)
+        # CialloHook's UIF-format parser: reverse[source[i]] = target[i] if different.
+        sub = json.loads(artifacts["uif_config.json"])["character_substitution"]
+        reverse = {s: t for s, t in zip(sub["source_characters"], sub["target_characters"]) if s != t}
+        self.assertEqual("".join(reverse.get(c, c) for c in raw.decode("cp932")), text)
+        report = json.loads(artifacts["jis-mapping.json"])["hook"]
+        self.assertEqual((report["name"], report["files"]), ("ciallohook", ["version.dll", "version.ini"]))
+        self.assertIn("方案二 CialloHook", artifacts["JIS-部署说明.txt"].decode("utf-8"))
+        bare = dict(codec.artifacts(include_hook=False, hook="ciallohook"))
+        self.assertFalse({"version.dll", "version.ini", "winmm.dll"} & set(bare))
+        with self.assertRaises(FormatError):
+            codec.artifacts(hook="x64")
 
     def test_pass_through_aliases_and_explicit_encoding(self):
         codec = JisSubstitution("ms932")

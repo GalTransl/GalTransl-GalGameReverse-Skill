@@ -117,6 +117,28 @@ class WorkspaceTests(unittest.TestCase):
             with self.assertRaises(FileExistsError):
                 finalize(root / "prepared", root / "engine-output", root / "readback/gt_input", root / "delivery")
 
+    def test_ciallohook_delivery_and_existing_map_rejected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            work, profile = self.fixture(root)
+            prepare(work, root / "prepared", encoding="cp932", proxy_policy="unused",
+                    include_hook=True, hook="ciallohook")
+            plan = json.loads((root / "prepared/jis-plan.json").read_bytes())
+            self.assertEqual(plan["hook"], "ciallohook")
+            eagls_extract.rebuild(root / "prepared/workspace", root / "engine-output")
+            eagls_extract.extract(root / "engine-output/script", root / "readback", profile=profile, key=b"key")
+            report = finalize(root / "prepared", root / "engine-output", root / "readback/gt_input", root / "delivery")
+            self.assertTrue({"version.dll", "version.ini", "uif_config.json"} <= set(report["artifacts"]))
+            self.assertFalse((root / "delivery/winmm.dll").exists())
+            self.assertIn("CnJpMapJson = uif_config.json", (root / "delivery/version.ini").read_text(encoding="utf-8"))
+            (work / "original/winmm.ini").write_text("[CialloHook]\nEnableCnJpMap = true\n", encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "CialloHook EnableCnJpMap"):
+                prepare(work, root / "stacked", encoding="cp932", proxy_policy="unused")
+            self.assertFalse((root / "stacked").exists())
+            (work / "original/winmm.ini").write_text("[CialloHook]\n# EnableCnJpMap = true\nEnableCnJpMap = false\n",
+                                                     encoding="utf-8")
+            prepare(work, root / "disabled-map", encoding="cp932", proxy_policy="unused")
+
     def test_exhibit_same_workflow_no_new_engine_api(self):
         from python.engines.exhibit_extract import extract as ex, rebuild as pack
         from tests.test_exhibit_rld import script as rld, op

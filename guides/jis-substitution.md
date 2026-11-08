@@ -8,7 +8,7 @@
 - [jis_substitution.py](../python/common/jis_substitution.py)：SExtractor 固定映射、冲突检测、可选私用字符分配、配置及 hook 产物。仅依赖标准库，无需安装外部项目。
 - 工作区采用主 Skill 的 `original/metadata/reports/gt_input/gt_output` 结构；引擎接受 UTF-8 的最小 name/names/message JSON，并已有严格 CP932 writer 与真实重提取能力。
 - 必须确认**存储编码**。JSON 本身是 UTF-8，某些 manifest 的 encoding 也是交换层 UTF-8；都不能代替脚本编码证据。严格 shift_jis、UTF-8、UTF-16、GBK 不使用此流程，Kirikiri PSB/SCN 不因 XP3 文件名编码而触发它。
-- 原脚本已使用 UIF 替换或 tunneling 时先识别原映射。工作区声明已有 source/target 字符表或已启用旧映射时，公共准备器拒绝直接叠加；应先制定合并/还原方案。游戏目录已有 hook 也需检查，不能用新子集配置覆盖仍在使用的旧映射。
+- 原脚本已使用 UIF 替换或 tunneling 时先识别原映射。工作区声明已有 source/target 字符表、已启用旧映射，或 `original/` 中 `CialloHook.ini`/`version.ini`/`winmm.ini` 开启 `EnableCnJpMap` 时，公共准备器拒绝直接叠加；应先制定合并/还原方案。游戏目录已有 hook 也需检查，不能用新子集配置覆盖仍在使用的旧映射。
 
 `prepare` / `finalize` 的输出父目录须已存在，目标须不存在或为普通空目录；非空目录、文件和链接拒绝。
 
@@ -48,7 +48,7 @@ python -m python.common.jis_workflow prepare "原工作区" "新的JIS准备目�
 python -m python.common.jis_workflow finalize "新的JIS准备目录" "重建资源目录" "回读目录/gt_input" "新的交付目录"
 ```
 
-`--hook x86` 仅在确认实际主程序为 32 位后使用；默认 `none` 不选 DLL。`--extra-text` 可重复指定额外已解码的 UTF-8 文本。准备器复制标准工作区四个来源目录，跳过旧 `rebuilt/`；当前文件/总字节预算为 128/512 MiB，超限明确报错，不使用硬链接、符号链接或覆盖用户目录来规避复制。
+`--hook` 仅在确认实际主程序为 32 位后选择 DLL：`x86`（同 `uif-x86`）附带 UIF `winmm.dll`，`ciallohook-x86` 附带 CialloHook `version.dll` 与 `version.ini`；默认 `none` 不选 DLL。两种 hook 读取同一 `uif_config.json`，选择依据见[显示部署](#用户下一步与显示部署)。`--extra-text` 可重复指定额外已解码的 UTF-8 文本。准备器复制标准工作区四个来源目录，跳过旧 `rebuilt/`；当前文件/总字节预算为 128/512 MiB，超限明确报错，不使用硬链接、符号链接或覆盖用户目录来规避复制。
 
 SystemC、ExHibit 已有的内联 JIS 接口保留兼容；走公共准备流程时关闭其自动处理（例如 `--jis-mode off`）。不要照这些旧接口再为其他引擎复制一套。特殊工作区可调用下面的公共 API 组织已有 parser/writer，仍不需要改引擎的编码函数。
 
@@ -82,7 +82,7 @@ plan = prepare_translations(
 # 原 writer 校验、重建、再从真实产物提取后：
 verification = plan.verify(actual_reextracted_rows_by_filename)
 # 与重建资源一起通过 write_new_tree 发布到新目录。
-artifacts = plan.codec.artifacts(include_hook=True)  # 已确认 x86 时
+artifacts = plan.codec.artifacts(include_hook=True, hook="uif")  # 已确认 x86；或 hook="ciallohook"
 ```
 
 `plan.original`、`plan.translated` 保留真实文本，`plan.stored` 仅含提供译文的文件；verify 要求所有原文文件的实际回读。转换不会修改原输入对象或原 manifest。纯 API 不自动识别已有游戏映射，由调用方先完成检查。低层 `JisSubstitution` 与公共契约的 `text_codec` 接口仍可供既有集成使用，但不再作为每个新引擎的必改步骤。
@@ -105,10 +105,13 @@ artifacts = plan.codec.artifacts(include_hook=True)  # 已确认 x86 时
 
 - `uif_config.json`：source 是 CP932 代理日文/私用字符，target 是真实中文；tunneling 关闭。方向不可颠倒。
 - `jis-mapping.json`：固定表版本、实际映射、私用字符分配、固定字体兼容性与冲突清单。
-- `winmm.dll`：已选择 x86 时附带仓库固定哈希的 [UIF 工具](../assets/uif/README.md)，与配置在一起；不自动安装或执行。
+- `winmm.dll`：选择 `x86`/`uif-x86` 时附带仓库固定哈希的 [UIF 工具](../assets/uif/README.md)，与配置在一起；不自动安装或执行。
+- `version.dll` + `version.ini`：选择 `ciallohook-x86` 时附带固定哈希的 [CialloHook](../assets/ciallohook/README.md) 及只开启字形映射的配置，`CnJpMapJson` 指向同目录 `uif_config.json`；不自动安装或执行。
 - `JIS-部署说明.txt`：本批 hook/字体条件与显示测试步骤；不生成字体。
 
-agent 最终必须给出实际目录和操作说明。使用兼容 UIF 的 `winmm.dll` 代理时，将匹配游戏位数的 DLL 与本批配置放到实际游戏 EXE 目录，再按引擎既有规则部署资源；已有同名文件先检查、备份或合并，不叠加两次替换。恢复中文后，游戏还须选用包含中文字形的普通字体。
+agent 最终必须给出实际目录和操作说明。将匹配游戏位数的 hook DLL、其配置与本批 `uif_config.json` 放到实际游戏 EXE 目录，再按引擎既有规则部署资源；已有同名文件先检查、备份或合并，同一游戏只用一种 hook，不叠加两次替换。恢复中文后，游戏还须选用包含中文字形的普通字体。
+
+两种 hook 互补：UIF 只 hook 默认的 TextOut/GetGlyphOutline 路径，配置简单；CialloHook 覆盖更多 GDI 文本与测宽接口及部分引擎兼容层，A 接口无法写回中文时改走 W 接口，并可替换字体。一般先用 UIF；UIF 未生效、显示方框需换字体，或 `winmm.dll` 已被其他补丁占用时改用 CialloHook。CialloHook 的字体、字符集与文件名调整见[其说明](../assets/ciallohook/README.md)，不要使用其上游示例 `subs_cn_jp.json`，它与本项目固定表不同。
 
 只有 `preset_font_compatible=true` 且预设字体冲突清单为空时，才考虑映射版本匹配的 SExtractor `WenQuanYi_cnjp.ttf` / `MSGothic_WenQuanYi_cnjp.ttf`，并让游戏实际选用。普通日文/繁体字体不能还原代理字。使用 unused 私用字符映射时，上述固定预设字体不可用；选择本批 hook 配置或定制字体。不要同时开启 hook 字符还原和替换字体。
 

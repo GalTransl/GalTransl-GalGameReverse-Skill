@@ -86,7 +86,7 @@ JSON 中姓名在正文前；偏移、原字节和控制码映射放入 metadata
 4. 重解析并比对译文与非文本结构，按已确认加载规则生成松散补丁、补丁归档或重封包。格式往返不代表运行时可加载。
 5. 交代产物、数量、验证状态和未验证项，详见[验证与部署](guides/validation-and-deployment.md)。
 
-JIS 交付可将随包 [UIF x86 winmm.dll](assets/uif/README.md) 与配置一并写入新结果目录，无需另问复制许可；64 位游戏须另选兼容构建。最终说明配置路径及用法：将匹配位数的 DLL 和 `uif_config.json` 放到实际游戏 EXE 目录，或选用同批映射对应的专用替换字体。普通日文/繁体字体不能代替它；已有 DLL/配置须先检查合并。交付结果不等于已授权安装或验证显示。
+JIS 交付可将随包 [UIF x86 winmm.dll](assets/uif/README.md) 或 [CialloHook x86 version.dll](assets/ciallohook/README.md) 与配置一并写入新结果目录，无需另问复制许可；两者读取同一 `uif_config.json`，只选其一，UIF 未生效或需换字体时改用 CialloHook；64 位游戏须另选兼容构建。最终说明配置路径及用法：将匹配位数的 DLL、其配置和 `uif_config.json` 放到实际游戏 EXE 目录，或选用同批映射对应的专用替换字体。普通日文/繁体字体不能代替它；已有 DLL/配置须先检查合并。交付结果不等于已授权安装或验证显示。
 
 ## 通用指南与资料
 

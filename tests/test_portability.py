@@ -42,9 +42,11 @@ class PortabilityTests(unittest.TestCase):
 
     def test_no_unapproved_native_or_game_binaries(self):
         forbidden = {".exe", ".dll", ".pyd", ".so", ".dylib", ".rpyc", ".xp3", ".rpa"}
-        # UIF is a documented delivery asset, never a Python runtime dependency.
+        # UIF/CialloHook are documented delivery assets, never Python runtime dependencies.
         allowed = {"assets/uif/winmm.dll":
-                   "b83f896edd06662078eadd5ea7970ab5bfd320cd8ec319e72b1455473c897e41"}
+                   "b83f896edd06662078eadd5ea7970ab5bfd320cd8ec319e72b1455473c897e41",
+                   "assets/ciallohook/version.dll":
+                   "45a690c147467bf34168ecdeedb1d682848e99617dde41402faf83c291dc54ad"}
         for relative, expected_hash in allowed.items():
             self.assertEqual(hashlib.sha256((ROOT / relative).read_bytes()).hexdigest(),
                              expected_hash, relative)

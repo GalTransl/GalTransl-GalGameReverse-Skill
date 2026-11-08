@@ -20,6 +20,42 @@ from .contract import load_json
 MAPPING_SHA256 = "0d503680cc62e032b8d0574328842d2b19162774ac19184e8af67be70c147c80"
 HOOK_SHA256 = "b83f896edd06662078eadd5ea7970ab5bfd320cd8ec319e72b1455473c897e41"
 HOOK_PATH = Path(__file__).resolve().parents[2] / "assets/uif/winmm.dll"
+CIALLOHOOK_SHA256 = "45a690c147467bf34168ecdeedb1d682848e99617dde41402faf83c291dc54ad"
+CIALLOHOOK_PATH = Path(__file__).resolve().parents[2] / "assets/ciallohook/version.dll"
+# Both pinned DLLs are x86 delivery assets; they are copied, never loaded here.
+HOOKS = {
+    "uif": {"path": HOOK_PATH, "sha256": HOOK_SHA256, "dll": "winmm.dll", "config": None},
+    "ciallohook": {"path": CIALLOHOOK_PATH, "sha256": CIALLOHOOK_SHA256,
+                   "dll": "version.dll", "config": "version.ini"},
+}
+# CialloHook reads uif_config.json's character_substitution directly
+# (source = proxy, target = Chinese); only the glyph-map hook is enabled.
+CIALLOHOOK_INI = """# CialloHook 配置（JIS 替换回注生成，UTF-8）
+# 与 version.dll 同名，读取同目录 uif_config.json 的 character_substitution。
+[CialloHook]
+Charset = 0x00
+# 留空不替换字体；代理字恢复为中文后若显示方框，再由 agent 调整 Font。
+Font =
+EnableCharsetSpoof = false
+EnableCnJpMap = true
+CnJpMapVerboseLog = false
+CnJpMapJson = uif_config.json
+CnJpMapReadEncoding = 932
+
+[LoadMode]
+Mode = proxy
+
+[EngineCompat]
+Enable = true
+Mode = auto
+FeatureSet = all
+RuntimePatch = safe
+
+[Debug]
+Enable = true
+LogToFile = true
+LogToConsole = false
+"""
 
 
 def is_cp932(encoding):
@@ -178,22 +214,29 @@ class JisSubstitution:
                 "preset_font_compatible": not bool(self._remapped),
                 "runtime_verified": False}
 
-    def artifacts(self, *, include_hook=True):
+    def artifacts(self, *, include_hook=True, hook="uif"):
         """Return files to publish atomically WITH the rewritten game resources.
 
-        No config is needed for a pass-through run. Bundle the pinned x86 UIF
-        DLL by default; set include_hook=False for another runtime/architecture.
-        Nothing is installed. Existing configurations must be merged by the agent
-        after inspecting the existing hook; this template must not replace one.
+        No config is needed for a pass-through run. Bundle a pinned x86 hook by
+        default: hook="uif" (winmm.dll) or "ciallohook" (version.dll + ini, both
+        reading the same uif_config.json); set include_hook=False for another
+        runtime/architecture. Nothing is installed. Existing configurations must
+        be merged by the agent after inspecting the existing hook; this template
+        must not replace one.
         """
+        if hook not in HOOKS:
+            raise FormatError(f"unknown JIS hook: {hook}")
         if not self._used:
             return []
+        selected = HOOKS[hook]
         hook_files = []
         if include_hook:
-            hook = HOOK_PATH.read_bytes()
-            if hashlib.sha256(hook).hexdigest() != HOOK_SHA256:
-                raise FormatError("bundled UIF winmm.dll hash mismatch")
-            hook_files = [("winmm.dll", hook)]
+            raw = selected["path"].read_bytes()
+            if hashlib.sha256(raw).hexdigest() != selected["sha256"]:
+                raise FormatError(f"bundled {hook} {selected['dll']} hash mismatch")
+            hook_files = [(selected["dll"], raw)]
+            if selected["config"]:
+                hook_files.append((selected["config"], CIALLOHOOK_INI.encode("utf-8")))
         pairs = sorted(self._used.items())
         config = {
             "injector": {"enable": True, "print_loaded_modules": False},
@@ -210,8 +253,10 @@ class JisSubstitution:
             v for k, v in self._preset_mapping.items() if k != v))
         report = dict(self.summary(), chinese_to_proxy=dict(pairs),
                       custom_chinese_to_proxy=dict(sorted(self._remapped.items())),
-                      hook={"included": include_hook, "architecture": "x86",
-                            "sha256": HOOK_SHA256 if include_hook else None},
+                      hook={"included": include_hook, "name": hook if include_hook else None,
+                            "architecture": "x86",
+                            "files": [name for name, _ in hook_files],
+                            "sha256": selected["sha256"] if include_hook else None},
                       preset_font_conflicts=font_conflicts,
                       collision_scope="only display text supplied to this session; other UI needs runtime testing")
         readme = """JIS 替换回注：部署与测试
@@ -220,18 +265,28 @@ class JisSubstitution:
 uif_config.json 的 source 是代理日文，target 是预期中文，不可颠倒。
 本结果未附带字体，也未验证游戏实际加载、hook 或字形显示。
 
-方案一：使用兼容的 UniversalInjectorFramework hook。
-https://github.com/satan53x/UniversalInjectorFramework
-若结果附带 winmm.dll，它是 SExtractor 提供的 x86（32 位）版本。
-64 位游戏不要使用此版本，应由 agent 准备对应构建；未附带时另选兼容构建。
-确认与游戏进程位数及加载方式匹配；若使用 winmm.dll 代理，
-将该 hook 的 winmm.dll 与本目录 uif_config.json 放到实际游戏 EXE 目录，
-并按本引擎已确认的加载方式部署回注资源。代理 DLL 是否被加载需实测。
-若已有 winmm.dll、uif_config.json 或其他汉化 hook，先交给 agent 检查合并；
+方案一与方案二都读取同一个 uif_config.json，只选其一，不要同时放入两个 hook。
+两者附带的 DLL 都是 x86（32 位）版本；64 位游戏不要使用，应由 agent 准备对应构建。
+确认与游戏进程位数及加载方式匹配，并按本引擎已确认的加载方式部署回注资源。
+代理 DLL 是否被加载需实测。若已有 winmm.dll、version.dll、uif_config.json、
+CialloHook.ini/version.ini 或其他汉化 hook，先交给 agent 检查合并；
 不要覆盖现有 DLL/配置，不要叠加两次字符替换或同时开启 JIS tunneling。
 Hook 恢复中文后，游戏还需实际选用包含这些中文字形的普通字体。
 
-方案二：使用与 jis-mapping.json 中 mapping_sha256 对应的专用日繁/JIS 替换字体。
+方案一：UniversalInjectorFramework（winmm.dll 代理）。
+https://github.com/satan53x/UniversalInjectorFramework
+将 winmm.dll 与 uif_config.json 放到实际游戏 EXE 目录。默认只 hook
+TextOutA/W、GetGlyphOutlineA/W。
+
+方案二：CialloHook（version.dll 代理）。
+https://github.com/Lite0812/CialloHook
+将 version.dll、version.ini 与 uif_config.json 放到实际游戏 EXE 目录。
+覆盖 TextOut/ExtTextOut/DrawText/GetGlyphOutline/文本宽度等 A/W 接口及部分引擎兼容层，
+A 接口无法用 CP932 写回中文时改走 W 接口；还可替换字体，适合方案一不生效或缺字的情况。
+version.ini 默认不替换字体并在游戏目录写日志；version.dll 不被加载时可改名为
+winmm.dll，并把 version.ini 同时改名为 winmm.ini。
+
+方案三：使用与 jis-mapping.json 中 mapping_sha256 对应的专用日繁/JIS 替换字体。
 SExtractor 的 WenQuanYi_cnjp.ttf / MSGothic_WenQuanYi_cnjp.ttf 是候选，
 必须核对其映射版本；普通日文字体、繁体字体不能还原代理字符。
 安装字体后，还需让游戏选择/加载该字体（或按引擎方式替换实际字体资源）。
@@ -246,6 +301,8 @@ SExtractor 的 WenQuanYi_cnjp.ttf / MSGothic_WenQuanYi_cnjp.ttf 是候选，
         if self._remapped:
             readme = ("本批包含自定义 CP932 私用代理字。必须使用本批 uif_config.json 配套的兼容 hook，\n"
                       "或按本批映射定制字体；SExtractor 固定日繁/JIS 替换字体不适用于本批。\n"
-                      "以下方案二的固定预设字体路线不可使用。尚未验证游戏的 hook 加载及私用字符显示。\n\n" + readme)
+                      "以下方案三的固定预设字体路线不可使用。尚未验证游戏的 hook 加载及私用字符显示。\n\n" + readme)
+        if include_hook:
+            readme = f"本结果附带的 hook：{'方案一 UIF' if hook == 'uif' else '方案二 CialloHook'}。\n\n" + readme
         return [*hook_files, ("uif_config.json", _json(config)), ("jis-mapping.json", _json(report)),
                 ("JIS-部署说明.txt", readme.encode("utf-8"))]
