@@ -1,4 +1,4 @@
-"""Refresh the local engine-page index; never reads upstream repositories."""
+"""Refresh catalog/engines.json and catalog/engines.md; never reads upstream repositories."""
 
 import ast
 import json
@@ -6,8 +6,6 @@ from pathlib import Path
 import re
 
 ROOT = Path(__file__).resolve().parents[1]
-START = "<!-- ENGINE_INDEX_START -->"
-END = "<!-- ENGINE_INDEX_END -->"
 # Search aliases only, not claims of complete support for every related dialect.
 ALIASES = {
     "artemis": ["Artemis", "Mikage"],
@@ -73,17 +71,14 @@ def main() -> None:
     target.parent.mkdir(exist_ok=True)
     target.write_text(json.dumps({"schema": "galgame-engine-index/1", "count": len(engines),
                                  "engines": engines}, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    skill = ROOT / "SKILL.md"
-    text = skill.read_text(encoding="utf-8")
-    if text.count(START) != 1 or text.count(END) != 1:
-        raise SystemExit("SKILL.md must contain one engine index marker pair")
-    rows = ["| 引擎/格式族 | 页面 |", "|---|---|"]
+    rows = ["# 引擎页目录", "",
+            "由 `tools/update_engine_index.py` 生成，勿手改。先运行探测，再按候选引擎名、扩展名或魔数",
+            "搜索 `engines/`；本表只用于浏览，不代表版本、阶段或游戏已验证支持。", "",
+            "| 引擎/格式族 | 页面 |", "|---|---|"]
     for engine in engines:
         label = engine["title"].replace("|", "\\|").replace("\n", " ")
-        rows.append(f"| {label} | [{engine['id']}]({engine['document']}) |")
-    before, rest = text.split(START, 1)
-    _, after = rest.split(END, 1)
-    skill.write_text(before + START + "\n" + "\n".join(rows) + "\n" + END + after, encoding="utf-8")
+        rows.append(f"| {label} | [{engine['id']}](../{engine['document']}) |")
+    (ROOT / "catalog" / "engines.md").write_text("\n".join(rows) + "\n", encoding="utf-8")
     print(f"Indexed {len(engines)} engine pages; no runtime capability inferred.")
 
 

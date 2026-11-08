@@ -151,7 +151,10 @@ def check() -> tuple[list[str], dict]:
                 errors.append("engine index IDs/pages/count do not match")
             for missing in sorted(REQUIRED_ENGINES - pages):
                 errors.append(f"missing baseline engine page: {missing}")
+            listing = (ROOT / "catalog/engines.md").read_text(encoding="utf-8")
             for engine in engines:
+                if f"](../{engine['document']})" not in listing:
+                    errors.append(f"{engine['id']}: missing from catalog/engines.md; run tools/update_engine_index.py")
                 references = engine["python_references"]
                 if not references:
                     errors.append(f"{engine['id']}: no shipped Python reference")

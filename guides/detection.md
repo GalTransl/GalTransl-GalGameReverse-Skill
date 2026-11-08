@@ -25,7 +25,7 @@ python /path/to/GalTransl-GalGameReverse-Skill/python/detect.py /path/to/game --
 
 ## 按证据查引擎页
 
-从 [引擎索引](../catalog/engines.json) 找对应的 `engines/<id>.md`，在该页核对魔数、布局、配套文件、版本和下一层解析入口。具体格式的识别表与例外维护在引擎页；此处只规定识别流程。
+用候选引擎名、扩展名或魔数搜索 `engines/`，或查 [引擎页目录](../catalog/engines.md)（[JSON 版](../catalog/engines.json)含别名与公开函数），找到对应的 `engines/<id>.md`，在该页核对魔数、布局、配套文件、版本和下一层解析入口。具体格式的识别表与例外维护在引擎页；此处只规定识别流程。
 
 ## 搜索资料目录
 
