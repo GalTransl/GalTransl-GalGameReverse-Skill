@@ -68,9 +68,7 @@
       "id": "alicesoft",
       "title": "AliceSoft：AI2 容器与 AIN 文本表",
       "aliases": [
-        "AliceSoft",
-        "AIN",
-        "AI2"
+        "alicesoft"
       ],
       "document": "engines/alicesoft.md",
       "python_references": [
@@ -87,6 +85,7 @@
           "AinTable",
           "cipher",
           "read_ain",
+          "known_text_tags",
           "rewrite_ain"
         ]
       },
@@ -118,7 +117,7 @@
     },
     {
       "id": "arcgameengine",
-      "title": "ArcGameEngine：AGE 字符串池与 PAC 容器",
+      "title": "ArcGameEngine：AGE 字符串池算法",
       "aliases": [
         "ArcGameEngine",
         "AGE"
@@ -401,7 +400,9 @@
           "export_v1",
           "patch_v1"
         ],
-        "python/engines/bgi_v1_opcodes.py": []
+        "python/engines/bgi_v1_opcodes.py": [
+          "operand_template"
+        ]
       },
       "scope": "version/stage-limited references; read the engine page",
       "evidence": "per-module provenance and synthetic tests; not blanket game verification"
@@ -712,7 +713,7 @@
     },
     {
       "id": "entis-gls",
-      "title": "Entis GLS：SRCXML 消息、选择属性与 CSX 容器",
+      "title": "Entis GLS：SRCXML 多语言消息、选择属性与 CSX 容器",
       "aliases": [
         "EntisGLS",
         "Entis GLS",
@@ -757,7 +758,8 @@
         "python/engines/escude.py",
         "python/engines/escude_extract.py",
         "python/engines/escude_mdb.py",
-        "python/engines/escude_mess.py"
+        "python/engines/escude_mess.py",
+        "python/engines/escude_pack.py"
       ],
       "public_symbols": {
         "python/archives/escude.py": [
@@ -766,7 +768,9 @@
           "read_index",
           "probe_member",
           "decode_acp",
-          "read_member"
+          "read_member",
+          "encode_acp_literal",
+          "repack"
         ],
         "python/engines/escude.py": [
           "Script",
@@ -799,6 +803,11 @@
           "extract_pair",
           "protected_tokens",
           "patch_mess"
+        ],
+        "python/engines/escude_pack.py": [
+          "read_file",
+          "pack",
+          "main"
         ]
       },
       "scope": "version/stage-limited references; read the engine page",
@@ -806,14 +815,17 @@
     },
     {
       "id": "exhibit",
-      "title": "ExHibit：RLD 操作片段、间接姓名与有界 XOR",
+      "title": "ExHibit：RLD v3 静态解密、文本提取与回注",
       "aliases": [
         "ExHibit",
         "RLD"
       ],
       "document": "engines/exhibit.md",
       "python_references": [
-        "python/engines/exhibit.py"
+        "python/engines/exhibit.py",
+        "python/engines/exhibit_extract.py",
+        "python/engines/exhibit_keys.py",
+        "python/engines/exhibit_rld.py"
       ],
       "public_symbols": {
         "python/engines/exhibit.py": [
@@ -825,6 +837,32 @@
           "name_table",
           "extract_dialogue",
           "patch_dialogue"
+        ],
+        "python/engines/exhibit_extract.py": [
+          "json_bytes",
+          "read_bounded",
+          "flat_names",
+          "extract",
+          "rebuild",
+          "main"
+        ],
+        "python/engines/exhibit_keys.py": [
+          "PE",
+          "bitmap_bits",
+          "ini_checksum",
+          "scenario_seed",
+          "recover_def_seed"
+        ],
+        "python/engines/exhibit_rld.py": [
+          "mt_keys",
+          "crypt",
+          "Script",
+          "parse",
+          "choice_fields",
+          "records",
+          "patch",
+          "export_rld",
+          "rebuild_rld"
         ]
       },
       "scope": "version/stage-limited references; read the engine page",
@@ -923,11 +961,10 @@
     },
     {
       "id": "gxengine",
-      "title": "GxEngine：V3 MWB 字符串、zlib 包装与 GXP 容器",
+      "title": "GxEngine：V3 MWB 字符串与 zlib 包装",
       "aliases": [
         "GxEngine",
-        "GxEngine_mwb",
-        "GXP"
+        "GxEngine_mwb"
       ],
       "document": "engines/gxengine.md",
       "python_references": [
@@ -1072,7 +1109,7 @@
     },
     {
       "id": "kaguya",
-      "title": "Kaguya：message.dat ver4/早期分块、TBLSTR 与 LINK6 容器",
+      "title": "Kaguya：message.dat 与 LINK6",
       "aliases": [
         "KaGuYa",
         "Kaguya",
@@ -1128,7 +1165,7 @@
     },
     {
       "id": "kirikiri",
-      "title": "Kirikiri / KAG：有限 KS 文本往返与 TJS2 字节码阅读",
+      "title": "Kirikiri / KAG：剧本提取、回填与 XP3 补丁",
       "aliases": [
         "KiriKiri",
         "KAG",
@@ -1137,16 +1174,64 @@
       ],
       "document": "engines/kirikiri.md",
       "python_references": [
+        "python/archives/kirikiri_filtered.py",
+        "python/archives/kirikiri_filters.py",
+        "python/archives/kirikiri_hxv4_archive.py",
+        "python/archives/kirikiri_hxv4_names.py",
+        "python/archives/kirikiri_hxv4_payload.py",
+        "python/archives/kirikiri_xp3.py",
         "python/archives/xp3.py",
         "python/engines/kirikiri.py",
-        "python/engines/kirikiri_tjs_inspect.py",
-        "python/engines/kirikiri_tjs_decompile.py",
+        "python/engines/kirikiri_extract.py",
         "python/engines/kirikiri_hxv4_candidates.py",
-        "python/engines/kirikiri_hxv4_tables.py"
+        "python/engines/kirikiri_hxv4_recover.py",
+        "python/engines/kirikiri_hxv4_tables.py",
+        "python/engines/kirikiri_hxv4_text.py",
+        "python/engines/kirikiri_kag_extract.py",
+        "python/engines/kirikiri_kag_text.py",
+        "python/engines/kirikiri_probe.py",
+        "python/engines/kirikiri_psb.py",
+        "python/engines/kirikiri_scn.py",
+        "python/engines/kirikiri_simple_crypt.py",
+        "python/engines/kirikiri_tjs_decompile.py",
+        "python/engines/kirikiri_tjs_inspect.py",
+        "python/engines/kirikiri_tlg.py"
       ],
       "public_symbols": {
+        "python/archives/kirikiri_filtered.py": [
+          "read_member",
+          "build"
+        ],
+        "python/archives/kirikiri_filters.py": [
+          "validate",
+          "transform"
+        ],
+        "python/archives/kirikiri_hxv4_archive.py": [
+          "run",
+          "main"
+        ],
+        "python/archives/kirikiri_hxv4_names.py": [
+          "resolve",
+          "inspect",
+          "main"
+        ],
+        "python/archives/kirikiri_hxv4_payload.py": [
+          "build_flat_patch",
+          "Random",
+          "order",
+          "Cipher",
+          "read_member",
+          "build"
+        ],
+        "python/archives/kirikiri_xp3.py": [
+          "detect",
+          "read_index",
+          "read_member",
+          "build"
+        ],
         "python/archives/xp3.py": [
           "Entry",
+          "resolve_index_offset",
           "extract",
           "build"
         ],
@@ -1155,24 +1240,137 @@
           "kag_spans",
           "patch_kag"
         ],
+        "python/engines/kirikiri_extract.py": [
+          "digest",
+          "js",
+          "regular",
+          "read_file",
+          "manifest_for",
+          "verify_archive",
+          "extract",
+          "pack",
+          "main"
+        ],
+        "python/engines/kirikiri_hxv4_candidates.py": [
+          "collect",
+          "write_candidates",
+          "main"
+        ],
+        "python/engines/kirikiri_hxv4_recover.py": [
+          "script_names"
+        ],
+        "python/engines/kirikiri_hxv4_tables.py": [
+          "decode_text",
+          "clean_token",
+          "looks_like_stem",
+          "name_variants",
+          "scene_candidates",
+          "diff_map_candidates",
+          "table_tokens",
+          "psb_ref_candidates",
+          "text_candidates",
+          "token_candidates",
+          "ogg_title_candidates",
+          "series_candidates",
+          "candidate_names"
+        ],
+        "python/engines/kirikiri_hxv4_text.py": [
+          "encrypted_archive",
+          "plain_members",
+          "extract",
+          "pack",
+          "main"
+        ],
+        "python/engines/kirikiri_kag_extract.py": [
+          "extract",
+          "pack",
+          "main"
+        ],
+        "python/engines/kirikiri_kag_text.py": [
+          "prose",
+          "restore_comments",
+          "signature",
+          "parse",
+          "export_script",
+          "skeleton",
+          "rebuild_script"
+        ],
+        "python/engines/kirikiri_probe.py": [
+          "png_valid",
+          "classify",
+          "recover_akabei",
+          "probe",
+          "main"
+        ],
+        "python/engines/kirikiri_psb.py": [
+          "Node",
+          "array",
+          "Psb"
+        ],
+        "python/engines/kirikiri_scn.py": [
+          "fields",
+          "list_nodes",
+          "selection_index",
+          "structural_choice",
+          "integer",
+          "records",
+          "locate_records",
+          "writable_records",
+          "controls",
+          "save_message",
+          "visible_length",
+          "fingerprint",
+          "patch"
+        ],
+        "python/engines/kirikiri_simple_crypt.py": [
+          "detect",
+          "swap_adjacent_bits",
+          "unpack",
+          "pack",
+          "text_codec"
+        ],
+        "python/engines/kirikiri_tjs_decompile.py": [
+          "Unsupported",
+          "Expr",
+          "negate",
+          "conjunction",
+          "disjunction",
+          "binary",
+          "unary",
+          "escape_string",
+          "real_literal",
+          "is_identifier",
+          "Stmt",
+          "render",
+          "source_registers",
+          "Loop",
+          "Method",
+          "member_is_registration",
+          "Program",
+          "drop_trailing_return",
+          "decompile",
+          "strings",
+          "info",
+          "encode_source",
+          "process_file",
+          "iter_sources",
+          "main"
+        ],
         "python/engines/kirikiri_tjs_inspect.py": [
+          "Reader",
           "parse",
           "instructions",
           "disassemble"
         ],
-        "python/engines/kirikiri_tjs_decompile.py": [
-          "decompile",
-          "strings",
-          "info"
-        ],
-        "python/engines/kirikiri_hxv4_candidates.py": [
-          "collect",
-          "write_candidates"
-        ],
-        "python/engines/kirikiri_hxv4_tables.py": [
-          "candidate_names",
-          "scene_candidates",
-          "diff_map_candidates"
+        "python/engines/kirikiri_tlg.py": [
+          "TlgImage",
+          "info",
+          "decode",
+          "encode",
+          "encode_png",
+          "decode_file",
+          "from_rgba_png",
+          "main"
         ]
       },
       "scope": "version/stage-limited references; read the engine page",
@@ -1285,20 +1483,49 @@
     },
     {
       "id": "med",
-      "title": "MED：头部定位的 NUL 文本表",
+      "title": "MED / MDN0：有界脚本归档与序号引用回写",
       "aliases": [
         "med"
       ],
       "document": "engines/med.md",
       "python_references": [
-        "python/engines/med.py"
+        "python/archives/med.py",
+        "python/engines/med.py",
+        "python/engines/med_extract.py",
+        "python/engines/med_script.py"
       ],
       "public_symbols": {
+        "python/archives/med.py": [
+          "Entry",
+          "index",
+          "read_member",
+          "read_archive",
+          "rebuild"
+        ],
         "python/engines/med.py": [
           "Table",
           "parse_table",
           "replace_strings",
           "classify_text"
+        ],
+        "python/engines/med_extract.py": [
+          "json_bytes",
+          "read_bounded",
+          "member_info",
+          "extract",
+          "pack",
+          "main"
+        ],
+        "python/engines/med_script.py": [
+          "Frame",
+          "Script",
+          "parse",
+          "controls",
+          "records",
+          "rule_definition",
+          "export",
+          "rebuild",
+          "summary"
         ]
       },
       "scope": "version/stage-limited references; read the engine page",
@@ -1460,10 +1687,9 @@
     },
     {
       "id": "nekosdk",
-      "title": "NekoSDK：ADVSCRIPT2 记录与 NEKOPACK4 容器",
+      "title": "NekoSDK：ADVSCRIPT2 显示与日志记录",
       "aliases": [
-        "nekosdk",
-        "NEKOPACK"
+        "nekosdk"
       ],
       "document": "engines/nekosdk.md",
       "python_references": [
@@ -1474,6 +1700,8 @@
         "python/archives/nekopack.py": [
           "PakEntry",
           "PakArchive",
+          "name_checksum",
+          "xor_head",
           "open_pak",
           "read_member",
           "build_pak"
@@ -1489,7 +1717,7 @@
     },
     {
       "id": "nexas",
-      "title": "NeXAS：PAC 尾索引、BIN 字符串池与 Aikiss3 往返",
+      "title": "NeXAS：PAC 尾索引与 BIN 字符串池回填",
       "aliases": [
         "NeXAS",
         "GIGA",
@@ -1794,7 +2022,7 @@
     },
     {
       "id": "renpy",
-      "title": "Ren'Py：有限 .rpy 词法与原位字符串回填",
+      "title": "Ren’Py：RPA/ARC3 归档与 RPYC2 编译脚本回填",
       "aliases": [
         "Ren'Py",
         "RenPy",
@@ -1804,16 +2032,63 @@
       "document": "engines/renpy.md",
       "python_references": [
         "python/archives/rpa.py",
-        "python/engines/renpy.py"
+        "python/engines/renpy.py",
+        "python/engines/renpy_extract.py",
+        "python/engines/renpy_pickle.py",
+        "python/engines/renpy_rpyc.py"
       ],
       "public_symbols": {
         "python/archives/rpa.py": [
           "Entry",
-          "extract"
+          "IndexEntry",
+          "Index",
+          "read_index",
+          "read_entry",
+          "extract",
+          "rebuild"
         ],
         "python/engines/renpy.py": [
           "Target",
           "extract",
+          "patch"
+        ],
+        "python/engines/renpy_extract.py": [
+          "json_bytes",
+          "read_bounded",
+          "flat_names",
+          "scan",
+          "load_archives",
+          "context",
+          "language",
+          "names_for",
+          "json_names",
+          "extract",
+          "pack",
+          "main"
+        ],
+        "python/engines/renpy_pickle.py": [
+          "Value",
+          "Ref",
+          "Program",
+          "parse",
+          "scalar",
+          "class_name",
+          "attributes",
+          "graph_digest",
+          "rewrite"
+        ],
+        "python/engines/renpy_rpyc.py": [
+          "Script",
+          "parse",
+          "rebuild",
+          "primitive",
+          "expression",
+          "literal",
+          "character_names",
+          "controls",
+          "records",
+          "text_records",
+          "export",
           "patch"
         ]
       },
@@ -2022,10 +2297,10 @@
         "python/archives/silky_arc.py": [
           "ArcEntry",
           "ArcArchive",
-          "lzss_decompress",
-          "lzss_compress",
           "decrypt_name",
           "encrypt_name",
+          "lzss_decompress",
+          "lzss_compress",
           "open_arc",
           "open_arc_old",
           "read_member",
@@ -2175,22 +2450,51 @@
     },
     {
       "id": "systemc",
-      "title": "SystemC / SystemB3：ZLC2 literal 成员",
+      "title": "SystemC / SystemB3：FPK、ACT 与 UTF-8 TXD/PTR",
       "aliases": [
         "systemc"
       ],
       "document": "engines/systemc.md",
       "python_references": [
         "python/archives/systemc.py",
-        "python/engines/systemc.py"
+        "python/engines/systemc.py",
+        "python/engines/systemc_extract.py",
+        "python/engines/systemc_txd.py",
+        "python/engines/systemc_txd_extract.py"
       ],
       "public_symbols": {
         "python/archives/systemc.py": [
           "encode_zlc2_literals",
-          "decode_zlc2_literals"
+          "decode_zlc2_literals",
+          "decode_zlc2",
+          "decode_member",
+          "FpkEntry",
+          "FpkIndex",
+          "read_fpk_index",
+          "unpack_fpk",
+          "rebuild_fpk"
         ],
         "python/engines/systemc.py": [
-          "systemc_name_header"
+          "systemc_name_header",
+          "export_act",
+          "inject_act"
+        ],
+        "python/engines/systemc_extract.py": [
+          "extract",
+          "pack",
+          "main"
+        ],
+        "python/engines/systemc_txd.py": [
+          "read_table",
+          "records",
+          "export_table",
+          "inject_table"
+        ],
+        "python/engines/systemc_txd_extract.py": [
+          "stems",
+          "extract",
+          "pack",
+          "main"
         ]
       },
       "scope": "version/stage-limited references; read the engine page",
@@ -2356,25 +2660,36 @@
       "title": "Unity：Utage 剧情表、serialized asset 与 .bin/.idx 容器",
       "aliases": [
         "UTAGE",
-        "Unity UTAGE mono DAT",
-        "Unity bin idx",
-        "SNR"
+        "Unity UTAGE mono DAT"
       ],
       "document": "engines/unity.md",
       "python_references": [
         "python/archives/unity_arc.py",
+        "python/archives/unity_serialized.py",
         "python/engines/unity.py",
-        "python/engines/unity_snr.py"
+        "python/engines/unity_snr.py",
+        "python/engines/unity_utage.py",
+        "python/engines/unity_utage_extract.py"
       ],
       "public_symbols": {
         "python/archives/unity_arc.py": [
           "ArcEntry",
           "IndexEntry",
-          "pack_record",
           "unpack_record",
+          "pack_record",
           "read_index",
           "read_member",
           "build_bin"
+        ],
+        "python/archives/unity_serialized.py": [
+          "Reader",
+          "Object",
+          "Index",
+          "read_index",
+          "open_checked",
+          "read_object",
+          "read_file",
+          "rebuild"
         ],
         "python/engines/unity.py": [
           "AlignedString",
@@ -2384,9 +2699,41 @@
         ],
         "python/engines/unity_snr.py": [
           "SnrLine",
+          "pack_string",
           "open_snr",
-          "apply_snr_texts",
-          "pack_string"
+          "apply_snr_texts"
+        ],
+        "python/engines/unity_utage.py": [
+          "Writer",
+          "Row",
+          "Grid",
+          "Book",
+          "Chapter",
+          "behaviour",
+          "mono_script",
+          "units",
+          "read_grid",
+          "write_grid",
+          "reader",
+          "read_book",
+          "write_book",
+          "read_chapter",
+          "columns",
+          "cell",
+          "character_names",
+          "controls",
+          "export_book",
+          "patch_book"
+        ],
+        "python/engines/unity_utage_extract.py": [
+          "json_bytes",
+          "bounded",
+          "flat",
+          "filename",
+          "inventory",
+          "extract",
+          "pack",
+          "main"
         ]
       },
       "scope": "version/stage-limited references; read the engine page",
@@ -2396,8 +2743,7 @@
       "id": "valkyria",
       "title": "VALKYRIA：DAT 容器与 SDT 文本片段",
       "aliases": [
-        "VALKYRIA",
-        "MICO"
+        "valkyria"
       ],
       "document": "engines/valkyria.md",
       "python_references": [
@@ -2608,7 +2954,13 @@
       "document": "engines/yuris.md",
       "python_references": [
         "python/archives/yuris.py",
-        "python/engines/yuris.py"
+        "python/archives/yuris_482.py",
+        "python/engines/yuris.py",
+        "python/engines/yuris_extract.py",
+        "python/engines/yuris_font.py",
+        "python/engines/yuris_text.py",
+        "python/engines/yuris_ydg.py",
+        "python/engines/yuris_ydg_workflow.py"
       ],
       "public_symbols": {
         "python/archives/yuris.py": [
@@ -2618,10 +2970,57 @@
           "read_member",
           "decode_member"
         ],
+        "python/archives/yuris_482.py": [
+          "murmur2",
+          "Entry",
+          "read_index",
+          "decode_member",
+          "pack_archive"
+        ],
         "python/engines/yuris.py": [
           "toggle_ybn_sections",
           "convert_control_bytes",
           "read_command_list"
+        ],
+        "python/engines/yuris_extract.py": [
+          "read_file",
+          "json_bytes",
+          "profile_from",
+          "archive_members",
+          "extract",
+          "rebuild",
+          "main"
+        ],
+        "python/engines/yuris_font.py": [
+          "cp932_pages",
+          "Grid",
+          "reverse_mapping",
+          "render_page"
+        ],
+        "python/engines/yuris_text.py": [
+          "Profile",
+          "Scenario",
+          "commands_from",
+          "literal",
+          "ystb_version",
+          "export_script",
+          "rebuild_script"
+        ],
+        "python/engines/yuris_ydg.py": [
+          "imaging",
+          "Tile",
+          "Resource",
+          "read_ydg",
+          "rebuild_ydg",
+          "create_ydg",
+          "png_bytes",
+          "read_png"
+        ],
+        "python/engines/yuris_ydg_workflow.py": [
+          "extract",
+          "pack",
+          "font",
+          "main"
         ]
       },
       "scope": "version/stage-limited references; read the engine page",

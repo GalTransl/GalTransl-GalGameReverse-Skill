@@ -9,6 +9,7 @@ Hxv4 在标准 XP3 File 索引之外保存加密名称表；File 中的短 Unico
 | 恢复、核验候选名 | [kirikiri_hxv4_names.py](../../python/archives/kirikiri_hxv4_names.py) |
 | 解密资源、回填已重建的资源字节 | [kirikiri_hxv4_archive.py](../../python/archives/kirikiri_hxv4_archive.py) |
 | 自动从 PSB/TJS 静态结构收集候选名 | [kirikiri_hxv4_recover.py](../../python/engines/kirikiri_hxv4_recover.py) |
+| 从小成员、文本表与脚本分阶段收集候选名 | [kirikiri_hxv4_candidates.py](../../python/engines/kirikiri_hxv4_candidates.py)，表解析见 [kirikiri_hxv4_tables.py](../../python/engines/kirikiri_hxv4_tables.py) |
 | 提取与回写已支持的 PSB SCN 对白 | [kirikiri_hxv4_text.py](../../python/engines/kirikiri_hxv4_text.py) |
 
 仅需 Python 标准库，不执行游戏 EXE、DLL 或 TJS。普通 `kirikiri_extract` 没有 Hx 密钥上下文，不能代替专用入口。

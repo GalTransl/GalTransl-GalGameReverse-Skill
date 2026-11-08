@@ -46,7 +46,11 @@ def main() -> None:
         text = page.read_text(encoding="utf-8")
         heading = re.search(r"^#\s+(.+)$", text, re.MULTILINE)
         title = heading.group(1).strip() if heading else page.stem
-        references = set(re.findall(r"python/(?:engines|archives)/[\w/.-]+\.py", text))
+        # Subpages under engines/<id>/ belong to the same engine entry.
+        sources = [text, *(sub.read_text(encoding="utf-8")
+                           for sub in sorted((ROOT / "engines" / page.stem).rglob("*.md")))]
+        references = {ref for source in sources
+                      for ref in re.findall(r"python/(?:engines|archives)/[\w/.-]+\.py", source)}
         # A naming fallback records the actual shipped module, not a capability.
         for kind in ("engines", "archives"):
             candidate = f"python/{kind}/{page.stem.replace('-', '_')}.py"
