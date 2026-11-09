@@ -48,7 +48,7 @@ python -m python.engines.kirikiri_hxv4_text pack "提取目录" "新的打包目
 | `rebuilt/roundtrip`、`smoke-test` | 明文中间测试包 |
 | `rebuilt/hx-roundtrip`、`hx-smoke-test` | 保留身份的 Hx 加密测试包 |
 
-smoke-test 带测试前缀，不是正式译文。正式 `pack` 需原始档案仍可读取；它校验源档案、成员身份、原文和 manifest，再复用共享 SCN writer，生成 Hx `scenario.xp3`。该包仅含脚本，不能替换完整 `data.xp3`。
+smoke-test 带测试前缀，不是正式译文。正式 `pack` 需原始档案仍可读取；它校验源档案、成员身份、原文和 manifest，再复用共享 SCN writer，生成 Hx `scenario.xp3`。该包仅含脚本，用于验证 writer，不作为交付物；交付按下文生成[扁平 patch.xp3](#hxv4-扁平-patchxp3)，不得重封整个 `data.xp3` 或原脚本包。
 
 ## 资源级处理与候选名称
 
@@ -120,7 +120,7 @@ TJS 常量引用 `.csv`、`.dat`、`.tjs` 等表名时，按名定位并解开�
 | 包根目录（如剧本包里的 `*.txt.scn`） | `foo.txt.scn` | 无 |
 | 子目录（如 `font/…`、`scenario/…`、`data/…`） | 同样只用 basename：`font.otf`、`history.ks` | 按原结构放进 `font/`、`scenario/`，实际覆盖不到 |
 
-通用挂载与变化筛选见 [补丁工作流](workflow.md#译文回注优先使用-patchxp3-增量补丁)。Hxv4 还需核对 EXE 是否通过 `CompoundStorageMedia` 接管存储，追踪 `parseArchiveIndex/mount/entryDomain/pathHash/assignFiles` 的引用与失败分支；可用 [TJS 静态检查器](../../python/engines/kirikiri_tjs_inspect.py) 和 [TJS 反编译阅读](tjs.md)。
+通用挂载与变化筛选见 [补丁工作流](workflow.md#译文回注必须使用-patchxp3-增量补丁)。Hxv4 还需核对 EXE 是否通过 `CompoundStorageMedia` 接管存储，追踪 `parseArchiveIndex/mount/entryDomain/pathHash/assignFiles` 的引用与失败分支；可用 [TJS 静态检查器](../../python/engines/kirikiri_tjs_inspect.py) 和 [TJS 反编译阅读](tjs.md)。
 
 1. 校验译文并重建脚本，只选择相对原文实际变化的资源。
 2. 使用经哈希核验的原 basename 和完整扩展名，拒绝同名冲突；JSON 文件名与内部 ID 不能代替真实资源名。
@@ -128,7 +128,7 @@ TJS 常量引用 `.csv`、`.dat`、`.tjs` 等表名时，按名定位并解开�
 4. 生成加密正文、名称表和有效 Poly1305 标签，在新目录保存 `patch.xp3`。
 5. 重读索引认证，**确认全部成员的 `path_hash` 都等于 `path_hash("")`**，再核对身份、明文、译文及非文本结构，最后测试实际加载。
 
-“扁平”指 **Hx 名称表映射到根目录**；标准 File 索引仍保留内部 ID。不能仅改文件名、保留原 `scn/`（或 `font/`、`scenario/`）哈希，或改成普通明文 XP3。只有“整体替换整个原包”的做法才保留原包目录结构，那是另一种产物，不是本节的增量补丁。
+“扁平”指 **Hx 名称表映射到根目录**；标准 File 索引仍保留内部 ID。不能仅改文件名、保留原 `scn/`（或 `font/`、`scenario/`）哈希，或改成普通明文 XP3；也不能改为保留原目录结构、整体重封原包来替换原文件。
 
 ### 确认挂载目录、文件名与优先级
 
