@@ -1,0 +1,34 @@
+{
+  "implementation": [
+    "python/archives/asar.py",
+    "python/engines/tyrano.py",
+    "python/engines/tyrano_extract.py"
+  ],
+  "license": "GPL-3.0-or-later (new code of this skill)",
+  "origin": "Independent implementation. No upstream source lines were copied; behaviour was matched to the engine semantics listed below and checked with synthetic round trips.",
+  "references": [
+    {
+      "project": "TyranoScript",
+      "repository": "https://github.com/ShikemokuMK/tyranoscript",
+      "license": "MIT",
+      "copyright": "Copyright (c) ShikemokuMK",
+      "symbols": ["tyrano.plugin.kag.parser.parseScenario", "tyrano.plugin.kag.parser.makeTag",
+                  "tyrano.plugin.kag.tag.chara_ptext", "tyrano.plugin.kag.checkUpdate", "applyPatch"],
+      "use": "Line dispatch (JavaScript trim, ';' '#' '*' '@' '_' prefixes, whole-line /* */ comments), bracket nesting, literal brackets while iscript is open, quoted-attribute handling that drops ASCII spaces and maps '#' to '=', speaker lookup through jname -> character key, and the .tpatch location/apply behaviour for Electron builds."
+    },
+    {
+      "project": "asar",
+      "repository": "https://github.com/electron/asar",
+      "license": "MIT",
+      "copyright": "Copyright (c) 2014 GitHub Inc.",
+      "symbols": ["filesystem header pickle", "offset strings", "unpacked", "integrity"],
+      "use": "Archive layout: 16-byte Chromium pickle prefix, JSON directory tree with decimal-string offsets relative to the data region, unpacked members stored beside the archive, and per-file SHA256 integrity blocks."
+    }
+  ],
+  "deviations": [
+    "Header JSON, member ranges, names and overlaps are bounds-checked before any member is read.",
+    "With no replacement the rebuilt archive is byte-identical; with replacements only sizes, later offsets and integrity records change.",
+    "Text inside iscript, html and macro blocks is never exported; unreferenced scenario files are reported and excluded by default."
+  ],
+  "tests": "tests/test_tyrano.py"
+}

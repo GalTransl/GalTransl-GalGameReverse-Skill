@@ -1,6 +1,6 @@
 {
   "schema": "galgame-engine-index/1",
-  "count": 100,
+  "count": 101,
   "engines": [
     {
       "id": "advsys3",
@@ -2585,6 +2585,58 @@
           "parse_block",
           "extract_block",
           "rewrite_block"
+        ]
+      },
+      "scope": "version/stage-limited references; read the engine page",
+      "evidence": "per-module provenance and synthetic tests; not blanket game verification"
+    },
+    {
+      "id": "tyrano",
+      "title": "TyranoScript：Electron app.asar、.ks 剧本与补丁",
+      "aliases": [
+        "tyrano"
+      ],
+      "document": "engines/tyrano.md",
+      "python_references": [
+        "python/archives/asar.py",
+        "python/engines/tyrano.py",
+        "python/engines/tyrano_extract.py"
+      ],
+      "public_symbols": {
+        "python/archives/asar.py": [
+          "Entry",
+          "Index",
+          "read_index",
+          "read_member",
+          "plan_rebuild",
+          "rebuilt_size",
+          "write_rebuilt",
+          "verify_rebuilt"
+        ],
+        "python/engines/tyrano.py": [
+          "TyranoError",
+          "js_trim",
+          "Piece",
+          "Tag",
+          "Message",
+          "Choice",
+          "NameLine",
+          "Script",
+          "parse",
+          "display_names",
+          "export_rows",
+          "manifest",
+          "message_edits",
+          "name_map",
+          "rebuild",
+          "verify",
+          "validate_rows"
+        ],
+        "python/engines/tyrano_extract.py": [
+          "Source",
+          "extract",
+          "pack",
+          "main"
         ]
       },
       "scope": "version/stage-limited references; read the engine page",

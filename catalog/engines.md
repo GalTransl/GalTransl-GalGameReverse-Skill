@@ -91,6 +91,7 @@
 | Tanaka：SCB1 模板重封与 BIN 文本记录 | [tanaka](../engines/tanaka.md) |
 | TmrHiro：text 流的 i16 长度往返 | [tmrhiro](../engines/tmrhiro.md) |
 | Triangle：MOP / EXD / KLH 的独立文本块 | [triangle](../engines/triangle.md) |
+| TyranoScript：Electron app.asar、.ks 剧本与补丁 | [tyrano](../engines/tyrano.md) |
 | U-GOS：.o 指针引用的字符串块 | [ugos](../engines/ugos.md) |
 | U-MeSoft：PK 尾索引与 SCR/TBL literal 封装 | [umesoft](../engines/umesoft.md) |
 | Unison / Softpal Lazy：VAL 分离式字符串池 | [unison](../engines/unison.md) |

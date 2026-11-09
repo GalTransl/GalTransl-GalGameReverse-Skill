@@ -97,8 +97,25 @@ def validate_new_tree_destination(destination: Path) -> tuple[int, int] | None:
     return info.st_dev, info.st_ino
 
 
+class _BoundedWriter:
+    """Binary sink that refuses to grow past an explicit byte budget."""
+
+    def __init__(self, stream, limit: int):
+        self._stream = stream
+        self._limit = limit
+        self.written = 0
+
+    def write(self, data) -> int:
+        size = len(data)
+        if self.written + size > self._limit:
+            raise FormatError("streamed output exceeds its byte budget")
+        self._stream.write(data)
+        self.written += size
+        return size
+
+
 def write_new_tree(destination: Path, entries: list[tuple[str, bytes]],
-                   limits: Limits = Limits()) -> list[str]:
+                   limits: Limits = Limits(), *, streams=()) -> list[str]:
     """Validate all entries, stage them, then publish to a new or empty directory.
 
     Returned names are relative to destination. The parent must exist; an
@@ -106,11 +123,17 @@ def write_new_tree(destination: Path, entries: list[tuple[str, bytes]],
     at a game directory or a previous output. The caller must bound
     decompression BEFORE building entries; these checks cannot undo an earlier
     excessive allocation. No output file is opened in overwrite mode.
+
+    ``streams`` holds ``(name, writer, max_bytes)`` for outputs too large to
+    hold in memory: ``writer(sink)`` receives a write-only sink that rejects
+    bytes past ``max_bytes``. Streamed files are staged and published together
+    with ``entries`` and are budgeted individually, not by ``limits``.
     """
     destination = Path(os.path.abspath(destination))
     identity = validate_new_tree_destination(destination)
     existing = identity is not None
-    names = validate_names([entry[0] for entry in entries], limits)
+    streams = list(streams)
+    names = validate_names([entry[0] for entry in entries] + [item[0] for item in streams], limits)
     total = 0
     for _, payload in entries:
         if not isinstance(payload, bytes) or len(payload) > limits.max_file_bytes:
@@ -118,6 +141,9 @@ def write_new_tree(destination: Path, entries: list[tuple[str, bytes]],
         total += len(payload)
         if total > limits.max_total_bytes:
             raise FormatError("archive output exceeds total budget")
+    for _, writer, max_bytes in streams:
+        if not callable(writer) or type(max_bytes) is not int or max_bytes < 0:
+            raise FormatError("streamed entry needs a writer and a nonnegative byte budget")
     staging = Path(tempfile.mkdtemp(prefix=".galgame-stage-", dir=destination.parent))
     reserved = False
     try:
@@ -126,6 +152,11 @@ def write_new_tree(destination: Path, entries: list[tuple[str, bytes]],
             target.parent.mkdir(parents=True, exist_ok=True)
             with target.open("xb") as stream:
                 stream.write(payload)
+        for name, (_, writer, max_bytes) in zip(names[len(entries):], streams):
+            target = staging.joinpath(*name.split("/"))
+            target.parent.mkdir(parents=True, exist_ok=True)
+            with target.open("xb") as stream:
+                writer(_BoundedWriter(stream, max_bytes))
         # Reserve absent destinations exclusively; reuse only a verified empty
         # directory. Failure cleanup removes only reservations created here.
         if not existing:
