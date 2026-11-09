@@ -70,6 +70,10 @@ DEFAULT_COMMAND_TAGS = frozenset({"var", "macro"})
 INLINE_RE = re.compile(r"\[[^\[\]\r\n]*\]")
 _ATTR_RE = re.compile(r'([^\s=\]"]+)\s*=\s*"([^"]*)"')
 _SECTION_RE = re.compile(r"^\[([^\]]*)\]")
+# looks_like_script only: a label names something; a command fills its line.
+_PROBE_LABEL_RE = re.compile(r"^\*[^\s*]")
+_PROBE_COMMAND_RE = re.compile(r'^\[([^\s\[\]"=]+)(?:\s(?:"[^"]*"|[^\[\]"])*)?\]\s*(?:(?://|;).*)?$')
+_HEX_RE = re.compile(r"[0-9A-Fa-f]+")
 
 
 class ScpError(ValueError):
@@ -251,7 +255,19 @@ def looks_like_script(data, *, encoding=None, max_lines: int = 40) -> bool:
         return False
     kinds = {}
     for line in text.splitlines()[:max_lines]:
-        kinds[line_kind(line)] = kinds.get(line_kind(line), 0) + 1
+        kind = line_kind(line)
+        stripped = line.strip()
+        # The probe is stricter than the parser: README rules ("****") and
+        # string tables ("[000000]text[-]") must not count as SCP structure.
+        if kind == "label" and not _PROBE_LABEL_RE.match(stripped):
+            kind = "text"
+        elif kind == "command":
+            match = _PROBE_COMMAND_RE.match(stripped)
+            tag = match.group(1) if match else ""
+            if not match or tag == "-" or tag.isdigit() or (
+                    len(tag) in (6, 8) and _HEX_RE.fullmatch(tag) and any(c.isdigit() for c in tag)):
+                kind = "text"
+        kinds[kind] = kinds.get(kind, 0) + 1
     commands = kinds.get("command", 0)
     text_lines = kinds.get("text", 0)
     return commands + text_lines + kinds.get("comment", 0) + kinds.get("linetag", 0) >= 3 \

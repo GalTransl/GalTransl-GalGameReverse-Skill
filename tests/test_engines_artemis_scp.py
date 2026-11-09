@@ -318,6 +318,19 @@ class ProbeTests(unittest.TestCase):
         self.assertFalse(scp.looks_like_script(b"\x00\x01\x02\x03" * 40))
         self.assertFalse(scp.looks_like_script(b""))
 
+    def test_probe_rejects_readme_rules_string_tables_and_licences(self):
+        readme = ("=" * 70 + "\r\n    Voice release 1.5\r\n\r\n" + "*" * 70 + "\r\n    Copying\r\n"
+                  + "*" * 70 + "\r\n# " + "-" * 60 + " #\r\nSome prose.\r\n")
+        table = "".join(f"[{c}]項目{i} (FLAG_{i})[-]\t᠎[{c}]項目{i}\r\n"
+                        for i, c in enumerate(["000000", "111111", "FF00AA"] * 5))
+        licence = ("Copyright (c) 2015 Example Corp.\nAll rights reserved.\n"
+                   "* Redistributions must retain the above notice.\n[1] See terms.\n")
+        for sample in (readme, table, licence):
+            self.assertFalse(scp.looks_like_script(sample.encode("utf-8"), max_lines=12))
+        # Word-like tag names that happen to be hex letters still count.
+        self.assertTrue(scp.looks_like_script(
+            "*start\r\n[fade time=\"1\"]\r\n「text」\r\n[bg file=\"a\"] // c\r\n".encode("utf-8")))
+
     def test_tag_schema_ignores_comments_and_keeps_order(self):
         schema = scp.TagSchema.parse(TAG_INI, encoding="utf-8")
         self.assertIn("var", schema.tags)

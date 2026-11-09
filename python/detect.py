@@ -4,13 +4,17 @@ Run from any directory: python /path/to/skill/python/detect.py GAME_DIRECTORY
 Header facts derive from the format sources recorded in provenance/sources.json.
 Only lists candidates: extensions, filenames and magic do not establish that a
 specific parser, encryption scheme, script writer or patch loading route works.
+Derived trees (this skill's *_extract workspaces, third-party *_Output dumps)
+are skipped by default; pass --include-derived to scan them too.
 """
 
 import argparse
 import json
 import os
 from pathlib import Path
+import re
 import stat
+import struct
 import sys
 import time
 
@@ -58,10 +62,13 @@ MAGICS = (
     (b"YKC001", "yuka", "YKC001 archive prefix"),
     (b"YKC002", "yuka", "YKC002 archive prefix; differs from writer v1"),
     (b"\xcd\x32\x6e\x59", "rugp", "rUGP RIO object signature; schema/key/script roles unverified"),
+    (b"MDN0", "med", "MED MDN0 container; only plain MDN0 script archives (often md_scr.med) have a writer"),
+    (b"MDE0", "med", "MED MDE0 container; encrypted members, no writer for this magic"),
+    (b"UnityFS\0", "unity", "UnityFS/AssetBundle shell; not covered by the complete workspace route"),
 )
 
 EXTENSIONS = {
-    ".xp3": ("kirikiri",), ".ks": ("kirikiri",), ".tjs": ("kirikiri",),
+    ".xp3": ("kirikiri",), ".ks": ("kirikiri", "tyrano"), ".tjs": ("kirikiri",),
     ".rpa": ("renpy",), ".rpy": ("renpy",), ".rpyc": ("renpy",),
     ".pfs": ("artemis",), ".ast": ("artemis",), ".asb": ("artemis", "azsystem"),
     ".iet": ("artemis", "artemis-scp"),
@@ -72,23 +79,123 @@ EXTENSIONS = {
     ".rvdata2": ("rpgmaker",), ".rvdata": ("rpgmaker",),
     ".ykc": ("yuka",), ".yks": ("yuka",),
     ".rio": ("rugp",), ".ici": ("rugp",),
+    ".fpk": ("systemc",),
+}
+EXTENSION_NOTES = {
+    ".fpk": ".fpk; other engines also use FPK, check the encrypted tail index",
 }
 
 # Content probes for extensions that are ambiguous on their own.
 AMBIGUOUS_TEXT_SUFFIXES = (".txt", ".iet")
 #: Largest head read for a probe; never the whole file.
 PROBE_BYTES = 2048
+#: Largest Electron asar header JSON read; member data is never read.
+ASAR_HEADER_LIMIT = 32 << 20
 
 BASENAMES = {
     "nscript.dat": ("nscripter",), "0.txt": ("nscripter",),
     "scene.pck": ("siglus",), "seen.txt": ("reallive",),
     "script.src": ("softpal",), "ysc.ybn": ("yuris",),
     "rpg_core.js": ("rpgmaker",), "rmmz_core.js": ("rpgmaker",),
+    "systemc.ini": ("systemc",),
+    "eagls.ini": ("eagls",), "eagls.dll": ("eagls",),
+    "scpack.idx": ("eagls",), "scpack.pak": ("eagls",),
+    "unityplayer.dll": ("unity",), "gameassembly.dll": ("unity",),
+    "globalgamemanagers": ("unity",), "globalgamemanagers.assets": ("unity",),
+    "kag.parser.js": ("tyrano",),
 }
+
+# Derived trees: this skill's workspaces and common third-party dump folders.
+DERIVED_NAME = re.compile(r"(?i)(?:_extract(?:[_-]?\d+)?|(?<!^gt)_output)$")
+MAX_SKIPPED_REPORTED = 50
+
+# Catalog fallback: generic media/container heads carry no engine signal.
+GENERIC_PREFIXES = (
+    b"\x89PNG", b"OggS", b"RIFF", b"MZ", b"PK\x03\x04", b"ID3", b"\xff\xd8\xff",
+    b"\x1aE\xdf\xa3", b"GIF8", b"%PDF", b"\x00\x00\x01\xba", b"\x00\x00\x01\xb3",
+    b"0&\xb2u", b"fLaC", b"\x7fELF", b"\xef\xbb\xbf", b"\xff\xfe", b"\xfe\xff", b"MSCF",
+)
+# Catalog "magics" below this little-endian value are version/count words
+# (e.g. Chromium .pak heads 05 00 00 00), not signatures.
+MIN_CATALOG_MAGIC = 0x10000
+MAX_CATALOG_HINTS = 50
+_CATALOG_INDEX = None
+
+
+def _catalog_index() -> dict:
+    """Four file-order header bytes (hex) -> catalog tags; loaded once, lazily."""
+    global _CATALOG_INDEX
+    if _CATALOG_INDEX is None:
+        from python.common.source_catalog import load_formats
+        index: dict[str, list[str]] = {}
+        try:
+            document = load_formats(Path(__file__).resolve().parents[1] / "catalog" / "formats.json")
+        except (OSError, ValueError):
+            document = {"formats": []}
+        for entry in document["formats"]:
+            tag = entry.get("tag", {}).get("value")
+            for magic in entry.get("magic", {}).get("nonzero_uint32_le_hex", []) or []:
+                if int.from_bytes(bytes.fromhex(magic), "little") < MIN_CATALOG_MAGIC:
+                    continue
+                tags = index.setdefault(magic, [])
+                if tag and tag not in tags:
+                    tags.append(tag)
+        _CATALOG_INDEX = index
+    return _CATALOG_INDEX
+
+
+def _generic_head(header: bytes) -> bool:
+    return header.startswith(GENERIC_PREFIXES) or header[4:8] == b"ftyp"
+
+
+def _nexas_head(header: bytes) -> bool:
+    if len(header) < 12 or header[:3] != b"PAC":
+        return False
+    count, pack_type = struct.unpack_from("<II", header, 4)
+    return 1 <= count <= 100_000 and pack_type in (0, 2, 3, 4, 5, 6, 7)
+
+
+def _asar_probe(path: Path, header: bytes, size: int):
+    """Return (engine, explanation) for an Electron asar head, else None.
+
+    Reads only the bounded header JSON; member payloads are never touched.
+    """
+    if len(header) < 25 or struct.unpack_from("<I", header, 0)[0] != 4 or header[16:25] != b'{"files":':
+        return None
+    length = struct.unpack_from("<I", header, 12)[0]
+    if not 0 < length <= ASAR_HEADER_LIMIT or 16 + length > size:
+        return ("tyrano", "Electron asar head with an out-of-range header length; only Electron asar")
+    try:
+        with path.open("rb") as stream:
+            stream.seek(16)
+            tree = json.loads(stream.read(length).decode("utf-8"))
+        files = tree["files"]
+        scenario = files.get("data", {}).get("files", {}).get("scenario", {}).get("files", {})
+        tyrano = "files" in files.get("tyrano", {})
+        has_ks = any(name.lower().endswith(".ks") and "files" not in node for name, node in scenario.items())
+    except (OSError, ValueError, KeyError, AttributeError, TypeError):
+        return ("tyrano", "Electron asar head; header JSON unreadable; only Electron asar")
+    if tyrano and has_ks:
+        return ("tyrano", "Electron asar with tyrano/ and data/scenario/*.ks; TyranoScript layout, "
+                          "dialect still needs parsing")
+    return ("tyrano", "only Electron asar; no TyranoScript layout (tyrano/ + data/scenario/*.ks) seen")
+
+
+def _derived_reason(path: Path, name: str):
+    if DERIVED_NAME.search(name):
+        return "derived output name (*_extract / *_Output)"
+    try:
+        children = {entry.name.lower() for entry in os.scandir(path) if entry.is_dir(follow_symlinks=False)}
+    except OSError:
+        return None
+    if "gt_input" in children and ({"metadata", "reports"} & children):
+        return "skill workspace (gt_input with metadata/reports)"
+    return None
 
 
 def detect_directory(root: Path, *, max_files: int = 2000, max_depth: int = 5,
-                     max_seconds: float = 15.0, max_evidence: int = 12) -> dict:
+                     max_seconds: float = 15.0, max_evidence: int = 12,
+                     include_derived: bool = False) -> dict:
     root = Path(os.path.abspath(root))
     if max_files < 1 or max_depth < 0 or max_seconds <= 0:
         raise ValueError("invalid scan limits")
@@ -99,7 +206,11 @@ def detect_directory(root: Path, *, max_files: int = 2000, max_depth: int = 5,
         raise ValueError("choose an ordinary directory, not a link or junction")
     result = {"kind": "candidate-evidence-only", "files_seen": 0, "truncated": False,
               "candidates": {}, "candidate_stats": {}, "evidence_capped": False,
-              "volume_sets": [], "warnings": []}
+              "volume_sets": [], "skipped_directories": [], "skipped_directory_count": 0,
+              "catalog_hints": [],
+              "catalog_hint_stats": {"total_hits": 0, "shown_hits": 0, "capped": False,
+                                     "note": "catalog magic leads only; not engine-page support"},
+              "warnings": []}
     started = time.monotonic()
     pending = [(root, 0)]
     matched_files: dict[str, set[str]] = {}
@@ -117,6 +228,17 @@ def detect_directory(root: Path, *, max_files: int = 2000, max_depth: int = 5,
         if len(hits) < max_evidence:
             hits.append({"file": file, "kind": kind, "evidence": explanation})
         stats["shown_hits"] = len(hits)
+        stats["capped"] = stats["total_hits"] > stats["shown_hits"]
+
+    def catalog_hint(file, header):
+        tags = _catalog_index().get(header[:4].hex())
+        if not tags:
+            return
+        stats = result["catalog_hint_stats"]
+        stats["total_hits"] += 1
+        if len(result["catalog_hints"]) < MAX_CATALOG_HINTS:
+            result["catalog_hints"].append({"file": file, "tags": tags[:5], "kind": "catalog-magic"})
+        stats["shown_hits"] = len(result["catalog_hints"])
         stats["capped"] = stats["total_hits"] > stats["shown_hits"]
 
     while pending:
@@ -140,7 +262,12 @@ def detect_directory(root: Path, *, max_files: int = 2000, max_depth: int = 5,
                     if stat.S_ISLNK(info.st_mode) or getattr(info, "st_file_attributes", 0) & 0x400:
                         continue
                     if stat.S_ISDIR(info.st_mode):
-                        if depth < max_depth:
+                        reason = None if include_derived else _derived_reason(Path(entry.path), entry.name)
+                        if reason:
+                            result["skipped_directory_count"] += 1
+                            if len(result["skipped_directories"]) < MAX_SKIPPED_REPORTED:
+                                result["skipped_directories"].append({"directory": relative, "reason": reason})
+                        elif depth < max_depth:
                             pending.append((Path(entry.path), depth + 1))
                         else:
                             result["truncated"] = True
@@ -149,8 +276,9 @@ def detect_directory(root: Path, *, max_files: int = 2000, max_depth: int = 5,
                         continue
                     result["files_seen"] += 1
                     path = Path(entry.path)
-                    for engine in EXTENSIONS.get(path.suffix.lower(), ()):
-                        evidence(engine, relative, "weak-extension", path.suffix)
+                    suffix = path.suffix.lower()
+                    for engine in EXTENSIONS.get(suffix, ()):
+                        evidence(engine, relative, "weak-extension", EXTENSION_NOTES.get(suffix, path.suffix))
                     for engine in BASENAMES.get(path.name.lower(), ()):
                         evidence(engine, relative, "weak-layout", path.name)
                     name = path.name
@@ -163,18 +291,33 @@ def detect_directory(root: Path, *, max_files: int = 2000, max_depth: int = 5,
                         header = stream.read(PROBE_BYTES)
                         # QLIE's signature is in a footer, not a file header.
                         footer = b""
-                        if path.suffix.lower() == ".pack":
+                        if suffix == ".pack":
                             if info.st_size <= 256:
                                 footer = header[:256]
                             else:
                                 stream.seek(max(0, info.st_size - 256))
                                 footer = stream.read(256)
+                    header_hit = False
                     for magic, engine, explanation in MAGICS:
                         if header.startswith(magic):
                             evidence(engine, relative, "header-hint", explanation)
+                            header_hit = True
+                    if (header[:3] == b"MDN" and header[3:4].isdigit() and not header.startswith(b"MDN0")):
+                        evidence("med", relative, "header-hint",
+                                 f"MED {header[:4].decode('ascii')} container; only plain MDN0 scripts have a writer")
+                        header_hit = True
+                    if _nexas_head(header):
+                        evidence("nexas", relative, "header-hint",
+                                 "PAC head (count and compression type plausible); validate the tail index")
+                        header_hit = True
+                    asar = _asar_probe(path, header, info.st_size)
+                    if asar:
+                        evidence(asar[0], relative, "header-hint", asar[1])
+                        header_hit = True
                     if b"FilePackVer" in footer:
                         evidence("qlie", relative, "footer-hint", "FilePackVer footer; validate version/key/layout")
-                    if path.suffix.lower() in AMBIGUOUS_TEXT_SUFFIXES and len(header) == PROBE_BYTES:
+                        header_hit = True
+                    if suffix in AMBIGUOUS_TEXT_SUFFIXES and len(header) == PROBE_BYTES:
                         # The suffix does not decide: .iet is text in some releases and ASB
                         # in others, and .txt may be binary. Look at the content.
                         if header.startswith(b"ASB\0\0"):
@@ -183,12 +326,11 @@ def detect_directory(root: Path, *, max_files: int = 2000, max_depth: int = 5,
                         elif looks_like_script(header, max_lines=12):
                             evidence("artemis-scp", relative, "content-probe",
                                      "line-oriented SCP text (// or ; comments, [tag ...], *label)")
+                    if not header_hit and len(header) >= 4 and not _generic_head(header):
+                        catalog_hint(relative, header)
                 except OSError as exc:
                     if len(result["warnings"]) < 50:
                         result["warnings"].append({"file": relative, "error": type(exc).__name__})
-    result["candidates"] = dict(sorted(result["candidates"].items()))
-    result["candidate_stats"] = dict(sorted(result["candidate_stats"].items()))
-    result["evidence_capped"] = any(stats["capped"] for stats in result["candidate_stats"].values())
     for (directory, stem), files in sorted(volume_families.items()):
         if len(files) < 2:
             continue
@@ -203,6 +345,19 @@ def detect_directory(root: Path, *, max_files: int = 2000, max_depth: int = 5,
     return result
 
 
+def _emit(stream, text: str) -> None:
+    """Write UTF-8 regardless of the console code page or -I/-X utf8 mode."""
+    data = text.encode("utf-8")
+    buffer = getattr(stream, "buffer", None)
+    if buffer is not None:
+        stream.flush()
+        buffer.write(data)
+        buffer.flush()
+    else:
+        stream.write(text)
+        stream.flush()
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("directory", type=Path)
@@ -210,13 +365,16 @@ def main() -> None:
     parser.add_argument("--max-depth", type=int, default=5)
     parser.add_argument("--max-evidence", type=int, default=12,
                         help="display cap per engine; counts are still collected (0: counts only)")
+    parser.add_argument("--include-derived", action="store_true",
+                        help="also scan *_extract workspaces and *_Output dump folders")
     args = parser.parse_args()
     try:
         result = detect_directory(args.directory, max_files=args.max_files, max_depth=args.max_depth,
-                                  max_evidence=args.max_evidence)
+                                  max_evidence=args.max_evidence, include_derived=args.include_derived)
     except (OSError, ValueError) as exc:
-        parser.exit(2, f"scan refused: {exc}\n")
-    print(json.dumps(result, ensure_ascii=False, indent=2))
+        _emit(sys.stderr, f"scan refused: {exc}\n")
+        sys.exit(2)
+    _emit(sys.stdout, json.dumps(result, ensure_ascii=False, indent=2) + "\n")
 
 
 if __name__ == "__main__":
