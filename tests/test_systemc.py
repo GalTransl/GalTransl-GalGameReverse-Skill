@@ -8,7 +8,7 @@ import tempfile
 import unittest
 
 from python.archives.systemc import (decode_zlc2, decode_zlc2_literals, encode_zlc2_literals,
-    decode_member, read_fpk_index, unpack_fpk, rebuild_fpk)
+    decode_member, read_fpk_index, read_fpk_index_stream, read_fpk_member, unpack_fpk, rebuild_fpk)
 from python.common.binary import FormatError
 from python.common.safety import Limits
 from python.engines.systemc import export_act, inject_act
@@ -300,6 +300,79 @@ class ScriptTests(unittest.TestCase):
             self.assertEqual((game / "data.fpk").read_bytes(), original)
             with self.assertRaises(FileExistsError):
                 extract(game, work)
+
+
+class DiagnosticsTests(unittest.TestCase):
+    def test_non_cp932_line_reports_member_line_hex_and_gbk_hint(self):
+        members = fixture()
+        gbk = "汉化正文：你".encode("gbk")
+        with self.assertRaises(UnicodeError):
+            gbk.decode("cp932")
+        members["ACT_A.txt"] = members["ACT_A.txt"].replace("地の文。".encode("cp932"), gbk)
+        with self.assertRaises(FormatError) as caught:
+            export_act("ACT_A.txt", members)
+        message = str(caught.exception)
+        self.assertIn("ACT_A.txt:8:", message)
+        self.assertIn(gbk[-4:].hex(" "), message)
+        self.assertIn("GBK", message)
+        members = fixture()
+        members["charaid.tbl"] = members["charaid.tbl"].replace("仮名".encode("cp932"), b"\x81\x20")
+        with self.assertRaises(FormatError) as caught:
+            export_act("ACT_A.txt", members)
+        self.assertIn("charaid.tbl:2:", str(caught.exception))
+        self.assertIn("81 20", str(caught.exception))
+        self.assertNotIn("GBK", str(caught.exception))
+
+    def test_stream_index_matches_full_reader(self):
+        raw = archive(fixture())
+        with tempfile.TemporaryFile() as stream:
+            stream.write(raw)
+            index = read_fpk_index_stream(stream)
+            self.assertEqual(index, read_fpk_index(raw))
+            entry = next(e for e in index.entries if e.name == "ACT_A.txt")
+            self.assertEqual(read_fpk_member(stream, entry), fixture()["ACT_A.txt"])
+            stream.seek(len(raw) - 4)
+            stream.write(struct.pack("<I", len(raw)))
+            with self.assertRaises(FormatError):
+                read_fpk_index_stream(stream)
+
+    def test_sibling_patch_package_report_and_pack_refusal(self):
+        with tempfile.TemporaryDirectory() as temp:
+            game = Path(temp)
+            members = fixture()
+            members["ACT_A.txt"] = members["ACT_A.txt"].replace(b"$S", b"").replace(b"$L", b"")
+            (game / "data.fpk").write_bytes(archive(members))
+            patched = members["ACT_A.txt"].replace("地の文。".encode("cp932"), "地の文２。".encode("cp932"))
+            replace = "!BMP\r\nnew.png\r\n!DATA\r\nACT_A.txt\r\n".encode("cp932")
+            (game / "patch01.fpk").write_bytes(archive({"ACT_A.txt": patched, "resource.bin": b"untouched",
+                                                        "replace.txt": replace, "new.png": b"png"}))
+            (game / "broken.fpk").write_bytes(b"not an fpk at all")
+            work = game / "extract"
+            report = extract(game, work)
+            packages = {p["path"]: p for p in report["sibling_packages"]}
+            self.assertEqual(packages["broken.fpk"]["status"], "unsupported")
+            patch = packages["patch01.fpk"]
+            self.assertEqual(patch["same_name_members"], [
+                {"member": "ACT_A.txt", "script": True, "content": "different"},
+                {"member": "resource.bin", "script": False, "content": "identical"}])
+            self.assertEqual(patch["replace_list"], {"BMP": ["new.png"], "DATA": ["ACT_A.txt"]})
+            self.assertEqual(patch["replace_list_overrides_selected"], ["ACT_A.txt"])
+            self.assertEqual(report["overridden_script_members"], ["ACT_A.txt"])
+            self.assertTrue(any("patch01.fpk" in w for w in report["warnings"]))
+            with self.assertRaisesRegex(FormatError, "base-confirmed"):
+                pack(work, game / "refused")
+            self.assertFalse((game / "refused").exists())
+            self.assertTrue(pack(work, game / "packed", base_confirmed=True)["byte_identical"])
+
+    def test_identical_sibling_package_is_not_a_warning(self):
+        with tempfile.TemporaryDirectory() as temp:
+            game = Path(temp)
+            members = fixture()
+            (game / "data.fpk").write_bytes(archive(members))
+            (game / "patch.fpk").write_bytes(archive({"ACT_A.txt": members["ACT_A.txt"]}))
+            report = extract(game, game / "out")
+            self.assertEqual(report["warnings"], [])
+            self.assertEqual(report["overridden_script_members"], [])
 
 
 if __name__ == "__main__":

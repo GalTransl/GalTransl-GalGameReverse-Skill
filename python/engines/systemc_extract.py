@@ -5,8 +5,9 @@ import json
 from pathlib import Path
 import re
 import stat
+import sys
 
-from ..archives.systemc import unpack_fpk, rebuild_fpk
+from ..archives.systemc import read_fpk_index_stream, read_fpk_member, unpack_fpk, rebuild_fpk
 from ..common.binary import FormatError
 from ..common.contract import dump_rows, load_json, sha256
 from ..common.jis_workflow import preflight_translations
@@ -40,6 +41,87 @@ def _acts(members):
     return acts
 
 
+SCRIPT_MEMBER = re.compile(r"(?:ACT_[A-Z]\.(?:txt|DAT)|.+\.spt|charaid\.tbl)", re.IGNORECASE)
+MAX_SIBLING_PACKAGES = 256
+MAX_COMPARE_BYTES = 256 << 20
+MAX_REPLACE_LIST = 1 << 20
+
+
+def _parse_replace_list(data):
+    """``replace.txt`` in a patch FPK: ``!SECTION`` lines followed by member names."""
+    if len(data) > MAX_REPLACE_LIST:
+        raise FormatError("replace.txt exceeds budget")
+    text = data.decode("cp932", errors="strict")
+    sections, current = {}, ""
+    for line in text.replace("\r\n", "\n").split("\n"):
+        line = line.strip()
+        if not line or line.startswith("//"):
+            continue
+        if line.startswith("!"):
+            current = line[1:]
+            sections.setdefault(current, [])
+        else:
+            sections.setdefault(current, []).append(line)
+    return sections
+
+
+def _sibling_packages(game, selected, members):
+    """Inventory other same-directory FPKs by index; never merge them.
+
+    Reports members sharing a name with the selected package, whether their
+    decoded content differs, and any ``replace.txt`` list. Payloads other than
+    shared members and replace.txt are not read.
+    """
+    paths = sorted((p for p in Path(game).iterdir()
+                    if p.suffix.lower() == ".fpk" and p.name.casefold() != selected.casefold()),
+                   key=lambda p: p.name.casefold())
+    if len(paths) > MAX_SIBLING_PACKAGES:
+        raise FormatError("too many sibling FPK packages")
+    packages, warnings, budget = [], [], MAX_COMPARE_BYTES
+    for path in paths:
+        info = path.lstat()
+        entry = {"path": path.name, "size": info.st_size}
+        packages.append(entry)
+        if not stat.S_ISREG(info.st_mode) or getattr(info, "st_file_attributes", 0) & 0x400:
+            entry.update(status="skipped", reason="not an ordinary file")
+            continue
+        try:
+            with path.open("rb") as stream:
+                index = read_fpk_index_stream(stream)
+                shared = []
+                for item in index.entries:
+                    if item.name == "replace.txt":
+                        try:
+                            entry["replace_list"] = _parse_replace_list(read_fpk_member(stream, item))
+                        except (FormatError, UnicodeError) as exc:
+                            entry["replace_list_error"] = str(exc)
+                    if item.name not in members:
+                        continue
+                    record = {"member": item.name, "script": bool(SCRIPT_MEMBER.fullmatch(item.name))}
+                    if item.size > budget:
+                        record["content"] = "not-compared-budget"
+                    else:
+                        payload = read_fpk_member(stream, item)
+                        budget -= item.size
+                        record["content"] = "identical" if payload == members[item.name] else "different"
+                    shared.append(record)
+        except FormatError as exc:
+            entry.update(status="unsupported", reason=str(exc))
+            continue
+        entry.update(status="indexed", members=len(index.entries), same_name_members=shared)
+        if "replace_list" in entry:
+            listed = {n for names in entry["replace_list"].values() for n in names}
+            entry["replace_list_overrides_selected"] = sorted(listed & members.keys())
+        differing = [r["member"] for r in shared if r["script"] and r["content"] != "identical"]
+        if differing:
+            entry["differing_script_members"] = differing
+            warnings.append(f"{path.name} contains {len(differing)} script member(s) that differ from "
+                            f"{selected} ({', '.join(differing[:8])}{' ...' if len(differing) > 8 else ''}); "
+                            "the game may load the patch version. Confirm the effective version before "
+                            "translating or packing.")
+    return packages, warnings
+
+
 def _verify_archive(archive, expected):
     _, actual = unpack_fpk(archive)
     if actual != expected:
@@ -60,8 +142,15 @@ def extract(game, destination, *, verify_edits=False):
               "archive_index_offset": index.offset, "scripts": [], "json_files": 0,
               "json_rows": 0, "selection_rows": 0, "runtime_verified": False,
               "loose_data": {"matching": [], "differing": [], "missing": []},
-              "source_selection": "data.fpk; loose data compared only, never merged",
+              "source_selection": "data.fpk; loose data and sibling FPKs compared only, never merged",
               "encoding": "cp932", "name_policy": "context-only"}
+    packages, warnings = _sibling_packages(game, "data.fpk", members)
+    report["sibling_packages"] = packages
+    report["overridden_script_members"] = sorted({m for p in packages for m in p.get("differing_script_members", [])})
+    report["warnings"] = warnings
+    for warning in warnings:
+        # Shown before parsing so it is visible even if the base scripts fail.
+        print(f"WARNING: {warning}", file=sys.stderr, flush=True)
     for name in _acts(members):
         rows, manifest = export_act(name, members)
         rebuilt = inject_act(name, members, rows, manifest, rows)
@@ -118,7 +207,8 @@ def extract(game, destination, *, verify_edits=False):
     return report
 
 
-def pack(workspace, destination=None, *, translations=None, jis_mode="auto", jis_preflight=False):
+def pack(workspace, destination=None, *, translations=None, jis_mode="auto", jis_preflight=False,
+         base_confirmed=False):
     from python.common.jis_substitution import JisSubstitution
 
     if jis_mode not in ("auto", "off"):
@@ -134,6 +224,13 @@ def pack(workspace, destination=None, *, translations=None, jis_mode="auto", jis
     report = load_json(_read(workspace / "reports/extraction.json"), max_bytes=MAX_BYTES)
     if report.get("schema") != "systemc-workspace/1" or report.get("variant") != VARIANT:
         raise FormatError("unsupported SystemC workspace")
+    overridden = report.get("overridden_script_members") or []
+    if overridden and not base_confirmed:
+        # A same-directory patch FPK ships different script members; writing
+        # data.fpk may have no effect or desynchronise ACT/DAT/SPT at runtime.
+        raise FormatError(f"sibling FPK overrides {len(overridden)} script member(s) of data.fpk "
+                          f"(see reports/extraction.json sibling_packages); confirm the effective "
+                          f"version, then pass --base-confirmed")
     raw = _read(workspace / "original/data.fpk")
     if report["source"] != {"path": "data.fpk", "size": len(raw), "sha256": sha256(raw)}:
         raise FormatError("SystemC source snapshot changed")
@@ -204,17 +301,24 @@ def main():
     pk.add_argument("--translations", type=Path)
     pk.add_argument("--jis-mode", choices=("auto", "off"), default="auto")
     pk.add_argument("--jis-preflight", action="store_true", help="report JIS proxy conflicts without writing a package")
+    pk.add_argument("--base-confirmed", action="store_true",
+                    help="data.fpk scripts confirmed effective despite differing sibling FPK members")
     args = parser.parse_args()
     if args.command == "pack":
         if not args.jis_preflight and args.output is None:
             parser.error("pack requires --output unless --jis-preflight is selected")
         if args.jis_preflight and args.jis_mode != "auto":
             parser.error("--jis-preflight requires --jis-mode auto")
-    result = (extract(args.game, args.output, verify_edits=args.verify_edits) if args.command == "extract"
-              else pack(args.workspace, args.output, translations=args.translations,
-                        jis_mode=args.jis_mode, jis_preflight=args.jis_preflight))
+    try:
+        result = (extract(args.game, args.output, verify_edits=args.verify_edits) if args.command == "extract"
+                  else pack(args.workspace, args.output, translations=args.translations,
+                            jis_mode=args.jis_mode, jis_preflight=args.jis_preflight,
+                            base_confirmed=args.base_confirmed))
+    except (FormatError, ValueError, OSError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        raise SystemExit(1)
     # Full per-member detail is saved in reports; keep console output compact.
-    print(json.dumps({k: v for k, v in result.items() if k not in {"scripts", "loose_data"}},
+    print(json.dumps({k: v for k, v in result.items() if k not in {"scripts", "loose_data", "sibling_packages"}},
                      ensure_ascii=True, indent=2))
     if args.command == "pack" and args.jis_preflight and not result["jis_preflight"]["ok"]:
         raise SystemExit(1)

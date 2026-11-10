@@ -134,29 +134,67 @@ def read_fpk_index(data, *, limits=Limits()):
     """Read only the high-bit-count, XOR tail-index variant. No guessing widths."""
     if len(data) < 12 or len(data) > limits.max_total_bytes:
         raise FormatError("FPK input outside budget")
-    tagged_count = struct.unpack_from("<I", data)[0]
+    count, offset, key = _index_location(data[:4], data[-8:], len(data), limits)
+    return _parse_index(data[offset:offset + count * 36], offset, key, len(data), limits)
+
+
+def _index_location(head, tail, size, limits):
+    tagged_count = struct.unpack_from("<I", head)[0]
     count = tagged_count & 0x7FFFFFFF
     if not tagged_count & 0x80000000 or not 0 < count <= limits.max_entries:
         raise FormatError("not a supported encrypted-index FPK")
-    offset = struct.unpack_from("<I", data, len(data) - 4)[0]
-    index_size = count * 36
-    if offset < 4 or offset + index_size > len(data) - 8:
+    offset = struct.unpack_from("<I", tail, 4)[0]
+    if offset < 4 or offset + count * 36 > size - 8:
         raise FormatError("FPK index outside archive")
-    key = data[-8:-4]
-    raw = bytes(v ^ key[i & 3] for i, v in enumerate(data[offset:offset + index_size]))
+    return count, offset, tail[:4]
+
+
+def read_fpk_index_stream(stream, *, limits=Limits(), max_archive_bytes=8 << 30):
+    """Read only header, tail and index of a seekable FPK; payloads stay unread.
+
+    For inventorying large sibling packages. Member sizes still obey
+    ``limits.max_file_bytes``; decode a member with ``read_fpk_member``.
+    """
+    size = stream.seek(0, 2)
+    if size < 12 or size > max_archive_bytes:
+        raise FormatError("FPK input outside budget")
+    stream.seek(0)
+    head = stream.read(4)
+    stream.seek(size - 8)
+    tail = stream.read(8)
+    count, offset, key = _index_location(head, tail, size, limits)
+    stream.seek(offset)
+    encrypted = stream.read(count * 36)
+    if len(encrypted) != count * 36:
+        raise FormatError("truncated FPK index")
+    return _parse_index(encrypted, offset, key, size, limits)
+
+
+def read_fpk_member(stream, entry, *, limits=Limits()):
+    """Decode one member located by ``read_fpk_index_stream``."""
+    stream.seek(entry.offset)
+    packed = stream.read(entry.size)
+    if len(packed) != entry.size:
+        raise FormatError("truncated FPK member")
+    return decode_member(packed, max_output=limits.max_file_bytes)
+
+
+def _parse_index(encrypted, offset, key, size, limits):
+    index_size = len(encrypted)
+    raw = bytes(v ^ key[i & 3] for i, v in enumerate(encrypted))
     entries = []
     for pos in range(0, index_size, 36):
         record = raw[pos:pos + 36]
-        start, size = struct.unpack_from("<II", record)
+        start, length = struct.unpack_from("<II", record)
         try:
             name = record[8:32].split(b"\0", 1)[0].decode("cp932", errors="strict")
         except UnicodeError as exc:
             raise FormatError("invalid FPK name encoding") from exc
         if not name or "/" in name or "\\" in name:
             raise FormatError("FPK variant requires flat names")
-        if start < 4 or start + size > len(data) - 8 or size > limits.max_file_bytes:
+        if start < 4 or start + length > size - 8 or length > limits.max_file_bytes:
             raise FormatError("FPK member outside bounds/budget")
-        entries.append(FpkEntry(name, start, size, record))
+        entries.append(FpkEntry(name, start, length, record))
     validate_names([e.name for e in entries], limits)
     spans = sorted([(e.offset, e.offset + e.size) for e in entries] + [(offset, offset + index_size)])
     end = 4
@@ -164,7 +202,7 @@ def read_fpk_index(data, *, limits=Limits()):
         if start < end:
             raise FormatError("overlapping FPK members/index")
         end = stop
-    return FpkIndex(tuple(entries), offset, key, len(data))
+    return FpkIndex(tuple(entries), offset, key, size)
 
 
 def unpack_fpk(data, *, limits=Limits()):

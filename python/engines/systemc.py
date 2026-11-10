@@ -36,16 +36,32 @@ def systemc_name_header(line):
     return {"name": match[1], "suffix": line[match.end(1):]} if match else None
 
 
-def _lines(data):
+def _lines(data, member="<text>"):
     if len(data) > MAX_BYTES or b"\0" in data:
-        raise FormatError("SystemC text exceeds budget or contains NUL")
+        raise FormatError(f"{member}: SystemC text exceeds budget or contains NUL")
     raw = data.split(b"\r\n")
     if any(b"\r" in line or b"\n" in line for line in raw):
-        raise FormatError("SystemC requires consistent CRLF line endings")
+        raise FormatError(f"{member}: SystemC requires consistent CRLF line endings")
+    lines = []
+    for number, line in enumerate(raw, 1):
+        try:
+            lines.append(line.decode("cp932", errors="strict"))
+        except UnicodeDecodeError as exc:
+            raise FormatError(cp932_error(member, number, line, exc)) from exc
+    return raw, lines
+
+
+def cp932_error(member, number, line, exc):
+    """Locate a strict-CP932 failure: member, 1-based line, byte column, hex."""
+    start = max(0, exc.start - 8)
+    snippet = line[start:exc.end + 8]
+    message = (f"{member}:{number}: SystemC source is not strict CP932 at line byte {exc.start}"
+               f" (bytes {start}..{start + len(snippet)}: {snippet.hex(' ')})")
     try:
-        return raw, [line.decode("cp932", errors="strict") for line in raw]
-    except UnicodeError as exc:
-        raise FormatError("SystemC source is not strict CP932") from exc
+        line.decode("gbk", errors="strict")
+    except UnicodeError:
+        return message
+    return message + "; 该行可按 GBK 严格解码：疑似已有中文汉化（GBK）输入，请改用日文原版"
 
 
 def _records(data, width):
@@ -70,9 +86,9 @@ def _parse(act_name, members):
     for name in (act_name, dat_name, "charaid.tbl"):
         if name not in members:
             raise FormatError(f"missing SystemC source: {name}")
-    raw, lines = _lines(members[act_name])
+    raw, lines = _lines(members[act_name], act_name)
     sources = {name: members[name] for name in (act_name, dat_name, "charaid.tbl")}
-    char_lines = _lines(members["charaid.tbl"])[1]
+    char_lines = _lines(members["charaid.tbl"], "charaid.tbl")[1]
     characters = []
     for line in char_lines:
         if not line or line.startswith("//"):
@@ -188,7 +204,7 @@ def inject_act(act_name, members, original_rows, manifest, translated_rows, *, t
         text_codec.reserve(members[act_name].decode("cp932"))
         text_codec.reserve(members["charaid.tbl"].decode("cp932"))
     translated = validate_translation(manifest, sources, original_rows, translated_rows, text_codec=text_codec)
-    raw, _ = _lines(members[act_name])
+    raw, _ = _lines(members[act_name], act_name)
     for before, after, rec in zip(original_rows, translated, manifest["records"]):
         old_lines = before["message"].split("\n")
         new_lines = after["message"].split("\n")

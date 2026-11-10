@@ -8,7 +8,7 @@ CP932 ACT/DAT/SPT 工作区通过 [systemc_extract.pack](../python/engines/syste
 
 | 层 | 模块与接口 |
 |---|---|
-| 归档 | [archives/systemc.py](../python/archives/systemc.py)：ZLC2 回指解码、literal 编码、加密尾索引 FPK 读写 |
+| 归档 | [archives/systemc.py](../python/archives/systemc.py)：ZLC2 回指解码、literal 编码、加密尾索引 FPK 读写；`read_fpk_index_stream` / `read_fpk_member` 只读索引与指定成员 |
 | CP932 脚本 | [engines/systemc.py](../python/engines/systemc.py)：`export_act`、`inject_act`、`systemc_name_header` |
 | UTF-8 文本表 | [systemc_txd.py](../python/engines/systemc_txd.py)：`read_table`、`export_table`、`inject_table` |
 | UTF-8 工作区 | [systemc_txd_extract.py](../python/engines/systemc_txd_extract.py)：`extract` / `pack` CLI |
@@ -39,6 +39,12 @@ CP932 ACT/DAT/SPT 工作区通过 [systemc_extract.pack](../python/engines/syste
 - 自动补齐只生成正文末尾的空行。继续拒绝用户译文中的空行、仅空白字符的行、完全空正文、未知控制语法、命令/姓名头注入、超长行及有损编码；不把段落间的空白或未知数据当成补齐槽。
 - 中文使用公共 JIS 替换；原始行布局保持不变，但空槽的运行时排版、中文字体覆盖和实际加载仍需游戏内验证。
 
+### 严格 CP932 与回填前确认生效版本
+
+- ACT 与 `charaid.tbl` 按行严格解码。失败时报 `<成员>:<行号>`、行内字节位置及附近字节的十六进制片段；该行若能按 GBK 严格解码，另提示“疑似已有中文汉化（GBK）输入，请改用日文原版”。CP932 与 GBK 字节范围大量重叠，能解码不代表是日文原版，此提示只用于定位已汉化输入，不据此改用 GBK 回写。
+- `extract` 只把 `data.fpk` 作为文本基准，同时只读扫描同目录其他 `*.fpk` 的索引（不递归、不读取无关成员）：列出与 `data.fpk` 同名的成员并逐个解码比较内容（`identical` / `different`），无法识别的包记为 `unsupported`。包内有 `replace.txt` 时按 `!节名` 与其后的成员名解析为列表，写入 `reports/extraction.json` 的 `sibling_packages`，并列出其中覆盖 `data.fpk` 的成员。
+- 同名 ACT/DAT/SPT/`charaid.tbl` 内容不同时，`extract` 在 stderr 输出 `WARNING`，报告写入 `overridden_script_members` 与 `warnings`。此时补丁包很可能才是运行时生效的剧本，只改 `data.fpk` 可能无效，或使 ACT/DAT/SPT 新旧混用。**回填前须确认生效版本**：补丁包与基准包剧本不一致时，`pack` 默认拒绝；确认 `data.fpk` 版本确实生效后才加 `--base-confirmed`。当前不支持把补丁包成员叠加为提取基准，也不重建补丁包。
+
 ### 工作区与元数据版本
 
 ```text
@@ -49,7 +55,7 @@ python -m python.engines.systemc_extract pack "<新输出目录>" --output "<新
 
 - `pack --jis-preflight` 保留为[公共预检](../guides/jis-substitution.md#打包前只读预检)的适配入口，调用共享 `preflight_translations`，输出在 `jis_preflight` 中。它先校验 SystemC 源快照、JSON 与 manifest，再将原始 ACT/`charaid.tbl` 的解码文本一并传入公共层，因此未翻译脚本、姓名头及注释中的代理字也参与检查。无需 `--output`，不写出文件，与 `--jis-mode off` 不兼容，支持 `--translations`。
 - 使用结构与编码标识重新导出元数据；旧 manifest 保护换行数量或使用旧标识时，应从哈希验证通过的原包导出到新工作区。核对原文 JSON 的字段、条数和顺序后保留同名 `gt_output` 译文，不修改旧 manifest 绕过校验或覆盖已有输入。
-- [test_systemc.py](../tests/test_systemc.py) 覆盖原文往返、少换行补齐、多个空槽、已有补齐脚本再次往返、按编译引用确定容量、变长中文/JIS 回读、非文本成员保留、坏译文拒绝与工作区封包。
+- [test_systemc.py](../tests/test_systemc.py) 覆盖原文往返、少换行补齐、多个空槽、已有补齐脚本再次往返、按编译引用确定容量、变长中文/JIS 回读、非文本成员保留、坏译文拒绝、工作区封包、CP932 失败定位与 GBK 提示、仅读索引的同目录补丁包比较、`replace.txt` 解析及封包拒绝。
 - [test_jis_preflight.py](../tests/test_jis_preflight.py) 覆盖公共预检及 SystemC 的跨脚本、人物表和源快照适配。
 
 ## UTF-8 TXD/PTR 工作流
