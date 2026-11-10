@@ -1,6 +1,8 @@
 """Validate gt_output -> ImoScripter patches -> new template-based QLIE PACKs.
 
-Standard library only. No deployment, EXE modifications or translation calls.
+Supports FilePackVer3.0 (HashVer1.3) and 3.1 (HashVer1.4) with the per-archive
+key mode recorded at extraction. Standard library only. No deployment, EXE
+modifications or translation calls.
 """
 import argparse
 from dataclasses import asdict
@@ -9,14 +11,15 @@ import io
 import json
 import os
 from pathlib import Path
+import sys
 
-from python.archives.qlie import read_index, read_member, PACK_KEY_NAME
-from python.archives.qlie_keys import game_key_from_pe
+from python.archives.qlie import external_key_required, member_keys, read_index, read_member
 from python.archives.qlie_writer import rebuild
 from python.common.contract import load_json, validate_translation
 from python.common.safety import Limits, validate_names, write_new_tree, validate_new_tree_destination
 from python.engines.qlie_imos import REFERENCE, scan, patch
-from python.engines.qlie_extract import _small, _ordinary, _json
+from python.engines.qlie_extract import (SCHEMA, KeyMaterial, QlieInputError, _small, _ordinary, _json,
+                                         decode_script, encode_script)
 
 
 def repack(game: Path, extracted: Path, output: Path, *, source_roundtrip: bool = False) -> dict:
@@ -29,20 +32,23 @@ def repack(game: Path, extracted: Path, output: Path, *, source_roundtrip: bool 
     game, extracted, output = map(lambda p: Path(os.path.abspath(p)), (game, extracted, output))
     validate_new_tree_destination(output)
     report = load_json(_small(extracted / 'reports/extraction.json', 16 << 20))
-    if (report.get('schema') != 'qlie-extract/1' or report.get('variant') != REFERENCE
-            or report.get('status') != 'complete' or report.get('crypto') != 'keyed'):
+    if (report.get('schema') not in ('qlie-extract/1', SCHEMA) or report.get('variant') != REFERENCE
+            or report.get('status') != 'complete'):
         raise ValueError('incompatible/incomplete QLIE extraction report')
     identities = report['sources']
-    if len(identities) != 2:
-        raise ValueError('QLIE report requires the original EXE and key identities')
-    source_names = validate_names([s['path'] for s in identities])
-    key_inputs = []
-    for name, identity in zip(source_names, identities):
-        data = _small(game / name, 64 << 20)
-        if len(data) != identity['size'] or hashlib.sha256(data).hexdigest() != identity['sha256']:
-            raise ValueError(f'QLIE key/EXE source changed: {name}')
-        key_inputs.append(data)
-    game_key, external_key = game_key_from_pe(key_inputs[0]), key_inputs[1]
+    if report['schema'] == 'qlie-extract/1':
+        # Legacy workspaces: 3.0 keyed, sources = [EXE, key file], CP932 scripts.
+        if report.get('crypto') != 'keyed' or len(identities) != 2:
+            raise ValueError('QLIE report requires the original EXE and key identities')
+        identities = [dict(identities[0], role='exe'), dict(identities[1], role='key-file')]
+        for archive in report['archives']:
+            archive.setdefault('version', '3.0')
+            archive.setdefault('mode', 'keyed')
+    by_role = {}
+    for identity in identities:
+        if identity['role'] in ('exe', 'key-file'):
+            by_role[identity['role']] = validate_names([identity['path']])[0]
+    keys = KeyMaterial(game, by_role.get('exe'), by_role.get('key-file'))
     archive_names = validate_names([a['path'] for a in report['archives']])
     known = set()
     work = {}
@@ -53,7 +59,9 @@ def repack(game: Path, extracted: Path, output: Path, *, source_roundtrip: bool 
         raw = _small(extracted / original_path, 8 << 20)
         if hashlib.sha256(raw).hexdigest() != item['decoded_sha256']:
             raise ValueError('extracted QLIE original changed')
-        text = raw.decode('cp932', errors='strict')
+        text, encoding, bom = decode_script(raw)
+        if (encoding, bom) != (item.get('encoding', 'cp932'), item.get('bom', False)):
+            raise ValueError('QLIE script encoding differs from extraction report')
         records = scan(text)
         if item['status'] == 'exported':
             json_path, manifest_path = validate_names([item['json'], item['manifest']])
@@ -65,7 +73,7 @@ def repack(game: Path, extracted: Path, output: Path, *, source_roundtrip: bool 
                 raise ValueError('QLIE original JSON does not match freshly parsed script')
             manifest = load_json(_small(extracted / manifest_path, 16 << 20))
             if (manifest['engine']['id'] != 'qlie' or manifest['engine']['reference'] != REFERENCE
-                    or manifest['encoding'] != 'cp932'
+                    or manifest['encoding'] != encoding
                     or [r['locator'] for r in manifest['records']]
                     != json.loads(json.dumps([asdict(r) for r in records]))):
                 raise ValueError('QLIE manifest parser identity/locators changed')
@@ -77,11 +85,11 @@ def repack(game: Path, extracted: Path, output: Path, *, source_roundtrip: bool 
             else:
                 continue
             checked = validate_translation(manifest, {original_path: raw}, original_rows, translated)
-            changed = patch(text, checked).encode('cp932', errors='strict')
+            changed = encode_script(patch(text, checked), encoding, bom)
         elif source_roundtrip:
             if records:
                 raise ValueError('QLIE script marked empty contains rows')
-            changed = patch(text, []).encode('cp932', errors='strict')
+            changed = encode_script(patch(text, []), encoding, bom)
         else:
             continue
         archive = item['archive']
@@ -98,8 +106,8 @@ def repack(game: Path, extracted: Path, output: Path, *, source_roundtrip: bool 
     if not work:
         raise ValueError('no matching QLIE translations to pack')
     payloads = []
-    result = {'schema': 'qlie-repack/1', 'source_roundtrip': source_roundtrip,
-              'encoding': 'cp932', 'game_launch_tested': False, 'archives': []}
+    result = {'schema': 'qlie-repack/2', 'source_roundtrip': source_roundtrip,
+              'game_launch_tested': False, 'archives': []}
     for identity in report['archives']:
         name = identity['path']
         if name not in work:
@@ -113,28 +121,38 @@ def repack(game: Path, extracted: Path, output: Path, *, source_roundtrip: bool 
             if digest != identity['sha256'] or path.stat().st_size != identity['size']:
                 raise ValueError(f'QLIE original archive changed: {name}')
             index = read_index(source)
-            key = external_key
+            mode = identity['mode']
+            if index.version != identity['version']:
+                raise ValueError(f'QLIE PACK version changed: {name}')
+            external, game_key = None, None
+            if external_key_required(index, mode):
+                external, game_key, _ = keys.external(index.version, mode)
+            chain = member_keys(source, index, mode=mode, key_file=external, game_key=game_key)
             replacements = {}
-            for entry in index.entries:
+            for entry, key in zip(index.entries, chain):
                 logical = entry.name.replace('\\', '/')
-                if entry.name == PACK_KEY_NAME:
-                    key = read_member(source, index, entry, mode='keyed', key_file=key, game_key=game_key)
-                elif logical in work[name]:
+                if logical in work[name]:
                     original, changed = work[name][logical]
-                    current = read_member(source, index, entry, mode='keyed', key_file=key, game_key=game_key)
+                    current = read_member(source, index, entry, mode=mode, key_file=key, game_key=game_key,
+                                          max_stored=8 << 20, max_output=8 << 20)
                     if current != original:
                         raise ValueError('QLIE extracted original differs from archive member')
                     replacements[entry.name] = changed
             if len(replacements) != len(work[name]):
                 raise ValueError('QLIE rebuild member not found in original index')
             destination = io.BytesIO()
-            stats = rebuild(source, destination, replacements, mode='keyed', key_file=external_key, game_key=game_key)
+            stats = rebuild(source, destination, replacements, mode=mode, key_file=external, game_key=game_key)
             data = destination.getvalue()
             digest_out = hashlib.sha256(data).hexdigest()
             if source_roundtrip and digest_out != digest:
                 raise ValueError('QLIE full archive original roundtrip changed bytes')
             result['archives'].append({'path': name, 'source_sha256': digest, 'sha256': digest_out, **stats})
             payloads.append((name, data))
+    recorded = {(i['role'], i['path'], i['sha256']) for i in identities}
+    for loaded in keys.sources:
+        if (loaded['role'], loaded['path'], loaded['sha256']) not in recorded:
+            raise ValueError(f"QLIE key/EXE source changed: {loaded['path']}")
+    result['key_sources'] = keys.sources
     payloads.append(('reports/repack.json', _json(result)))
     write_new_tree(output, payloads, Limits(max_file_bytes=192 << 20, max_total_bytes=256 << 20))
     return result
@@ -147,7 +165,11 @@ def main():
     parser.add_argument('output', type=Path)
     parser.add_argument('--source-roundtrip', action='store_true')
     args = parser.parse_args()
-    result = repack(args.game, args.extracted, args.output, source_roundtrip=args.source_roundtrip)
+    try:
+        result = repack(args.game, args.extracted, args.output, source_roundtrip=args.source_roundtrip)
+    except (QlieInputError, FileNotFoundError, FileExistsError) as exc:
+        print(f'error: {exc}', file=sys.stderr)
+        raise SystemExit(2)
     print(json.dumps(result, ensure_ascii=False, indent=2))
 
 

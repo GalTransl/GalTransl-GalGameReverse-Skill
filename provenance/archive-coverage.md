@@ -27,7 +27,7 @@
 | [CScript](../engines/cscript.md) | 已解压 payload 的记录 | `scr.dat` 容器，以及尚未移植的脚本包装/LZSS；`unpack_script` 是拒绝入口 |
 | [Cyberworks](../engines/cyberworks.md) | a0 的 S/T 长度块 | 本页 a0 块流可直接处理；若实际游戏另有 APP/DAT 等同族封装，须独立核对，不强行增加归档层 |
 | [DigitalWorks](../engines/digitalworks.md) | 单条 TAK 文本指令 codec | TAK.BIN 读取、EXE 内索引定位及可能的 LZS 外壳 |
-| [Entis GLS](../engines/entis-gls.md) | SRCXML 消息/选项 XML | NOA/DAT 容器；仅有 CSX 时还缺字节码转换 |
+| [Entis GLS](../engines/entis-gls.md) | NOA 读取（raw/ERISA-N，加密模式需口令）、扁平 raw NOA 写出；SRCXML 引擎方言 | NOA 不压缩写出；仅有 CSX 时还缺字节码转换；补丁覆盖顺序未经运行验证 |
 | [ExHibit](../engines/exhibit.md) | RLD op 子集、姓名表、有界 XOR | 先确认 RLD 是否为松散文件；GRP 是另一资源入口，不能当作必经剧本包 |
 | [Favorite](../engines/favorite.md) | HCB 指令子集与地址修复 | 包内 HCB 需要 BIN/FVP 等匹配容器；外置 HCB 可绕过归档层 |
 | [FrontWing](../engines/frontwing.md) | CSB 消息 | 资源 DAT 等外层容器，需核对具体版本 |
@@ -91,7 +91,7 @@
 
 ## 已有受限解包路线，未列入“只有脚本”
 
-Artemis 三方言共用 PFS；BGI、CatSystem2 INT、Escu:de、Kirikiri XP3、Majiro、NScripter、Ren'Py RPA、Siglus 均已有对应归档实现。当前工作区新增的 **NeXAS PAC** 和 **QLIE FilePackVer3.0** 也已计入，不能按旧引擎页或未刷新目录误判为缺失；具体 codec、版本与密钥条件以当前引擎页为准。
+Artemis 三方言共用 PFS；BGI、CatSystem2 INT、Escu:de、Kirikiri XP3、Majiro、NScripter、Ren'Py RPA、Siglus 均已有对应归档实现。当前工作区新增的 **NeXAS PAC** 和 **QLIE FilePackVer3.0/3.1** 也已计入，不能按旧引擎页或未刷新目录误判为缺失；具体 codec、版本与密钥条件以当前引擎页为准。
 
 **EAGLS** 已补 SCPACK.idx/PAK 的显式长/短偏移索引、尺寸/连续性检查和重封包，配套提取器处理选中成员；已从“只有归档局部算法”移出。**YU-RIS、WillPlus/AdvHD、Softpal** 本轮新增的读取范围见下节。
 

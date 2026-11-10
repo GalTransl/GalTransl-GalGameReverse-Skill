@@ -5,12 +5,31 @@ ArcFormats/Qlie/{ArcQLIE,DelphiDeserializer}.cs, commit
 bc26d991ef5cdc0e1ecb32122ee9a48c3375750c. Copyright (C) 2017 morkt;
 MIT notice: ../../provenance/licenses/MIT-GARbro.txt.
 PE traversal and bounds checks are new. Input is caller-supplied bytes.
+pe_rcdata(..., 'RESKEY') reads the optional external 3.x key resource that
+GARbro's FindKeyFile consults when no key.fkey exists; it never unpacks or
+runs a protected EXE, so virtual-only (packed) resource data is an error.
 """
 import struct
 
 
 def pe_tform1(data: bytes, *, max_resource: int = 16 << 20) -> bytes:
     """Return the unique RCDATA (10), TFORM1 resource across languages."""
+    return pe_rcdata(data, 'TFORM1', max_resource=max_resource, within_directory=True)
+
+
+def pe_rcdata_names(data: bytes, *, max_resource: int = 16 << 20) -> list:
+    """Names/IDs under RT_RCDATA (10); bounded, no resource data is read."""
+    return pe_rcdata(data, None, max_resource=max_resource)
+
+
+def pe_rcdata(data: bytes, name: str | None, *, max_resource: int = 16 << 20,
+              within_directory: bool = False) -> bytes | list:
+    """Return the unique RCDATA resource `name` across languages.
+
+    Leaf data must be backed by raw file bytes of exactly one section. With
+    within_directory=True it must also lie inside the declared resource
+    directory (the original TFORM1 rule). name=None lists RCDATA names.
+    """
     def take(at, size):
         if at < 0 or size < 0 or at + size > len(data):
             raise ValueError('PE offset outside file')
@@ -82,7 +101,10 @@ def pe_tform1(data: bytes, *, max_resource: int = 16 << 20) -> bytes:
             raise ValueError(f'PE resource directory missing/ambiguous: {name}')
         return found[0] & 0x7FFFFFFF
 
-    languages = directory_child(directory_child(0, 10), 'TFORM1')
+    rcdata = directory_child(0, 10)
+    if name is None:
+        return [key for key, _ in children(rcdata)]
+    languages = directory_child(rcdata, name)
     blobs = []
     for _, target in children(languages):
         if target & 0x80000000:
@@ -90,12 +112,17 @@ def pe_tform1(data: bytes, *, max_resource: int = 16 << 20) -> bytes:
         at = rel(target, 16)
         rva, size = u32(at), u32(at + 4)
         if not 0 < size <= max_resource:
-            raise ValueError('TFORM1 size exceeds budget')
-        if not resource_rva <= rva or rva + size > resource_rva + resource_size:
-            raise ValueError('TFORM1 lies outside resource directory')
-        blobs.append(take(rva_offset(rva, size), size))
+            raise ValueError(f'{name} size exceeds budget')
+        if within_directory and (not resource_rva <= rva or rva + size > resource_rva + resource_size):
+            raise ValueError(f'{name} lies outside resource directory')
+        try:
+            at = rva_offset(rva, size)
+        except ValueError:
+            raise ValueError(f'{name} data is not stored in the EXE file (packed/protected '
+                             'section); static extraction is impossible') from None
+        blobs.append(take(at, size))
     if not blobs or any(blob != blobs[0] for blob in blobs):
-        raise ValueError('missing or conflicting TFORM1 languages')
+        raise ValueError(f'missing or conflicting {name} languages')
     return blobs[0]
 
 

@@ -5,15 +5,17 @@ import io
 import json
 from pathlib import Path
 import struct
+import subprocess
+import sys
 import tempfile
 import unittest
 
 from python.archives import qlie
-from python.archives.qlie_keys import game_key_from_pe, icon_key_from_dfm
-from python.archives.qlie_writer import hash13_tail, rebuild
+from python.archives.qlie_keys import game_key_from_pe, icon_key_from_dfm, pe_rcdata, pe_rcdata_names
+from python.archives.qlie_writer import hash13_tail, lookup_tail, rebuild
 from python.engines import qlie_imos as imos
 from python.engines import qlie as fields_api
-from python.engines.qlie_extract import extract
+from python.engines.qlie_extract import QlieInputError, extract
 from python.engines.qlie_repack import repack
 
 FKEY = bytes((i * 3) % 256 for i in range(256))
@@ -324,6 +326,201 @@ class QlieWorkflowTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'locators'):
                 repack(game, output, game / 'tampered')
             self.assertFalse((game / 'tampered').exists())
+
+
+PKEY31 = b'KeyFile ver1.0\0\0' + bytes((i * 13 + 5) % 256 for i in range(240))
+SCRIPT31 = ('@@MAIN\r\n\r\n【少女】\r\n％voice01％\r\n“……”\r\n\r\n'
+            '在山道上独行的少女。\r\n\r\n^select,是,否\r\n\r\n')
+
+
+def archive31(files=None, *, compressed_lookup=True, bad_mapping=False, key_encryption=1):
+    """Synthetic FilePackVer3.1 + HashVer1.4: method-1 pack key, method-2 members."""
+    files = files or [('scenario\\scene.s', b'\xff\xfe' + SCRIPT31.encode('utf-16-le')),
+                      ('image.png', b'\x89PNG unchanged media payload')]
+    files = [(qlie.PACK_KEY_NAME, PKEY31), *files]
+    key_blob = bytes((i * i + 29) % 256 for i in range(1024))
+    arc_key = qlie.hash_v31(key_blob[:256]) & 0xFFFFFFF
+    entries, payload = [], bytearray()
+    for i, (name, data) in enumerate(files):
+        packed = int(name.endswith(('.s', '.txt')))
+        stored = literal(data) if packed else data
+        enc = key_encryption if i == 0 else 2
+        entry = qlie.Entry(name, name.encode('utf-16-le'), len(payload), len(stored), len(data), packed, enc, 0)
+        cipher = qlie.encrypt(stored, entry, arc_key, mode='pack-key',
+                              key_file=FKEY if i == 0 else PKEY31)
+        entries.append(replace(entry, checksum=qlie.hash_v31(cipher)))
+        payload.extend(cipher)
+    index_offset = len(payload)
+    for e in entries:
+        payload.extend(struct.pack('<H', len(e.raw_name) // 2) + qlie.crypt_name31(e.raw_name, arc_key))
+        payload.extend(struct.pack('<QIIIII', e.offset, e.size, e.unpacked_size, e.packed, e.encryption, e.checksum))
+    lookup = struct.pack('<I', len(entries))
+    for i, entry in enumerate(entries):
+        lookup += struct.pack('<H', len(entry.raw_name) // 2) + entry.raw_name + struct.pack('<QI', i * 4, 0)
+    lookup += bytes(255 * 4)
+    lookup += struct.pack(f'<{len(entries)}I', *([0] * len(entries) if bad_mapping else range(len(entries))))
+    data = literal(lookup) if compressed_lookup else lookup
+    dummy = qlie.Entry('hash', b'hash', 0, len(data), len(data), 0, 1, 0)
+    data = qlie.encrypt(data, dummy, 0x428, mode='legacy')
+    tail = (b'HashVer1.4' + bytes(6) + struct.pack('<5I', 256, len(entries), len(entries) * 4, len(data),
+                                                 int(compressed_lookup)) + bytes(32) + data)
+    tail += bytes(32) + struct.pack('<I', len(tail)) + key_blob
+    return bytes(payload) + tail + b'FilePackVer3.1\0\0' + struct.pack('<IQ', len(entries), index_offset)
+
+
+def read31(data, name='scenario\\scene.s', mode='pack-key'):
+    stream = io.BytesIO(data)
+    index = qlie.read_index(stream)
+    keys = qlie.member_keys(stream, index, mode=mode)
+    ordinal = next(i for i, e in enumerate(index.entries) if e.name == name)
+    return qlie.read_member(stream, index, index.entries[ordinal], mode=mode, key_file=keys[ordinal])
+
+
+class QliePack31Tests(unittest.TestCase):
+    def test_v31_vectors_names_and_key_rules(self):
+        # Pinned against an independent port of GARbro EncryptionV3_1.
+        self.assertEqual(qlie.hash_v31(bytes(range(256))), 4272422890)
+        name = 'a\\名.s'.encode('utf-16-le')
+        self.assertEqual(qlie.crypt_name31(name, 0x1234567).hex(), 'c24c38df602198258ca7')
+        self.assertEqual(qlie.crypt_name31(qlie.crypt_name31(name, 7), 7), name)
+        data = bytes(range(35))
+        expected = {1: '143aef7ac788c258a415ac3999e985b83eb15a33f3a6598f12936ee249cbdcee202122',
+                    2: '07bf7f775c44804829aa82cd20e7c338ff97769e16716010a5d515312627ec00202122'}
+        for enc, value in expected.items():
+            entry = qlie.Entry('x', name, 0, 35, 35, 0, enc, 0)
+            plain = qlie.decrypt(data, entry, 0x1234567, mode='pack-key', key_file=bytes(range(256)))
+            self.assertEqual(plain.hex(), value)
+            self.assertEqual(qlie.encrypt(plain, entry, 0x1234567, mode='pack-key',
+                                          key_file=bytes(range(256))), data)
+        entry = qlie.Entry('x', name, 0, 35, 35, 0, 2, 0)
+        self.assertEqual(qlie.decrypt(data, entry, 0x1234567, mode='default-key').hex(),
+                         'f7b8844860bb63b73da2c7f4b8a1cb510b189dcf92914b668dd4e5fbba393df4202122')
+        for kwargs in ({'mode': 'pack-key'}, {'mode': 'pack-key', 'key_file': bytes(64)},
+                       {'mode': 'default-key', 'key_file': bytes(256)},
+                       {'mode': 'pack-key', 'key_file': bytes(256), 'game_key': bytes(256)}):
+            with self.assertRaises(ValueError):
+                qlie.decrypt(data, entry, 0, **kwargs)
+
+    def test_v31_index_members_and_negative_cases(self):
+        raw = archive31()
+        stream = io.BytesIO(raw)
+        index = qlie.read_index(stream)
+        self.assertEqual(index.version, '3.1')
+        self.assertEqual([e.name for e in index.entries][1], 'scenario\\scene.s')
+        self.assertEqual(qlie.infer_mode(index)[0], 'pack-key')
+        self.assertFalse(qlie.external_key_required(index, 'pack-key'))
+        self.assertEqual(read31(raw), b'\xff\xfe' + SCRIPT31.encode('utf-16-le'))
+        self.assertEqual(read31(raw, 'image.png'), b'\x89PNG unchanged media payload')
+        # Wrong-version mode, missing chain key and built-in table all fail closed.
+        entry = index.entries[1]
+        for mode in ('keyed', 'legacy'):
+            with self.assertRaises(ValueError):
+                qlie.read_member(stream, index, entry, mode=mode)
+        with self.assertRaises(ValueError):
+            read31(raw, mode='default-key')
+        corrupt = bytearray(raw)
+        corrupt[entry.offset + 3] ^= 1
+        with self.assertRaisesRegex(ValueError, 'checksum'):
+            read31(bytes(corrupt))
+        with self.assertRaisesRegex(ValueError, 'FilePackVer3.2'):
+            qlie.read_index(io.BytesIO(raw[:-28] + b'FilePackVer3.2\0\0' + raw[-12:]))
+        # A method-2 pack_keyfile needs an external key; it is never guessed.
+        keyed = archive31(key_encryption=2)
+        keyed_index = qlie.read_index(io.BytesIO(keyed))
+        self.assertTrue(qlie.external_key_required(keyed_index, 'pack-key'))
+        with self.assertRaisesRegex(ValueError, 'external key'):
+            qlie.member_keys(io.BytesIO(keyed), keyed_index, mode='pack-key')
+        keys = qlie.member_keys(io.BytesIO(keyed), keyed_index, mode='pack-key', key_file=FKEY)
+        self.assertEqual(keys[1], PKEY31)
+
+    def test_v31_writer_roundtrip_and_changed_member(self):
+        original = b'\xff\xfe' + SCRIPT31.encode('utf-16-le')
+        for compressed in (True, False):
+            with self.subTest(compressed_lookup=compressed):
+                raw = archive31(compressed_lookup=compressed)
+                dest = io.BytesIO()
+                rebuild(io.BytesIO(raw), dest, {'scenario\\scene.s': original}, mode='pack-key')
+                self.assertEqual(dest.getvalue(), raw)
+                changed = b'\xff\xfe' + (SCRIPT31 + '更长的中文回填测试，长度改变。\r\n\r\n').encode('utf-16-le')
+                dest = io.BytesIO()
+                result = rebuild(io.BytesIO(raw), dest, {'scenario\\scene.s': changed}, mode='pack-key')
+                self.assertEqual((result['changed'], result['pack_version']), (1, '3.1'))
+                self.assertEqual(read31(dest.getvalue()), changed)
+                self.assertEqual(read31(dest.getvalue(), 'image.png'), b'\x89PNG unchanged media payload')
+                before, after = qlie.read_index(io.BytesIO(raw)), qlie.read_index(dest)
+                self.assertEqual(lookup_tail(io.BytesIO(raw), before), lookup_tail(dest, after))
+                self.assertEqual(after.entries[1].packed, 0)
+                self.assertEqual(after.entries[1].encryption, 2)
+        for raw, edits, mode in [(archive31(bad_mapping=True), {}, 'pack-key'),
+                                 (archive31(), {qlie.PACK_KEY_NAME: b'x'}, 'pack-key'),
+                                 (archive31(), {}, 'keyed')]:
+            with self.assertRaises(ValueError):
+                rebuild(io.BytesIO(raw), io.BytesIO(), edits, mode=mode)
+
+    def test_pe_rcdata_listing_and_missing_resource(self):
+        self.assertEqual(pe_rcdata_names(pe()), ['TFORM1'])
+        self.assertTrue(pe_rcdata(pe(), 'TFORM1').startswith(b'TPF0'))
+        with self.assertRaises(ValueError):
+            pe_rcdata(pe(), 'RESKEY')
+
+
+class QliePack31WorkflowTests(unittest.TestCase):
+    def _game(self, temp):
+        game = Path(temp)
+        files = [('scenario\\scene.s', b'\xff\xfe' + SCRIPT31.encode('utf-16-le')),
+                 ('scenario\\other.s', b'\xff\xfe' + '@@MAIN\r\n\r\nOther\r\n'.encode('utf-16-le')),
+                 ('avg\\projectsetting.txt', b'\xff\xfe' + 'FormatType=1\r\n'.encode('utf-16-le')),
+                 ('avg\\setting.txt', b'\xff\xfe' + 'ReturnCode=[n]\r\n'.encode('utf-16-le'))]
+        (game / 'data0.pack').write_bytes(archive31(files))
+        return game
+
+    def test_auto_mode_utf16_extract_repack_and_roundtrip(self):
+        with tempfile.TemporaryDirectory() as temp:
+            game = self._game(temp)
+            output = game / 'extract'
+            report = extract(game, output, archives=['data0.pack'], members=['scenario/scene.s'])
+            archive_report = report['archives'][0]
+            self.assertEqual((archive_report['pack_version'], archive_report['mode']), ('FilePackVer3.1', 'pack-key'))
+            self.assertIn('pack_keyfile', archive_report['mode_evidence'])
+            self.assertEqual(report['sources'], [])
+            self.assertEqual(report['counts']['scripts'], 1)
+            item = next(i for i in report['members'] if i.get('json'))
+            self.assertEqual((item['encoding'], item['bom']), ('utf-16-le', True))
+            rows = json.loads((output / item['json']).read_text(encoding='utf-8'))
+            self.assertEqual(rows[0], {'name': '少女', 'message': '“……”'})
+            rows[0] = {'name': '少女（译）', 'message': '“这是一句明显更长的中文译文。”'}
+            rows[1]['message'] = '短。'
+            (output / 'gt_output' / Path(item['json']).name).write_text(
+                json.dumps(rows, ensure_ascii=False), encoding='utf-8')
+            result = repack(game, output, game / 'rebuilt')
+            self.assertEqual(result['archives'][0]['pack_version'], '3.1')
+            data = read31((game / 'rebuilt/data0.pack').read_bytes())
+            self.assertTrue(data.startswith(b'\xff\xfe'))
+            self.assertEqual(imos.rows(data[2:].decode('utf-16-le')), rows)
+            repack(game, output, game / 'roundtrip', source_roundtrip=True)
+            self.assertEqual((game / 'data0.pack').read_bytes(), (game / 'roundtrip/data0.pack').read_bytes())
+            with self.assertRaises(ValueError):
+                extract(game, game / 'wrong', archives=['data0.pack'], mode='keyed')
+            self.assertFalse((game / 'wrong').exists())
+
+    def test_missing_key_file_and_patched_exe_are_clear_errors(self):
+        with tempfile.TemporaryDirectory() as temp:
+            game = Path(temp)
+            (game / 'a.pack').write_bytes(archive([('avg/setting.txt', b'ReturnCode=[n]\r\n')]))
+            (game / 'game.exe').write_bytes(pe())
+            with self.assertRaisesRegex(QlieInputError, 'key.fkey was not found'):
+                extract(game, game / 'out', archives=['a.pack'], exe='game.exe')
+            (game / 'game.exe.org').write_bytes(pe()[:-1] + b'X')
+            with self.assertRaisesRegex(QlieInputError, r'\.org'):
+                extract(game, game / 'out', archives=['a.pack'], exe='game.exe', key_file='none.fkey')
+            self.assertFalse((game / 'out').exists())
+            root = Path(__file__).resolve().parents[1]
+            proc = subprocess.run([sys.executable, '-X', 'utf8', '-B', '-m', 'python.engines.qlie_extract',
+                                   str(game), str(game / 'cli'), '--archives', 'a.pack', '--exe', 'game.exe.org'],
+                                  cwd=root, capture_output=True, text=True, encoding='utf-8')
+            self.assertEqual(proc.returncode, 2)
+            self.assertIn('key.fkey', proc.stderr)
+            self.assertNotIn('Traceback', proc.stderr)
 
 
 if __name__ == '__main__':

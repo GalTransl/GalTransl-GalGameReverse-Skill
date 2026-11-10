@@ -1,17 +1,18 @@
-"""Template writer for FilePackVer3.0 + HashVer1.3, unchanged names/order.
+"""Template writer for FilePackVer3.0 + HashVer1.3 and 3.1 + HashVer1.4.
 
-New inverse writer based on the GARbro-derived qlie.py reader. HashVer1.3
-layout was checked against actual archives; schema cross-reference:
-msg-tool src/scripts/qlie/archive/pack/types.rs (GPL-3.0). No 3.1 conversion,
-new members, renaming or game key generation. Preserve the verified filename
-lookup table because its offsets address the ordinal array, not payloads.
+New inverse writer based on the GARbro-derived qlie.py reader; names and
+order are unchanged. HashVer1.3/1.4 layouts were checked against actual
+archives; schema cross-reference: msg-tool src/scripts/qlie/archive/pack/
+{types,v31}.rs (GPL-3.0). No version conversion, new members, renaming or
+key generation. Preserve the verified filename lookup table because its
+offsets address the ordinal array, not payloads.
 """
 from dataclasses import replace
 import struct
 from typing import BinaryIO
 
-from .qlie import (Entry, Index, PACK_KEY_NAME, crypt_name, decrypt, decompress,
-                   encrypt, hash_v3, read_index, read_member)
+from .qlie import (Entry, Index, PACK_KEY_NAME, checksum, crypt_name, crypt_name31, decrypt,
+                   decompress, encrypt, member_keys, read_index, read_member)
 
 
 def _read(stream, at, size):
@@ -76,6 +77,74 @@ def hash13_tail(stream: BinaryIO, index: Index, *, max_bytes: int = 32 << 20) ->
     return tail
 
 
+def hash14_tail(stream: BinaryIO, index: Index, *, max_bytes: int = 32 << 20) -> bytes:
+    """3.1 HashVer1.4: validate every lookup name -> ordinal before preserving.
+
+    Header (68 bytes): signature, u32 buckets=256, count, ordinal-array size
+    (count*4), stored size, compressed flag, 32 opaque bytes kept verbatim.
+    Lookup: per bucket u32 n, then n x (u16 chars, UTF-16LE name, u64 offset
+    into the u32 ordinal array, u32 name hash); then the ordinal array.
+    """
+    size = index.file_size - 28 - index.index_end
+    if not 1128 <= size <= max_bytes:
+        raise ValueError('unsupported QLIE hash/key tail size')
+    tail = _read(stream, index.index_end, size)
+    if tail[:16] != b'HashVer1.4\0\0\0\0\0\0':
+        raise ValueError('FilePackVer3.1 template writer requires HashVer1.4')
+    buckets, count, mapping_size, stored, compressed = struct.unpack_from('<5I', tail, 16)
+    if (buckets != 256 or count != len(index.entries) or mapping_size != count * 4
+            or 68 + stored + 1060 != len(tail)):
+        raise ValueError('invalid HashVer1.4 dimensions')
+    if compressed not in (0, 1):
+        raise ValueError('unknown HashVer1.4 compression flag')
+    if struct.unpack_from('<I', tail, len(tail) - 1028)[0] != 68 + stored:
+        raise ValueError('QLIE key trailer hash-size mismatch')
+    synthetic = Entry('hash', b'hash', 0, stored, stored, 0, 1, 0)
+    data = decrypt(tail[68:68 + stored], synthetic, 0x428, mode='legacy')
+    if compressed:  # flag 0 (seen in separately built patch packs): encrypted only
+        if data[:4] != b'1PC\xff' or len(data) < 12:
+            raise ValueError('HashVer1.4 compression signature mismatch')
+        data = decompress(data, expected_size=struct.unpack_from('<I', data, 8)[0], max_output=max_bytes)
+    pos, refs = 0, []
+
+    def take(n):
+        nonlocal pos
+        if n < 0 or pos + n > len(data):
+            raise ValueError('truncated HashVer1.4 lookup')
+        result = data[pos:pos + n]
+        pos += n
+        return result
+
+    for _ in range(buckets):
+        n = int.from_bytes(take(4), 'little')
+        if len(refs) + n > count:
+            raise ValueError('HashVer1.4 entry count overflow')
+        for _ in range(n):
+            length = int.from_bytes(take(2), 'little')
+            if not 0 < length <= 256:
+                raise ValueError('HashVer1.4 filename length mismatch')
+            name = take(2 * length)
+            offset, _name_hash = struct.unpack('<QI', take(12))
+            refs.append((name, offset))
+    mapping = struct.unpack(f'<{count}I', take(mapping_size))
+    if pos != len(data) or len(refs) != count or sorted(mapping) != list(range(count)):
+        raise ValueError('HashVer1.4 ordinal array mismatch')
+    seen = set()
+    for name, offset in refs:
+        if offset % 4 or offset >= mapping_size:
+            raise ValueError('HashVer1.4 lookup offset outside ordinal array')
+        ordinal = mapping[offset // 4]
+        if ordinal in seen or name != index.entries[ordinal].raw_name:
+            raise ValueError('HashVer1.4 filename/ordinal disagrees with index')
+        seen.add(ordinal)
+    return tail
+
+
+def lookup_tail(stream: BinaryIO, index: Index) -> bytes:
+    """Validated hash/key tail for the archive's PACK version."""
+    return (hash13_tail if index.version == '3.0' else hash14_tail)(stream, index)
+
+
 def rebuild(source: BinaryIO, destination: BinaryIO, replacements: dict[str, bytes], *,
             mode: str, key_file: bytes | None = None, game_key: bytes | None = None,
             max_replacement: int = 8 << 20, max_total: int = 64 << 20) -> dict:
@@ -93,7 +162,7 @@ def rebuild(source: BinaryIO, destination: BinaryIO, replacements: dict[str, byt
     if destination.tell() != 0:
         raise ValueError('QLIE writer requires an empty destination')
     index = read_index(source)
-    tail = hash13_tail(source, index)
+    tail = lookup_tail(source, index)
     by_name = {e.name: e for e in index.entries}
     if len(by_name) != len(index.entries) or not isinstance(replacements, dict) or set(replacements) - by_name.keys():
         raise ValueError('unknown or duplicate QLIE replacement member')
@@ -103,13 +172,8 @@ def rebuild(source: BinaryIO, destination: BinaryIO, replacements: dict[str, byt
         raise ValueError('QLIE replacement size/type budget exceeded')
     if sum(map(len, replacements.values())) > max_total:
         raise ValueError('QLIE total replacement budget exceeded')
-    keys = {}
-    active_key = key_file
-    for entry in index.entries:
-        keys[entry.name] = active_key
-        if entry.name == PACK_KEY_NAME and mode != 'legacy':
-            active_key = read_member(source, index, entry, mode=mode, key_file=active_key,
-                                     game_key=game_key, max_stored=1 << 20, max_output=1 << 20)
+    keys = dict(zip(by_name, member_keys(source, index, mode=mode, key_file=key_file,
+                                         game_key=game_key)))
     updated = {}
     cursor, changed, roundtripped = 0, 0, 0
 
@@ -146,7 +210,7 @@ def rebuild(source: BinaryIO, destination: BinaryIO, replacements: dict[str, byt
                 new_entry = replace(entry, offset=offset, size=len(data), unpacked_size=len(data), packed=0)
                 encoded = encrypt(data, new_entry, index.arc_key, mode=mode,
                                   key_file=keys[entry.name], game_key=game_key)
-                new_entry = replace(new_entry, checksum=hash_v3(encoded))
+                new_entry = replace(new_entry, checksum=checksum(encoded, index.version))
                 changed += 1
             destination.write(encoded)
             updated[entry.name] = new_entry
@@ -158,14 +222,19 @@ def rebuild(source: BinaryIO, destination: BinaryIO, replacements: dict[str, byt
     new_index_offset = destination.tell()
     for entry in index.entries:
         e = updated[entry.name]
-        destination.write(struct.pack('<H', len(e.raw_name)) + crypt_name(e.raw_name, index.arc_key))
+        if index.version == '3.0':
+            name = struct.pack('<H', len(e.raw_name)) + crypt_name(e.raw_name, index.arc_key)
+        else:
+            name = struct.pack('<H', len(e.raw_name) // 2) + crypt_name31(e.raw_name, index.arc_key)
+        destination.write(name)
         destination.write(struct.pack('<QIIIII', e.offset, e.size, e.unpacked_size, e.packed, e.encryption, e.checksum))
     destination.write(tail)
-    destination.write(b'FilePackVer3.0\0\0' + struct.pack('<IQ', len(index.entries), new_index_offset))
+    destination.write(b'FilePackVer' + index.version.encode('ascii') + b'\0\0'
+                      + struct.pack('<IQ', len(index.entries), new_index_offset))
     destination.flush()
     # Must be a readable output stream: verify lookup data and every replacement.
     check = read_index(destination)
-    if hash13_tail(destination, check) != tail:
+    if check.version != index.version or check.arc_key != index.arc_key or lookup_tail(destination, check) != tail:
         raise ValueError('QLIE filename lookup table changed')
     for entry in check.entries:
         if entry.name in replacements:
@@ -174,5 +243,6 @@ def rebuild(source: BinaryIO, destination: BinaryIO, replacements: dict[str, byt
             if actual != replacements[entry.name]:
                 raise ValueError('rebuilt QLIE member differs from replacement')
     return {'entries': len(index.entries), 'changed': changed, 'roundtripped': roundtripped,
-            'output_size': check.file_size, 'hash_lookup': 'verified-and-preserved',
+            'output_size': check.file_size, 'pack_version': index.version, 'mode': mode,
+            'hash_lookup': 'verified-and-preserved',
             'compression': 'changed-members-stored-uncompressed', 'game_launch_tested': False}

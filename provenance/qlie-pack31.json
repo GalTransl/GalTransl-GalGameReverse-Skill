@@ -1,0 +1,32 @@
+{
+  "implementation": [
+    "python/archives/qlie.py",
+    "python/archives/qlie_writer.py",
+    "python/archives/qlie_keys.py",
+    "python/engines/qlie_extract.py",
+    "python/engines/qlie_repack.py"
+  ],
+  "license": "MIT portions (GARbro-derived reader/crypto, notice kept in module headers); writer, mode inference and recipes are new code under the skill's GPL-3.0-or-later",
+  "origin": "FilePackVer3.1 support: Python port of GARbro EncryptionV3_1 (rotated checksum and ArcKey, UTF-16LE name XOR, method-1/method-2 member ciphers, 0x400-byte key expansion) and the PackIndexReader pack_keyfile chain, with explicit modes, encrypt inverses and bounds added. HashVer1.4 lookup layout was cross-checked against msg-tool and validated on real archives read locally in read-only mode; the template writer preserves it verbatim after validation. No upstream lines of msg-tool were copied.",
+  "references": [
+    {
+      "project": "GARbro-Mod",
+      "commit": "bc26d991ef5cdc0e1ecb32122ee9a48c3375750c",
+      "license": "MIT",
+      "copyright": "Copyright (C) 2015-2017 morkt",
+      "notice": "licenses/MIT-GARbro.txt",
+      "paths": ["ArcFormats/Qlie/ArcQLIE.cs", "ArcFormats/Qlie/Encryption.cs"],
+      "symbols": ["EncryptionV3_1.CalculateHash", "EncryptionV3_1.DecryptName", "EncryptionV3_1.DecryptV1",
+                  "EncryptionV3_1.DecryptV2", "EncryptionV3_1.GenerateTable", "EncryptionV3_1.GenerateKeyData",
+                  "PackIndexReader.Read (pack_keyfile chain)", "PackOpener.FindKeyFile (key.fkey / RCDATA RESKEY)"],
+      "use": "Algorithm port for the 3.1 reader and its inverse."
+    },
+    {
+      "project": "msg-tool",
+      "repository": "https://github.com/lifegpc/msg-tool",
+      "license": "GPL-3.0",
+      "paths": ["src/scripts/qlie/archive/pack/v31.rs", "src/scripts/qlie/archive/pack/types.rs"],
+      "use": "Layout cross-reference only: HashVer1.4 header fields (256 buckets, count, count*4 ordinal array, stored size, compression flag, 32 opaque bytes), u32 bucket depth, UTF-16LE names, u64 ordinal offsets, legacy 0x428 encryption of the lookup data."
+    }
+  ]
+}

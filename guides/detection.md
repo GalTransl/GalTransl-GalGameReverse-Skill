@@ -20,7 +20,7 @@
 
 ### 版本与运行环境字段
 
-- `format_versions` 汇总读到的头部版本（计数）：`yuris-ypf`（YPF 头版本字，只有 v482 有完整路线）、`qlie-filepack`（包尾 `FilePackVerX.Y`，随包 reader/writer 只覆盖 3.0）、`renpy-rpa`（`RPA-3.0`、改名的 `ARC-3.0`、`RPA-3.2`、`RPA-2.0`；随包 reader 只接受 3.0/ARC-3.0）、`entis`（子类型）、`unityfs`（bundle 格式版本）、`unity-serialized`（serialized 版本）。对应 hit 另带 `version`、`unity_version` 或 `subtype`。
+- `format_versions` 汇总读到的头部版本（计数）：`yuris-ypf`（YPF 头版本字，只有 v482 有完整路线）、`qlie-filepack`（包尾 `FilePackVerX.Y`，随包 reader/writer 覆盖 3.0 与 3.1）、`renpy-rpa`（`RPA-3.0`、改名的 `ARC-3.0`、`RPA-3.2`、`RPA-2.0`；随包 reader 只接受 3.0/ARC-3.0）、`entis`（子类型）、`unityfs`（bundle 格式版本）、`unity-serialized`（serialized 版本）。对应 hit 另带 `version`、`unity_version` 或 `subtype`。
 - Entis：偏移 `0x10` 为 `ERISA-Archive file` 的标为 NOA 归档（`subtype: noa`，随包无 reader），为 `Cotopha Image file` 的才是 CSX；其他子签名标 `other`。
 - `executables` 列出扫描根及其下两层内 `*.exe` 的 PE Machine：`x86`、`x64`、`arm64` 等，非 PE 记 `not-pe`。选择 JIS hook DLL 时按实际游戏 EXE 的位数，不按启动器。
 - `unity`：`scripting_backend` 为 `mono`（存在 `*_Data/Managed/Assembly-CSharp.dll`）、`il2cpp`（存在 `GameAssembly.dll` 或 `il2cpp_data`）、两者或 `undetermined`。这只是运行时后端，不决定资源或剧情的序列化布局；`.assets`、`globalgamemanagers` 的 serialized 版本仅在头部声明大小与实际大小一致时报告。
