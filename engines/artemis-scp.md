@@ -35,7 +35,8 @@ pf0     记录 = 0x104 字节 ASCII 名 | u32 offset | u32 size                 
 - **尾部附加表**：`index_size` 可能大于条目表。已知布局为 `u32 计数(=条目数+1) + 计数×u64 + u32`，须先核对目标布局：
   - 不能因"索引有剩余字节"就拒绝整卷；
   - 它**必须计入 SHA-1**，否则 key 错误、载荷全成乱码；
-  - 附加表存在累计记录长度的布局：`u64[i] = Σ(j≤i)(len(name_j)+16) − 8`，末项为 0，末尾 `u32 = 4 + Σ(len(name_j)+16)`。其中 `−8` 的用途未确认，不作为通用公式；writer 保留原表，不重算。
+  - 观测布局（记录偏移表）：`u64[i]` = 第 i 条记录（索引顺序）的 `offset` 字段相对**条目区起点**（紧随 u32 条目数之后）的位置，即 `Σ(j≤i)(len(name_j)+16) − 8`（−8 = 回退 offset/size 两个 u32）；末项为 0；最后一个 `u32` 是该表在索引内的偏移 `4 + Σ(len(name_j)+16)`。
+  - `pfs.trailing_matches_offset_table(index)` 判断已有卷是否为此布局；`build(..., trailing="auto")`（仅 pf6/pf8）为新记录重算该表。`repack` 仍按原字节保留旧卷的表。游戏是否依赖此表**尚未验证**；新建补丁卷时，若已有卷都带此表，就用 `"auto"` 保持一致。
 - `offset` 是相对本卷起点的 32 位偏移。读取须检查越界和重叠，重封包按实际物理顺序处理，不能假设无空洞。
 - 索引条目顺序**不等于**偏移顺序，重封包必须分别保留"记录顺序"和"物理顺序"。
 
@@ -54,6 +55,11 @@ pf0     记录 = 0x104 字节 ASCII 名 | u32 offset | u32 size                 
 - **起始 `「` 与结尾 `」` 是结构字符**：译文丢掉起始引号，该条会重新解析成旁白（说话人归属丢失）。`patch_script` 会直接拒绝，不要绕过。
 - 行内指令：`[ルビ rb="漢/かん"]`、`[恋人呼称 chara="…"]` 嵌在正文中间，必须作为受保护 token 原样保留。
 - 换行 CRLF；文件可能是 UTF-8 无 BOM 或带 BOM——带 BOM 却不按 `utf-8-sig` 解码，会把首行吃成一个假消息。
+- **`[lua]` … `[/lua]` 区段是 Lua 代码，不是对白**（系统 `.iet` 常见）：两行标记各自独占一行，区段内全部行不导出、回填时原样保留；未闭合、重复打开或孤立的 `[/lua]` 以 `unterminated_lua`/`nested_lua`/`unbalanced_lua` 拒绝。
+
+### 读取门槛
+
+本语法里任何一行都能算"文本"，所以 `read_script` 在 `looks_like_script` 为否时以 `not_scp` 拒绝；探测跳过 `[lua]` 区段，只数非空行。`scenario/*.lua` 这类 Lua 表剧本、纯 Lua 文件都会被拒，**不要用 `force=True` 硬读**——它们不是 SCP。`force=True`（`read_script`/`patch_script` 均有）只用于已由其他证据确认是 SCP、但篇幅太短而探测不足的文件。
 
 ### 说话人判定（本族最容易错的一处）
 
@@ -74,13 +80,14 @@ pf0     记录 = 0x104 字节 ASCII 名 | u32 offset | u32 size                 
 from python.archives import pfs
 
 paths = pfs.volume_paths("game/root.pfs")          # base + 同族 NNN，按卷序
-read = [(p, pfs.read_index(p)) for p in paths]
-index, resolved = read[-1][1], pfs.resolve_volumes([(p, i) for p, i in read])
-member = resolved.by_name()["scenario/00/0001共通.txt"]   # 覆盖链在 member.overrides
+indexes = {p: pfs.read_index(p) for p in paths}
+resolved = pfs.resolve_volumes([(p, indexes[p]) for p in paths])
+member = resolved.by_name()["scenario\\00\\0001.txt"]  # 真实成员名以 "\" 分隔；覆盖链在 member.overrides
+index = indexes[member.volume]          # 必须用成员所在卷的索引：XOR key 逐卷不同
 with open(member.volume, "rb") as stream:
     raw = pfs.read_member(stream, index, member.entry).data
-rebuilt = pfs.repack(index, {e.ordinal: pfs.read_member(stream, index, e).data
-                             for e in index.entries})      # 未改动则逐字节一致
+    rebuilt = pfs.repack(index, {e.ordinal: pfs.read_member(stream, index, e).data
+                                 for e in index.entries})  # 须在 with 内读取；未改动则逐字节一致
 ```
 
 剧本（`Record.text` 用 `\n` 表示盒内换行，与 JSON 一致）：
@@ -120,7 +127,7 @@ patched = script.patch(rows)            # 相同 rows 应得到相同字节
 
 - 多分卷按后卷覆盖前卷解析，补丁制作见 [PFS 覆盖卷](artemis.md#打包技巧新增-pfs-覆盖卷)；须通过少量试注确认目标发行版实际加载顺序。
 - 容器重封包须验证恒等重建、变长替换及重新解析；通过不代表游戏会加载新卷。
-- 尾部附加表的数值已解码（见“容器方言（pf8）”一节），但重封包仍按原字节保留、不重算；若游戏拒绝重封包，先怀疑这里。
+- 尾部附加表的布局已解码（见“容器方言（pf8）”一节）：`repack` 按原字节保留，新建卷可用 `trailing="auto"` 重算；游戏是否校验此表未验证，若游戏拒绝新卷，先怀疑这里。
 - 单卷重封包在内存中进行；大包先核对内存预算，当前无流式 writer。
 - 未做字体/字形、存档、选择肢排版与游戏启动验证；译文能否显示取决于字体与编码，本页不承诺。
 
@@ -133,5 +140,5 @@ patched = script.patch(rows)            # 相同 rows 应得到相同字节
 
 ## 验证与缺口
 
-- 合成测试见 [tests/test_archives.py](../tests/test_archives.py) 的 `PFSTests` 与 [tests/test_engines_artemis_scp.py](../tests/test_engines_artemis_scp.py)。
-- 缺口：`>1 GB` 卷无流式 writer；尾部表数值已知但 `-8` 常数与用途未解释；卷序未实机验证；`.iet` 里的系统 UI 文本（`[dialog message=…]` 等）未纳入 `name/message` 导出。另一种是 `.ast` Lua 表剧本，见 [artemis-ast](artemis-ast.md)。
+- 合成测试见 [tests/test_archives.py](../tests/test_archives.py) 的 `PFSTests` 与 [tests/test_engines_artemis_scp.py](../tests/test_engines_artemis_scp.py)（含 `[lua]` 区段、读取门槛正反例、`trailing="auto"` 读回）。
+- 缺口：`>1 GB` 卷无流式 writer；尾部表的运行时用途未验证；卷序未实机验证；`.iet` 里的系统 UI 文本（`[dialog message=…]` 等）未纳入 `name/message` 导出。另一种是 `.ast` Lua 表剧本，见 [artemis-ast](artemis-ast.md)。

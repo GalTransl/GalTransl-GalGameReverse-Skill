@@ -13,7 +13,7 @@ byte for byte)::
     astver = 2.0                    -- header; also seen: astname = "..." or
     astname = "chapter01"           -- neither, when the file starts at ``ast``
     ast = {
-        block_00000 = {
+        block_00000 = {             -- quoted keys (["0001_00001"] = {) also occur
             {"savetitle", text="第Ⅰ章"},
             {"text"},
             delay = { [1000] = { {"se", id=1, file="se0148"}, }, },
@@ -65,14 +65,15 @@ dropped silently.
 Name slots
 ----------
 
-``name = {"A", "B"}`` is an **ordered list of display names**, not "the name
-plus a fallback". A shipped patch translated both slots (``["麗華","？？？"] ->
-["丽华","？？？"]``, ``["女生徒A","女生徒"] -> ["女学生A","女学生"]``), so both
-are exported as writable slots through the ``names`` extension of
-``guides/roundtrip-contract.md``. Two upstream readers keep only one slot
-(msg-tool takes the last member, SExtractor's regex the second) and would lose
-half of them here. The language-keyed form ``name = { name="...", ja="..." }``
-is read and written too, with its keys preserved.
+``name = {"A", "B"}`` follows the ASB ``name`` command: slot 0 is the fixed
+character identity (official multi-language data keeps it untranslated while
+the last slot changes per language), and the **last slot is the display name**.
+Rows export only the display slot as ``name``; the identity is reported in the
+locator as ``name_identity`` and never rewritten. A lone slot gains an appended
+display slot (``{"A"} -> {"A", "译名"}``) instead of being overwritten. The
+language-keyed form ``name = { name="...", ja="..." }`` uses the same rule with
+its keys preserved; a lone keyed slot is ``context`` because an appended slot
+would need an invented key.
 
 Old layout
 ----------
@@ -91,6 +92,7 @@ proves ``\\n`` is accepted and proves nothing about ``\\\\`` or ``\\"``.
 """
 
 from dataclasses import dataclass, field
+import codecs
 import re
 
 #: Header statements accepted before ``ast = {``.
@@ -467,10 +469,26 @@ class Unit:
     line_lead: tuple = ()       # per rendered line: inline command source slices
     line_tail: tuple = ()
     line_has_text: tuple = ()
+    name_spans: tuple = ()      # per slot: (start, end) of the string literal
 
     @property
-    def writable_names(self) -> bool:
-        return bool(self.names)
+    def display_name(self):
+        """Last slot: the text shown in the name box (``None`` for narration)."""
+        return self.names[-1] if self.names else None
+
+    @property
+    def identity_name(self):
+        """Slot 0: the fixed character identity; read-only context."""
+        return self.names[0] if self.names else None
+
+    @property
+    def name_policy(self) -> str:
+        if not self.names:
+            return "absent"
+        # A lone keyed slot has no key to give an appended display slot.
+        if len(self.names) == 1 and self.name_keys[0] is not None:
+            return "context"
+        return "writable"
 
 
 @dataclass(frozen=True)
@@ -486,16 +504,19 @@ class Document:
     ast: Value
     units: tuple
     text: str = field(default="", repr=False)
+    #: Parse options; ``patch`` re-reads its own output with exactly these.
+    language: str | None = None
+    extra_inline_tags: frozenset = frozenset()
+    lenient_escapes: bool = False
 
     def rows(self):
-        """Minimal GalTransl rows in document order."""
+        """Minimal GalTransl rows in document order; ``name`` is the display slot."""
         result = []
         for unit in self.units:
-            row = {"message": unit.message}
-            if len(unit.names) == 1 and not any(unit.name_keys):
-                row["name"] = unit.names[0]
-            elif unit.names:
-                row["names"] = list(unit.names)
+            row = {}
+            if unit.names:
+                row["name"] = unit.display_name
+            row["message"] = unit.message
             result.append(row)
         return result
 
@@ -503,34 +524,76 @@ class Document:
         return [{"kind": unit.kind, "block": unit.block, "index": unit.index,
                  "script_line": unit.script_line, "span": [unit.span[0], unit.span[1]],
                  "source_lines": unit.lines, "name_slots": len(unit.names),
+                 "name_identity": unit.identity_name,
                  "furigana": list(unit.furigana), "inline_commands": list(unit.inline)}
                 for unit in self.units]
 
     def name_policies(self):
-        return ["writable" if unit.names else "absent" for unit in self.units]
+        return [unit.name_policy for unit in self.units]
 
     def protected_tokens(self):
         return [[] for _ in self.units]
 
     def patch(self, rows, *, allow_lua_escapes: bool = False,
               max_output_size: int = 64 << 20) -> bytes:
-        """Rebuild the source bytes from ``rows`` in this document's own order."""
+        """Rebuild the source bytes from ``rows`` and verify them by re-parsing.
+
+        The output is read back with this document's own encoding, language,
+        ``extra_inline_tags`` and ``lenient_escapes``, then compared unit by unit
+        and against the non-text skeleton; any mismatch raises
+        ``verification_failed`` instead of returning bytes.
+        """
         text = render(self, rows, allow_lua_escapes=allow_lua_escapes)
-        return encode_ast(self, text, max_output_size=max_output_size)
+        rebuilt = encode_ast(self, text, max_output_size=max_output_size)
+        after = read_ast(rebuilt, encoding=self.encoding, path=self.path,
+                         language=self.language,
+                         extra_inline_tags=self.extra_inline_tags,
+                         lenient_escapes=self.lenient_escapes,
+                         max_bytes=max(max_output_size, len(rebuilt)))
+        if after.bom != self.bom:
+            raise AstError("verification_failed", "BOM state changed after rebuild",
+                           "verify")
+        _verify_rebuild(self, after, rows)
+        return rebuilt
 
 
 # ------------------------------------------------------------------- reading
 
 
+_UTF8_BOM = b"\xef\xbb\xbf"
+
+
+def _candidates(data: bytes, encoding):
+    """Yield ``(codec, body, bom)``; the BOM is decided from the bytes, not the codec.
+
+    ``utf-8-sig`` happily decodes BOM-less input, so trying it first would record
+    a BOM the file never had and the writer would then add one.
+    """
+    bom = data[:3] == _UTF8_BOM
+    if encoding is None:
+        codecs_to_try = ("utf-8",) if bom else ("utf-8", "cp932")
+    else:
+        codecs_to_try = (encoding,)
+    for codec in codecs_to_try:
+        try:
+            name = codecs.lookup(codec).name
+        except LookupError:
+            continue
+        if name in ("utf-8", "utf-8-sig"):
+            yield ("utf-8-sig", data[3:], True) if bom else ("utf-8", data, False)
+        else:
+            yield codec, data, False
+
+
 def _decode(data, encoding):
+    """Return ``(text, codec, bom)``; ``text`` never starts with the BOM."""
     if not isinstance(data, (bytes, bytearray, memoryview)):
         raise AstError("input_type", "script input must be bytes", "input")
     data = bytes(data)
-    candidates = (encoding,) if encoding is not None else ("utf-8-sig", "cp932")
-    for codec in candidates:
+    for codec, body, bom in _candidates(data, encoding):
         try:
-            return data.decode(codec, errors="strict"), codec
-        except (UnicodeDecodeError, LookupError):
+            return body.decode(codec if not bom else "utf-8", errors="strict"), codec, bom
+        except UnicodeDecodeError:
             continue
     raise AstError("bad_encoding", "script is not decodable with the given encodings",
                    "input")
@@ -540,10 +603,22 @@ def looks_like_ast(data, *, encoding=None, max_bytes: int = 4096) -> bool:
     """Weak probe: ``astver``/``astname``/``ast`` followed by ``=``.
 
     Enough to pick this reader over the ASB and SCP ones, not a support claim.
+    Only a prefix is decoded; an incremental decoder holds back a multibyte
+    character cut by the prefix boundary instead of failing on it.
     """
     try:
-        text, _codec = _decode(bytes(data)[:max_bytes], encoding)
-    except (AstError, TypeError, ValueError):
+        prefix = bytes(data)[:max_bytes]
+    except (TypeError, ValueError):
+        return False
+    text = None
+    for codec, body, bom in _candidates(prefix, encoding):
+        try:
+            decoder = codecs.getincrementaldecoder("utf-8" if bom else codec)("strict")
+            text = decoder.decode(body, final=False)
+            break
+        except (UnicodeDecodeError, LookupError):
+            continue
+    if text is None:
         return False
     text = text.lstrip("\ufeff \t\r\n")
     for key in ("astver", "astname", "ast"):
@@ -598,29 +673,31 @@ def _name_slots(box: Value):
     if len(pairs) > 1:
         raise AstError("duplicate_name", "message box declares name more than once")
     if not pairs:
-        return (), ()
+        return (), (), ()
     table = pairs[0].value
     if table.kind != "table":
         raise AstError("bad_name", "name is not a table")
-    names, keys = [], []
+    names, keys, spans = [], [], []
     for member in table.items:
         if member.kind == "str":
             names.append(member.text)
             keys.append(None)
+            spans.append((member.start, member.end))
         elif member.kind == "pair" and member.value.kind == "str" \
                 and member.key.kind == "str":
             names.append(member.value.text)
             keys.append(member.key.text)
+            spans.append((member.value.start, member.value.end))
         else:
             raise AstError("bad_name_slot",
                            "name members must be string values or string pairs")
     if not names:
         raise AstError("bad_name_slot", "name table holds no string slot")
-    return tuple(names), tuple(keys)
+    return tuple(names), tuple(keys), tuple(spans)
 
 
 def _read_box(text, block_name, block, box, index, extra_inline):
-    names, name_keys = _name_slots(box)
+    names, name_keys, name_spans = _name_slots(box)
     furigana, inline, parts = [], [], []
     for element in box.items:
         if element.kind == "pair":
@@ -678,7 +755,7 @@ def _read_box(text, block_name, block, box, index, extra_inline):
                 names, name_keys, tuple(furigana), tuple(inline), len(breaks),
                 _indent_of(text, box.items[0].start), _indent_of(text, box.end - 1),
                 trailing, breaks[0] if breaks else "rt2", head.count("\n") > 1,
-                tuple(lead), tuple(tail), tuple(has_text))
+                tuple(lead), tuple(tail), tuple(has_text), name_spans)
 
 
 def _read_units(text, ast, extra_inline, language):
@@ -692,15 +769,21 @@ def _read_units(text, ast, extra_inline, language):
                            "top-level layout is not implemented")
         raise AstError("missing_label",
                        "the ast table has no label.top entry (unknown layout)")
-    units = []
+    names = set()
     for entry in ast.items:
         if entry.kind != "pair" or entry.key.kind != "str":
             raise AstError("bad_structure", "the ast table may only hold named tables")
+        if entry.key.text in names:
+            raise AstError("duplicate_key", f"top-level table {entry.key.text!r} repeats")
+        names.add(entry.key.text)
+    # Any string key is a block; its name is whatever label.top.block /
+    # linknext refer to. Bare ``block_00000`` and quoted ``["0001_00001"]``
+    # keys both occur, so no name prefix is required.
+    units = []
+    for entry in ast.items:
         name = entry.key.text
         if name == "label":
             continue
-        if not name.startswith("block"):
-            raise AstError("unknown_toplevel", f"unknown top-level table {name!r}")
         block = entry.value
         if block.kind != "table":
             raise AstError("bad_structure", f"{name} is not a table")
@@ -747,10 +830,7 @@ def read_ast(data, *, encoding=None, path: str = "", language=None,
         raise AstError("input_type", "script input must be bytes", "input")
     if len(data) > max_bytes:
         raise AstError("too_large", "script exceeds the byte budget", "input")
-    text, codec = _decode(data, encoding)
-    bom = text.startswith("\ufeff")
-    if bom:
-        text = text[1:]
+    text, codec, bom = _decode(data, encoding)
     version, name, ast = _Parser(text, lenient=lenient_escapes).parse_file()
     astver = None
     if version is not None:
@@ -761,9 +841,11 @@ def read_ast(data, *, encoding=None, path: str = "", language=None,
             raise AstError("unsupported_version", f"unsupported astver {astver}")
     astname = name.text if name is not None and name.is_str() else None
     units = _read_units(text, ast, frozenset(extra_inline_tags), language)
-    return Document(path=path, encoding="utf-8-sig" if bom else codec, bom=bom,
+    return Document(path=path, encoding=codec, bom=bom,
                     newline="\r\n" if "\r\n" in text else "\n", astver=astver,
-                    astname=astname, ast=ast, units=units, text=text)
+                    astname=astname, ast=ast, units=units, text=text,
+                    language=language, extra_inline_tags=frozenset(extra_inline_tags),
+                    lenient_escapes=lenient_escapes)
 
 
 # ------------------------------------------------------------------- writing
@@ -805,30 +887,42 @@ def _render_box(unit: Unit, message: str, names, newline: str,
 
 
 def _names_for(unit: Unit, row):
-    names, name = row.get("names"), row.get("name")
-    if names is not None and name is not None:
-        raise AstError("bad_name", "name and names are mutually exclusive", "write")
-    if names is not None:
-        if not isinstance(names, list) or len(names) != len(unit.names) \
-                or not all(isinstance(value, str) and value for value in names):
-            raise AstError("bad_name",
-                           "names must keep the parsed slot count and stay nonempty",
-                           "write")
-        return list(names)
+    """Full slot list after applying ``row["name"]``, or ``None`` when unchanged.
+
+    Slot 0 is the character identity and is never rewritten; the last slot is
+    the display name. A lone slot gains an appended display slot instead of
+    being overwritten - the same rule as the ASB ``name`` command.
+    """
+    if "names" in row:
+        raise AstError("bad_name",
+                       "AST rows carry one display name in name; the identity slot "
+                       "is not translatable", "write")
+    name = row.get("name")
     if name is None:
         return None
     if not isinstance(name, str) or not name:
         raise AstError("bad_name", "name must be a nonempty string", "write")
     if not unit.names:
         raise AstError("name_not_writable", "this unit has no name slot", "write")
-    if len(unit.names) != 1:
-        raise AstError("missing_names",
-                       "this box has several name slots; use names", "write")
-    if any(unit.name_keys):
-        raise AstError("bad_name",
-                       "this box stores a keyed name; use names to keep the keys",
-                       "write")
-    return [name]
+    if name == unit.display_name:
+        return None
+    if unit.name_policy != "writable":
+        raise AstError("name_not_writable",
+                       "a lone keyed name slot is identity only; no display slot "
+                       "can be added without inventing a key", "write")
+    if len(unit.names) == 1:
+        return [unit.names[0], name]
+    return list(unit.names[:-1]) + [name]
+
+
+def _render_name_edit(unit: Unit, names, allow_lua_escapes: bool):
+    """Minimal edit: replace the display literal, or append one after slot 0."""
+    literal = _slot_literal(names[-1], allow_lua_escapes)
+    if len(names) > len(unit.names):
+        end = unit.name_spans[-1][1]
+        return end, end, ", " + literal
+    start, end = unit.name_spans[-1]
+    return start, end, literal
 
 
 def render(document: Document, rows, *, allow_lua_escapes: bool = False) -> str:
@@ -849,7 +943,9 @@ def render(document: Document, rows, *, allow_lua_escapes: bool = False) -> str:
                            "empty message or embedded CR/NUL changes the record", "write")
         if unit.kind == "message":
             names = _names_for(unit, row)
-            if message == unit.message and names in (None, list(unit.names)):
+            if message == unit.message:
+                if names is not None:
+                    edits.append(_render_name_edit(unit, names, allow_lua_escapes))
                 continue
             if not message and not unit.line_has_text:
                 raise AstError("bad_message", f"{unit.block}: refusing to blank a box",
@@ -921,11 +1017,11 @@ def _verify_rebuild(before: Document, after: Document, rows) -> None:
             raise AstError("verification_failed",
                            f"{original.block}: message did not survive the rebuild",
                            "verify")
-        expected = row.get("names")
+        expected = _names_for(original, row) if original.kind == "message" else None
         if expected is None:
-            expected = [row["name"]] if row.get("name") is not None \
-                else list(original.names)
-        if list(rebuilt.names) != list(expected):
+            expected = list(original.names)
+        if list(rebuilt.names) != list(expected) or \
+                list(rebuilt.name_keys[:len(original.name_keys)]) != list(original.name_keys):
             raise AstError("verification_failed",
                            f"{original.block}: name slots did not survive the rebuild",
                            "verify")
@@ -958,18 +1054,13 @@ def patch_ast(data, rows, *, encoding=None, language=None,
               max_output_size: int = 64 << 20) -> bytes:
     """Reinsert translations into one AST text script.
 
-    Equivalent to ``read_ast(...).patch(rows)`` plus a re-parse comparison.
+    Equivalent to ``read_ast(...).patch(rows)``; both re-parse and verify.
     Prefer ``Document.patch`` when the parsed object is still around; the
-    keyword arguments must match the analysis or the name slots will resolve
+    keyword arguments here must match the analysis or the units will resolve
     differently.
     """
     document = read_ast(data, encoding=encoding, language=language,
                         extra_inline_tags=extra_inline_tags,
                         lenient_escapes=lenient_escapes, max_bytes=max_bytes)
-    rebuilt = document.patch(rows, allow_lua_escapes=allow_lua_escapes,
-                             max_output_size=max_output_size)
-    after = read_ast(rebuilt, encoding=encoding or document.encoding,
-                     language=language, extra_inline_tags=extra_inline_tags,
-                     lenient_escapes=lenient_escapes)
-    _verify_rebuild(document, after, rows)
-    return rebuilt
+    return document.patch(rows, allow_lua_escapes=allow_lua_escapes,
+                          max_output_size=max_output_size)

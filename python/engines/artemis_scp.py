@@ -74,6 +74,8 @@ _SECTION_RE = re.compile(r"^\[([^\]]*)\]")
 _PROBE_LABEL_RE = re.compile(r"^\*[^\s*]")
 _PROBE_COMMAND_RE = re.compile(r'^\[([^\s\[\]"=]+)(?:\s(?:"[^"]*"|[^\[\]"])*)?\]\s*(?:(?://|;).*)?$')
 _HEX_RE = re.compile(r"[0-9A-Fa-f]+")
+#: Embedded Lua code sections: ``[lua]`` ... ``[/lua]`` on their own lines.
+_LUA_RE = re.compile(r"^\[(/?)lua(?:\s[^\]]*)?\]\s*(?:(?://|;).*)?$")
 
 
 class ScpError(ValueError):
@@ -178,7 +180,8 @@ class Script:
         """
         rebuilt = encode_script(self, render(self, rows), max_output_size=max_output_size)
         verified = read_script(rebuilt, encoding=self.encoding, tag_schema=self.tag_schema,
-                               speaker_tags=self.speaker_tags, command_tags=self.command_tags)
+                               speaker_tags=self.speaker_tags, command_tags=self.command_tags,
+                               force=True)
         _verify_rebuild(self, verified, rows)
         return rebuilt
 
@@ -215,6 +218,43 @@ def line_kind(line: str) -> str:
     if stripped.startswith(COMMAND_OPEN):
         return "command"
     return "text"
+
+
+def _lua_marker(line: str):
+    """``"open"``/``"close"`` for a line that is exactly a ``[lua]``/``[/lua]`` command."""
+    stripped = line.strip()
+    if not stripped.startswith(COMMAND_OPEN):
+        return None
+    match = _LUA_RE.match(stripped)
+    if match is None:
+        return None
+    return "close" if match.group(1) else "open"
+
+
+def _lua_mask(lines, *, strict: bool = True):
+    """Per line: True when it lies inside a ``[lua]`` ... ``[/lua]`` section.
+
+    The marker lines themselves count as inside. Section content is Lua code,
+    never dialogue; it is kept byte for byte by the writer.
+    """
+    mask, inside = [], False
+    for line in lines:
+        marker = _lua_marker(line)
+        if marker == "open":
+            if inside and strict:
+                raise ScpError("nested_lua", "[lua] opened twice without [/lua]")
+            inside = True
+            mask.append(True)
+        elif marker == "close":
+            if not inside and strict:
+                raise ScpError("unbalanced_lua", "[/lua] without an open [lua]")
+            mask.append(True)
+            inside = False
+        else:
+            mask.append(inside)
+    if inside and strict:
+        raise ScpError("unterminated_lua", "[lua] section has no closing [/lua]")
+    return mask
 
 
 def _scan_command(text: str):
@@ -254,7 +294,17 @@ def looks_like_script(data, *, encoding=None, max_lines: int = 40) -> bool:
     if text[:5] == "ASB\x00\x00" or text[:4] == "ASB\x00":
         return False
     kinds = {}
-    for line in text.splitlines()[:max_lines]:
+    lines = text.splitlines()
+    mask = _lua_mask(lines, strict=False)
+    # Lua code sections are skipped, and the line budget counts only lines the
+    # probe actually classifies, so a long leading [lua] block cannot hide SCP.
+    seen = 0
+    for line, in_lua in zip(lines, mask):
+        if in_lua or not line.strip():
+            continue
+        seen += 1
+        if seen > max_lines:
+            break
         kind = line_kind(line)
         stripped = line.strip()
         # The probe is stricter than the parser: README rules ("****") and
@@ -276,7 +326,7 @@ def looks_like_script(data, *, encoding=None, max_lines: int = 40) -> bool:
 
 def read_script(data, *, encoding=None, tag_schema=None, speaker_tags=frozenset(),
                 command_tags=frozenset(), max_bytes: int = 64 << 20,
-                max_lines: int = 2_000_000) -> Script:
+                max_lines: int = 2_000_000, force: bool = False) -> Script:
     """Parse one SCP text script into ordered records; no filesystem access.
 
     ``speaker_tags`` forces the named tags to be speakers, which is how a bare
@@ -284,6 +334,13 @@ def read_script(data, *, encoding=None, tag_schema=None, speaker_tags=frozenset(
     gains a writable display-name override; it also wins over the built-in command set.
     ``command_tags`` adds tags that must never be read as speakers.
     ``tag_schema`` supplies the archive's own tag.ini.
+
+    Every line is "text" to this grammar, so arbitrary files (Lua table
+    scripts, plain Lua) would parse "successfully" into fake dialogue. Input
+    that fails :func:`looks_like_script` is therefore refused with
+    ``not_scp``; ``force=True`` skips that gate for a file already confirmed
+    as SCP by other evidence. ``[lua]`` ... ``[/lua]`` sections are never
+    exported and are written back unchanged.
     """
     if len(bytes(data)) > max_bytes:
         raise ScpError("script_budget", "script exceeds the input byte budget", "input")
@@ -292,6 +349,12 @@ def read_script(data, *, encoding=None, tag_schema=None, speaker_tags=frozenset(
     lines = text.split(newline)
     if len(lines) > max_lines:
         raise ScpError("script_budget", "script exceeds the line budget", "input")
+    if not force and not looks_like_script(data, encoding=encoding):
+        raise ScpError("not_scp",
+                       "input does not look like an SCP script (Lua table scripts and "
+                       "plain Lua are not SCP); pass force=True only with other evidence",
+                       "input")
+    in_lua = _lua_mask(lines)
     pinned = set(speaker_tags)
     excluded = set(DEFAULT_COMMAND_TAGS) | set(command_tags)
     if tag_schema is not None:
@@ -302,6 +365,9 @@ def read_script(data, *, encoding=None, tag_schema=None, speaker_tags=frozenset(
     speaker = None      # (tag, display name or None, policy, line index or None)
     index, total = 0, len(lines)
     while index < total:
+        if in_lua[index]:
+            index += 1
+            continue
         kind = line_kind(lines[index])
         if kind == "command":
             parsed = _scan_command(lines[index])
@@ -331,7 +397,7 @@ def read_script(data, *, encoding=None, tag_schema=None, speaker_tags=frozenset(
             index += 1
             continue
         start = index
-        while index < total and line_kind(lines[index]) == "text":
+        while index < total and not in_lua[index] and line_kind(lines[index]) == "text":
             index += 1
         body = lines[start:index]
         quoted = body[0].lstrip().startswith(OPEN_QUOTES)
@@ -464,7 +530,8 @@ def _verify_rebuild(before: Script, after: Script, rows) -> None:
 
 
 def patch_script(data, rows, *, encoding=None, tag_schema=None, speaker_tags=frozenset(),
-                 command_tags=frozenset(), max_output_size: int = 64 << 20) -> bytes:
+                 command_tags=frozenset(), max_output_size: int = 64 << 20,
+                 force: bool = False) -> bytes:
     """Reinsert translations into one SCP text script.
 
     Equivalent to ``read_script(...).patch(rows)``. The keyword policy arguments
@@ -473,5 +540,5 @@ def patch_script(data, rows, *, encoding=None, tag_schema=None, speaker_tags=fro
     available.
     """
     script = read_script(data, encoding=encoding, tag_schema=tag_schema,
-                         speaker_tags=speaker_tags, command_tags=command_tags)
+                         speaker_tags=speaker_tags, command_tags=command_tags, force=force)
     return script.patch(rows, max_output_size=max_output_size)

@@ -33,9 +33,17 @@
 1. 从资源证据确定 PFS/PF2 或外置文件路线。
 2. PFS 参考 [python/archives/pfs.py](../python/archives/pfs.py) 模块：`read_index`（只读头/索引，不载入载荷）、`read_member`、`volume_paths`/`resolve_volumes`（多分卷覆盖链）、`build`/`repack`（pf6/pf8 写出）。
 3. 校验提取成员路径和原始哈希，候选 ASB 先独立解析。
-4. `.ast` 转 [artemis-ast](artemis-ast.md)；SCP 文本 `.txt`/`.iet` 转 [artemis-scp](artemis-scp.md)。都不强行塞给 `read_asb`。
+4. 按内容选路，都不强行塞给 `read_asb`：
+
+   | 成员 | 判定 | 路线 |
+   |---|---|---|
+   | `ASB\0\0` 开头（`.asb`/`.iet`） | 二进制头 | 本页 `read_asb` |
+   | `.ast`，`label.top` 布局 | `looks_like_ast` | [artemis-ast](artemis-ast.md) |
+   | `.txt`/`.iet` SCP 文本 | `looks_like_script` | [artemis-scp](artemis-scp.md)；`[lua]` 区段跳过 |
+   | `scenario/*.lua`（Lua 表剧本） | Lua 表文本，无 SCP 结构 | **未支持，不要走 SCP**；`read_script` 以 `not_scp` 拒绝 |
+   | 旧布局 `.ast`（顶层 `text` 表） | `read_ast` 报 `old_layout` | **未支持，不要走 SCP** |
 5. 保存 ASB 树、提取字段身份与原始字节，之后只修改批准的属性。
-- 本模块不处理容器 XOR、目录索引、压缩或加载优先级；pf8 载荷 XOR、索引尾部附加表、多卷覆盖由 `pfs.py` 处理。
+- 本模块不处理容器 XOR、目录索引、压缩或加载优先级；pf8 载荷 XOR、索引尾部附加表、多卷覆盖由 `pfs.py` 处理。读成员时必须用**该成员所在卷**的索引（`member.volume` 对应的 `read_index` 结果），每卷 XOR key 不同，用错卷的索引会静默得到乱码。
 - pf8 载荷 XOR key 来自索引的 SHA-1；修改 index 后 key 会变化，不能只复制旧密文而不按新索引重新处理载荷。
 - 名称编码不要固定假设 CP932：`read_index` 默认自动判定，pf8 的成员名可以使用 UTF-8。
 
@@ -87,7 +95,20 @@ assert read_asb(changed)[1].line_number == 42
 
 - 可以把修改后的文件单独打包为 `xx.pfs.0xx` 形式的补丁卷：前缀沿用现有包名，末尾数字序号取**当前同族所有包的最大序号之后**，后加载的高序号卷覆盖前面卷中的同名成员。例如已有 `game.pfs`、`game.pfs.000`、`game.pfs.012`，可生成 `game.pfs.013`。
 - 每个补丁卷都是独立、完整的 PFS 归档；只需包含要替换的成员，不必重打整个原包，也不是把原包按字节切片。容器版本及成员名编码应与目标兼容，由 `pfs.py` 的 writer 正确重建索引和载荷。
-- **保留成员在原包中的完整逻辑路径和大小写**，例如原文件为 `scenario/common/start.asb`，补丁中仍用该路径；不要扁平化或额外套一层目录，否则不能覆盖原成员。该技巧属于容器层，同样适用于 ASB、SCP 和 AST 剧本。
+- **保留成员在原包中的完整逻辑路径和大小写**，例如原成员为 `scenario\common\start.asb`，补丁中仍用该名字；不要扁平化或额外套一层目录，否则不能覆盖原成员。该技巧属于容器层，同样适用于 ASB、SCP 和 AST 剧本。
+- **成员名分隔符是 `\`**（真实索引中的原样字节），不是 `/`。直接取 `read_index` 给出的 `entry.name` 写回，不要用 `os.path`/`Path` 重新拼接或把 `\` 规范成 `/`，否则名字不同、无法覆盖。
+- **新卷的容器参数与已有卷一致**：`version`（pf 版本号）和 `name_encoding` 取已有同族卷的值；若各卷不一致，取当前覆盖链中序号最高（最后加载）的那一卷。若已有卷的尾部附加表都符合记录偏移表布局（`pfs.trailing_matches_offset_table(index)` 为真），用 `pfs.build(..., trailing="auto")` 为新卷生成同样的表；游戏是否依赖此表尚未验证，保持一致只是降低风险。
+
+```python
+from python.archives import pfs
+
+paths = pfs.volume_paths("game/root.pfs")
+indexes = {p: pfs.read_index(p) for p in paths}
+ref = indexes[paths[-1]]                           # 序号最高的已有卷
+changed = [("scenario\\00\\0001.ast", b"...")]      # 名字取原 entry.name，含 "\"
+patch = pfs.build(changed, version=ref.version, name_encoding=ref.name_encoding,
+                  trailing="auto" if pfs.trailing_matches_offset_table(ref) else b"")
+```
 - 编号按数值比较，并沿用现有补零宽度；先枚举已有补丁，避免新包序号仍低于更晚的官方或汉化补丁。回填基准也应取覆盖链中最终生效的成员。
 - agent 默认在新结果目录生成高序号补丁卷，重新读取并核对成员与覆盖链，然后告知用户其对应的原包目录。先用少量中文确认目标发行版实际加载了补丁，再批量制作；部署与游戏启动沿用主流程授权边界。
 

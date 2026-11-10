@@ -5,6 +5,7 @@ mirror the ones verified against a real release (see engines/artemis-scp.md).
 """
 
 from pathlib import Path
+import struct
 import sys
 import unittest
 
@@ -79,7 +80,7 @@ class LineKindTests(unittest.TestCase):
 
     def test_linetag_lines_never_become_messages(self):
         text = "#\u7acb\u3061\u7d75 x,y\r\ntext line\r\n"
-        records = scp.read_script(text.encode("utf-8")).records
+        records = scp.read_script(text.encode("utf-8"), force=True).records
         self.assertEqual([r.text for r in records], ["text line"])
 
 
@@ -111,7 +112,7 @@ class SpeakerTests(unittest.TestCase):
 
     def test_speaker_tags_enable_a_display_name_override(self):
         text = "[\u4e3b\u4eba\u516c]\r\n\u300c\u3042\u300d\r\n"
-        records = scp.read_script(text.encode("utf-8"),
+        records = scp.read_script(text.encode("utf-8"), force=True,
                                   speaker_tags=frozenset({"\u4e3b\u4eba\u516c"})).records
         self.assertEqual((records[0].name, records[0].name_policy),
                          ("\u4e3b\u4eba\u516c", "writable"))
@@ -119,18 +120,19 @@ class SpeakerTests(unittest.TestCase):
     def test_command_tags_are_never_read_as_speakers(self):
         text = "[custom name=\"display\"]\r\n\u300c\u3042\u300d\r\n"
         raw = text.encode("utf-8")
-        self.assertEqual(scp.read_script(raw).records[0].name, "display")
+        self.assertEqual(scp.read_script(raw, force=True).records[0].name, "display")
         schema = scp.TagSchema.parse(TAG_INI, encoding="utf-8")
-        self.assertIsNone(scp.read_script(raw, tag_schema=schema).records[0].name)
-        self.assertIsNone(scp.read_script(raw, command_tags=frozenset({"custom"})).records[0].name)
+        self.assertIsNone(scp.read_script(raw, tag_schema=schema, force=True).records[0].name)
+        self.assertIsNone(scp.read_script(raw, command_tags=frozenset({"custom"}),
+                                          force=True).records[0].name)
         # An explicit speaker pin wins over the built-in command set.
         pinned = scp.read_script("[var name=\"x\" data=\"y\"]\r\n\u300c\u3042\u300d\r\n".encode("utf-8"),
-                                 speaker_tags=frozenset({"var"})).records
+                                 speaker_tags=frozenset({"var"}), force=True).records
         self.assertEqual((pinned[0].name, pinned[0].name_policy), ("x", "writable"))
 
     def test_builtin_command_set_catches_the_name_attribute_trap(self):
         raw = "[var name=\"scenario_path\" data=\"x\"]\r\n\u300c\u3042\u300d\r\n".encode("utf-8")
-        self.assertIsNone(scp.read_script(raw).records[0].name)
+        self.assertIsNone(scp.read_script(raw, force=True).records[0].name)
 
 
 class GroupingTests(unittest.TestCase):
@@ -267,7 +269,7 @@ class RoundtripTests(unittest.TestCase):
             self.assertEqual(caught.exception.code, 'shared_name_conflict')
 
     def test_variable_display_name_stays_context_only(self):
-        script = _read('[人物 name="$str20" voice="v"]\n「Body」\n')
+        script = _read('[人物 name="$str20" voice="v"]\n「Body」\n', force=True)
         self.assertEqual(script.name_policies(), ['context'])
         self.assertEqual(script.patch(script.rows()), script.text.encode('utf-8'))
         rows = script.rows()
@@ -279,8 +281,8 @@ class RoundtripTests(unittest.TestCase):
     def test_malformed_speaker_command_and_name_injection_rejected(self):
         for command in ('[人物 voice="v"', '[人物 name="a" name="b"]', '[人物 voice="v]'):
             with self.assertRaises(scp.ScpError):
-                _read(command + '\n「Body」\n')
-        script = _read('[人物 voice="v"]\n「Body」\n')
+                _read(command + '\n「Body」\n', force=True)
+        script = _read('[人物 voice="v"]\n「Body」\n', force=True)
         for name in ('', 'bad"name', 'bad\nname', 'bad\0name'):
             rows = script.rows()
             rows[0]['name'] = name
@@ -289,13 +291,14 @@ class RoundtripTests(unittest.TestCase):
 
     def test_patch_method_carries_the_speaker_policy(self):
         raw = "[\u4e3b\u4eba\u516c]\r\n\u300c\u3042\u300d\r\n".encode("utf-8")
-        script = scp.read_script(raw, speaker_tags=frozenset({"\u4e3b\u4eba\u516c"}))
+        script = scp.read_script(raw, speaker_tags=frozenset({"\u4e3b\u4eba\u516c"}),
+                                 force=True)
         self.assertEqual(script.speaker_tags, frozenset({"\u4e3b\u4eba\u516c"}))
         rows = script.rows()
         self.assertEqual(script.patch(rows), raw)
         # Rebuilding without the pinned policy would silently lose the name slot.
         with self.assertRaises(scp.ScpError) as caught:
-            scp.patch_script(raw, rows)
+            scp.patch_script(raw, rows, force=True)
         self.assertEqual(caught.exception.code, "name_not_writable")
 
     def test_one_speaker_command_cannot_receive_two_names(self):
@@ -309,6 +312,144 @@ class RoundtripTests(unittest.TestCase):
         with self.assertRaises(scp.ScpError) as caught:
             scp.patch_script(raw, rows, encoding="utf-8")
         self.assertEqual(caught.exception.code, "shared_name_conflict")
+
+
+LUA_SECTION = (
+    "*top\r\n"
+    "[adv]\r\n"
+    "[lua]\r\n"
+    "function init()\r\n"
+    "\tlocal msg = \"\u300c\u3053\u3093\u306b\u3061\u306f\u300d\"\r\n"
+    "\r\n"
+    "\te:tag{\"var\", name=\"x\"}\r\n"
+    "end\r\n"
+    "[/lua]\r\n"
+    "[\u5e78\u679d file=\"sachie_t001\"]\r\n"
+    "\u300c\u3042\u308a\u304c\u3068\u3046\u300d\r\n"
+    "\r\n"
+    "\u5f7c\u306f\u7b11\u3063\u305f\u3002\r\n"
+)
+LUA_TABLE_SCRIPT = (
+    "ast = {\n"
+    "\tblock_00000 = {\n"
+    "\t\t{\"text\"},\n"
+    "\t\ttext = {\n"
+    "\t\t\tja = {\n"
+    "\t\t\t\t{ \"\u300c\u3042\u300d\" },\n"
+    "\t\t\t},\n"
+    "\t\t},\n"
+    "\t},\n"
+    "\t[\"0001\"] = {},\n"
+    "}\n"
+)
+PLAIN_LUA = (
+    "-- system script\n"
+    "function init()\n"
+    "\tlocal t = { [1] = \"a\", [2] = \"b\" }\n"
+    "\tprint(\"\u3053\u3093\u306b\u3061\u306f\")\n"
+    "end\n"
+)
+
+
+class LuaAndGateTests(unittest.TestCase):
+    def test_lua_section_is_skipped_and_kept(self):
+        raw = LUA_SECTION.encode("utf-8")
+        script = scp.read_script(raw)
+        self.assertEqual([r.text for r in script.records],
+                         ["\u300c\u3042\u308a\u304c\u3068\u3046\u300d",
+                          "\u5f7c\u306f\u7b11\u3063\u305f\u3002"])
+        self.assertEqual(script.records[0].name, "\u5e78\u679d")
+        self.assertEqual(script.patch(script.rows()), raw)
+        rows = script.rows()
+        rows[1]["message"] = "\u4ed6\u7b11\u4e86\uff0c\u7b11\u5f97\u5f88\u5f00\u5fc3\u3002"
+        rebuilt = script.patch(rows).decode("utf-8")
+        self.assertIn("[lua]\r\nfunction init()\r\n", rebuilt)
+        self.assertIn("\te:tag{\"var\", name=\"x\"}\r\nend\r\n[/lua]\r\n", rebuilt)
+
+    def test_lua_only_iet_is_rejected_unless_forced(self):
+        raw = ("[lua]\r\nfunction a()\r\n\treturn 1\r\nend\r\n[/lua]\r\n").encode("utf-8")
+        with self.assertRaises(scp.ScpError) as caught:
+            scp.read_script(raw)
+        self.assertEqual(caught.exception.code, "not_scp")
+        self.assertEqual(scp.read_script(raw, force=True).records, ())
+
+    def test_unbalanced_lua_sections_are_rejected(self):
+        for body in ("*top\r\n[adv]\r\n[lua]\r\nx = 1\r\n\u300c\u3042\u300d\r\n",
+                     "*top\r\n[adv]\r\n[/lua]\r\n\u300c\u3042\u300d\r\n\u300c\u3044\u300d\r\n"):
+            with self.subTest(body=body[:20]):
+                with self.assertRaises(scp.ScpError) as caught:
+                    scp.read_script(body.encode("utf-8"), force=True)
+                self.assertIn(caught.exception.code, ("unterminated_lua", "unbalanced_lua"))
+
+    def test_translation_cannot_open_a_lua_section(self):
+        script = scp.read_script(LUA_SECTION.encode("utf-8"))
+        rows = script.rows()
+        rows[1]["message"] = "[lua]"
+        with self.assertRaises(scp.ScpError) as caught:
+            script.patch(rows)
+        self.assertEqual(caught.exception.code, "line_kind_changed")
+
+    def test_lua_table_scripts_and_plain_lua_are_not_scp(self):
+        for sample in (LUA_TABLE_SCRIPT, PLAIN_LUA):
+            raw = sample.encode("utf-8")
+            with self.subTest(sample=sample[:12]):
+                self.assertFalse(scp.looks_like_script(raw))
+                with self.assertRaises(scp.ScpError) as caught:
+                    scp.read_script(raw)
+                self.assertEqual(caught.exception.code, "not_scp")
+                with self.assertRaises(scp.ScpError) as caught:
+                    scp.patch_script(raw, [])
+                self.assertEqual(caught.exception.code, "not_scp")
+
+    def test_long_leading_lua_section_does_not_hide_scp(self):
+        lua = "[lua]\r\n" + "".join(f"x{i} = {i}\r\n" for i in range(80)) + "[/lua]\r\n"
+        raw = (lua + SCRIPT).encode("utf-8")
+        self.assertTrue(scp.looks_like_script(raw))
+        self.assertEqual(len(scp.read_script(raw).records), ROWS)
+
+
+class PfsOffsetTableTests(unittest.TestCase):
+    def test_auto_trailing_table_layout_and_readback(self):
+        from python.archives import pfs
+        entries = [("script\\a.ast", b"alpha"), ("script\\\u7b2c\u4e00.ast", "\u4e2d\u6587".encode("utf-8")),
+                   ("system\\first.iet", b"x" * 33)]
+        data = pfs.build(entries, version=8, trailing="auto")
+        index = pfs.read_index(data)
+        raws = [name.encode("utf-8") for name, _ in entries]
+        self.assertEqual(index.trailing, pfs.offset_table(raws))
+        self.assertTrue(pfs.trailing_matches_offset_table(index))
+        # Structure: u32 n+1 | (n+1) x u64 | u32 table offset inside the index.
+        n = len(entries)
+        self.assertEqual(len(index.trailing), 4 + 8 * (n + 1) + 4)
+        count, = struct.unpack_from("<I", index.trailing, 0)
+        self.assertEqual(count, n + 1)
+        values = struct.unpack_from(f"<{n + 1}Q", index.trailing, 4)
+        self.assertEqual(values[-1], 0)
+        table_offset, = struct.unpack_from("<I", index.trailing, 4 + 8 * (n + 1))
+        self.assertEqual(table_offset, index.index_end - 7 - len(index.trailing))
+        # Each u64 locates the record's offset field relative to the record area.
+        raw_index = data[7:index.index_end]
+        for value, entry in zip(values, index.entries):
+            self.assertEqual(struct.unpack_from("<I", raw_index, 4 + value)[0], entry.offset)
+        for entry, (name, payload) in zip(index.entries, entries):
+            self.assertEqual(entry.name, name)
+            self.assertEqual(pfs.read_member(data, index, entry).data, payload)
+        # The table is hashed into the key, and an unchanged repack is identical.
+        self.assertEqual(pfs.repack(index, {e.ordinal: pfs.read_member(data, index, e).data
+                                            for e in index.entries}), data)
+
+    def test_auto_trailing_follows_index_order_and_rejects_other_versions(self):
+        from python.archives import pfs
+        entries = [("b", b"22"), ("a", b"1")]
+        data = pfs.build(entries, version=8, trailing="auto", index_order=[1, 0])
+        index = pfs.read_index(data)
+        self.assertEqual([e.name for e in index.entries], ["a", "b"])
+        self.assertTrue(pfs.trailing_matches_offset_table(index))
+        for version in (0, 2):
+            with self.assertRaises(pfs.PfsError):
+                pfs.build(entries, version=version, trailing="auto")
+        with self.assertRaises(pfs.PfsError):
+            pfs.build(entries, trailing="other")
 
 
 class ProbeTests(unittest.TestCase):

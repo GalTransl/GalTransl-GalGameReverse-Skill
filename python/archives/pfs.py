@@ -454,6 +454,31 @@ def _padding_for(index, ordinal):
     raise PfsError("missing_entry", f"no entry with ordinal {ordinal}", "write")
 
 
+def offset_table(raw_names) -> bytes:
+    """Observed pf6/pf8 trailing table for records with these raw names (index order).
+
+    ``u32 count (= n + 1) | count x u64 | u32``: ``u64[i]`` is the position of
+    record *i*'s ``offset`` field relative to the start of the record area
+    (just after the u32 entry count, hence ``- 8`` from the record end), the
+    last u64 is 0, and the final u32 is the table's own offset inside the index.
+    Matches real volumes; whether an engine needs the table is not verified.
+    """
+    positions, end = [], 0
+    for raw in raw_names:
+        end += len(raw) + 16
+        positions.append(end - 8)
+    table = struct.pack("<I", len(positions) + 1)
+    table += b"".join(struct.pack("<Q", value) for value in positions)
+    table += struct.pack("<Q", 0) + struct.pack("<I", 4 + end)
+    return table
+
+
+def trailing_matches_offset_table(index: ArchiveIndex) -> bool:
+    """True when an index's trailing table is exactly :func:`offset_table`."""
+    return index.version in (6, 8) and bool(index.trailing) and \
+        index.trailing == offset_table([entry.name_bytes for entry in index.entries])
+
+
 def build(entries, *, version: int = 8, name_encoding: str = "utf-8",
           trailing: bytes = b"", index_order=None, max_entries: int = 100_000,
           max_total_size: int = 512 << 20) -> bytes:
@@ -462,10 +487,19 @@ def build(entries, *, version: int = 8, name_encoding: str = "utf-8",
     ``entries`` is the **physical** placement order. ``index_order`` optionally
     permutes the entry records inside the index, because real volumes do not keep
     the index in offset order; pass it together with the original ``trailing`` to
-    reproduce an existing layout.
+    reproduce an existing layout. ``trailing="auto"`` (pf6/pf8 only) appends the
+    record-offset table described by :func:`offset_table`, computed for the new
+    records, as a fresh patch volume would carry it.
     """
     if version not in SUPPORTED_VERSIONS:
         raise PfsError("unsupported_version", f"cannot write pf{version}", "write")
+    auto_trailing = isinstance(trailing, str)
+    if auto_trailing:
+        if trailing != "auto":
+            raise PfsError("bad_trailing", "trailing must be bytes or 'auto'", "write")
+        if version not in (6, 8):
+            raise PfsError("bad_trailing", "trailing='auto' is only defined for pf6/pf8", "write")
+        trailing = b""
     trailing = bytes(trailing)
     pad_len = _PF2_PADDING if version == 2 else (0 if version == 0 else 4)
     normalised = []
@@ -516,6 +550,8 @@ def build(entries, *, version: int = 8, name_encoding: str = "utf-8",
     entry_index_size = (len(normalised) * _PF0_RECORD if version == 0 else
                         (8 if version == 2 else 4) + sum(4 + len(item[2]) + pad_len + 8
                                                         for item in normalised))
+    if auto_trailing:
+        trailing = offset_table([normalised[i][2] for i in order])
     index_size = entry_index_size + len(trailing)
     position = 7 + index_size
     offsets = {}

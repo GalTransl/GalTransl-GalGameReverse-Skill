@@ -11,6 +11,7 @@ uses.
 from pathlib import Path
 import sys
 import unittest
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -191,11 +192,12 @@ class UnitTests(unittest.TestCase):
         self.assertEqual(self.units[2].line_lead[0], ('{"exfont", size="f2"}',))
         self.assertEqual(self.units[2].line_tail[0], ('{"exfont"}',))
 
-    def test_rows_use_name_only_for_a_single_slot(self):
+    def test_rows_export_the_last_slot_as_the_display_name(self):
         rows = self.document.rows()
         self.assertEqual(rows[0], {"message": "第一章"})
-        self.assertEqual(rows[1]["names"], ["静流", "？？？"])
-        self.assertNotIn("name", rows[1])
+        self.assertEqual(rows[1]["name"], "？？？")
+        self.assertNotIn("names", rows[1])
+        self.assertEqual(list(rows[1]), ["name", "message"])
         self.assertEqual(rows[2]["name"], "静流")
         self.assertEqual(rows[4], {"message": "はい"})
 
@@ -213,10 +215,13 @@ class UnitTests(unittest.TestCase):
         self.assertEqual(locator["inline_commands"], [])
         self.assertEqual(locator["furigana"], ["つぶらぎ"])
 
-    def test_both_slots_are_exported_so_no_translation_is_lost(self):
-        # msg-tool keeps only the last member, SExtractor's regex only the second.
-        self.assertEqual(len(self.units[1].names), 2)
-        self.assertEqual(self.document.name_policies()[1], "writable")
+    def test_slot_zero_is_identity_context(self):
+        self.assertEqual(self.units[1].identity_name, "静流")
+        self.assertEqual(self.units[1].display_name, "？？？")
+        locators = self.document.locators()
+        self.assertEqual(locators[1]["name_identity"], "静流")
+        self.assertEqual(locators[2]["name_identity"], "静流")
+        self.assertIsNone(locators[3]["name_identity"])
 
 
 class RoundtripTests(unittest.TestCase):
@@ -228,7 +233,7 @@ class RoundtripTests(unittest.TestCase):
     def test_translation_survives_a_reparse(self):
         document = read()
         rows = document.rows()
-        rows[1]["names"] = ["静流", "？？？"]
+        rows[1]["name"] = "？？？"
         rows[1]["message"] = "「原来如此，圆木当店长时的常客吗？」\n那是十年前左右的事了。"
         rows[2]["message"] = "「不用了」"
         rows[3]["message"] = "「欢迎下次再来」"
@@ -240,14 +245,52 @@ class RoundtripTests(unittest.TestCase):
                          [row["message"] for row in rows])
         self.assertEqual(after.units[1].names, ("静流", "？？？"))
 
-    def test_name_slots_are_writable(self):
+    def test_only_the_display_slot_is_written(self):
         document = read()
         rows = document.rows()
-        rows[1]["names"] = ["静", "？？？"]
+        rows[1]["name"] = "神秘人"
         rows[2]["name"] = "静"
-        rebuilt = read(ast.patch_ast(SOURCE, rows, encoding="utf-8"))
-        self.assertEqual(rebuilt.units[1].names, ("静", "？？？"))
-        self.assertEqual(rebuilt.units[2].names, ("静",))
+        raw = document.patch(rows)
+        rebuilt = read(raw)
+        # Slot 0 keeps the identity; a lone slot gains an appended display slot.
+        self.assertEqual(rebuilt.units[1].names, ("静流", "神秘人"))
+        self.assertEqual(rebuilt.units[2].names, ("静流", "静"))
+        self.assertEqual(rebuilt.rows()[1]["name"], "神秘人")
+        self.assertEqual(rebuilt.rows()[2]["name"], "静")
+        text = raw.decode("utf-8")
+        self.assertIn('name = {"静流", "神秘人"},', text)
+        self.assertIn('name = {"静流", "静"},', text)
+        # A name-only edit leaves the box itself (furigana included) untouched.
+        self.assertIn("つぶらぎ", text)
+        self.assertEqual(rebuilt.units[1].message, document.units[1].message)
+        # The appended display slot is replaced, not appended again, next time.
+        again = rebuilt.rows()
+        again[2]["name"] = "小静"
+        self.assertEqual(read(rebuilt.patch(again)).units[2].names, ("静流", "小静"))
+
+    def test_display_slot_and_message_change_together(self):
+        document = read()
+        rows = document.rows()
+        rows[2]["name"] = "静"
+        rows[2]["message"] = "「不用了」"
+        after = read(document.patch(rows))
+        self.assertEqual(after.units[2].names, ("静流", "静"))
+        self.assertEqual(after.units[2].message, "「不用了」")
+
+    def test_unchanged_display_name_adds_no_slot(self):
+        document = read()
+        rows = document.rows()
+        rows[2]["message"] = "「また」"
+        after = read(document.patch(rows))
+        self.assertEqual(after.units[2].names, ("静流",))
+
+    def test_identity_slot_cannot_be_targeted(self):
+        document = read()
+        rows = document.rows()
+        rows[1] = {"names": ["静", "？？？"], "message": rows[1]["message"]}
+        with self.assertRaises(ast.AstError) as caught:
+            document.patch(rows)
+        self.assertEqual(caught.exception.code, "bad_name")
 
     def test_non_text_structure_is_untouched(self):
         document = read()
@@ -399,12 +442,26 @@ class LuaSyntaxTests(unittest.TestCase):
         self.assertEqual(document.units[1].names, ("静流", "？？？"))
         self.assertEqual(document.units[1].name_keys, ("name", "ja"))
         self.assertEqual(document.patch(document.rows()), source)
+        self.assertEqual(document.rows()[1]["name"], "？？？")
         rows = document.rows()
-        rows[1]["names"] = ["静流子", "？？"]
+        rows[1]["name"] = "？？"
         rebuilt = ast.patch_ast(source, rows, encoding="utf-8")
         after = read(rebuilt)
-        self.assertEqual(after.units[1].names, ("静流子", "？？"))
+        self.assertEqual(after.units[1].names, ("静流", "？？"))
         self.assertEqual(after.units[1].name_keys, ("name", "ja"))
+
+    def test_lone_keyed_slot_is_context_only(self):
+        source = SOURCE.replace('name = {"静流"},'.encode("utf-8"),
+                                'name = { name="静流" },'.encode("utf-8"), 1)
+        self.assertNotEqual(source, SOURCE)
+        document = read(source)
+        self.assertEqual(document.name_policies()[2], "context")
+        self.assertEqual(document.patch(document.rows()), source)
+        rows = document.rows()
+        rows[2]["name"] = "静"
+        with self.assertRaises(ast.AstError) as caught:
+            document.patch(rows)
+        self.assertEqual(caught.exception.code, "name_not_writable")
 
 
 class RejectionTests(unittest.TestCase):
@@ -419,10 +476,11 @@ class RejectionTests(unittest.TestCase):
             read(b"ast = { block_00000 = {}, }\n")
         self.assertEqual(caught.exception.code, "missing_label")
 
-    def test_unknown_top_level_and_unknown_inline(self):
+    def test_any_named_top_level_table_and_unknown_inline(self):
+        self.assertEqual(read(b'ast = { label = { top = {} }, chapter = {}, }\n').units, ())
         with self.assertRaises(ast.AstError) as caught:
-            read(b'ast = { label = { top = {} }, chapter = {}, }\n')
-        self.assertEqual(caught.exception.code, "unknown_toplevel")
+            read(b'ast = { ["a"] = {}, ["a"] = {}, label = { top = { block="a" } }, }\n')
+        self.assertEqual(caught.exception.code, "duplicate_key")
         broken = SOURCE.replace(b'{"rt2"}', b'{"zzz"}', 1)
         with self.assertRaises(ast.AstError) as caught:
             read(broken)
@@ -496,6 +554,143 @@ class RejectionTests(unittest.TestCase):
             read(b"astver = 2.0\nast = { block_00000 = { text = { ja = { {} } }, },"
                  b' label = { top = {} } }\n')
         self.assertEqual(caught.exception.code, "empty_box")
+
+
+QUOTED = (
+    "astver = 2.0\r\nast = {\r\n"
+    '\t["0001_00001"] = {\r\n'
+    '\t\t{"text"},\r\n'
+    "\t\ttext = {\r\n\t\t\tja = {\r\n\t\t\t\t{\r\n"
+    '\t\t\t\t\tname = {"遥斗", "Haruto"},\r\n'
+    '\t\t\t\t\t"「おはよう」",\r\n'
+    '\t\t\t\t\t{"rt2"},\r\n'
+    "\t\t\t\t},\r\n\t\t\t},\r\n\t\t},\r\n"
+    '\t\tlinknext = "0001_00002",\r\n'
+    "\t},\r\n"
+    '\t["0001_00002"] = {\r\n'
+    '\t\t{"text"},\r\n'
+    "\t\ttext = {\r\n\t\t\tja = {\r\n\t\t\t\t{\r\n"
+    '\t\t\t\t\t"朝だ。",\r\n'
+    "\t\t\t\t},\r\n\t\t\t},\r\n\t\t},\r\n"
+    "\t},\r\n"
+    '\tlabel = { top = { block = "0001_00001", label = 1 }, },\r\n'
+    "}\r\n"
+).encode("utf-8")
+
+
+class QuotedBlockKeyTests(unittest.TestCase):
+    def test_quoted_string_block_keys_are_blocks(self):
+        document = ast.read_ast(QUOTED)
+        self.assertEqual([unit.block for unit in document.units],
+                         ["0001_00001", "0001_00002"])
+        self.assertEqual(document.rows()[0], {"name": "Haruto", "message": "「おはよう」"})
+        self.assertEqual(document.patch(document.rows()), QUOTED)
+
+    def test_quoted_key_rewrite_keeps_identity_and_links(self):
+        document = ast.read_ast(QUOTED)
+        rows = document.rows()
+        rows[0]["name"] = "遥斗君"
+        rows[0]["message"] = "「早上好，今天也要加油」"
+        rows[1]["message"] = "天亮了。"
+        rebuilt = document.patch(rows)
+        after = ast.read_ast(rebuilt)
+        self.assertEqual(after.units[0].names, ("遥斗", "遥斗君"))
+        self.assertEqual([u.message for u in after.units], [r["message"] for r in rows])
+        self.assertIn(b'["0001_00002"] = {', rebuilt)
+        self.assertIn(b'linknext = "0001_00002"', rebuilt)
+
+
+class EncodingRoundtripTests(unittest.TestCase):
+    def test_bomless_utf8_with_default_arguments_is_byte_identical(self):
+        document = ast.read_ast(SOURCE)          # no encoding argument
+        self.assertFalse(document.bom)
+        self.assertEqual(document.encoding, "utf-8")
+        rebuilt = document.patch(document.rows())
+        self.assertEqual(rebuilt, SOURCE)
+        self.assertFalse(rebuilt.startswith(b"\xef\xbb\xbf"))
+        rows = document.rows()
+        rows[1]["message"] = "改写"
+        changed = ast.patch_ast(SOURCE, rows)
+        self.assertFalse(changed.startswith(b"\xef\xbb\xbf"))
+
+    def test_bom_is_kept_with_default_arguments(self):
+        source = b"\xef\xbb\xbf" + SOURCE
+        document = ast.read_ast(source)
+        self.assertTrue(document.bom)
+        self.assertEqual(document.patch(document.rows()), source)
+        rows = document.rows()
+        rows[1]["message"] = "改写"
+        self.assertTrue(document.patch(rows).startswith(b"\xef\xbb\xbf"))
+        self.assertFalse(document.patch(rows)[3:].startswith(b"\xef\xbb\xbf"))
+
+    def test_explicit_utf8_sig_on_a_bomless_file_adds_no_bom(self):
+        document = ast.read_ast(SOURCE, encoding="utf-8-sig")
+        self.assertFalse(document.bom)
+        self.assertEqual(document.patch(document.rows()), SOURCE)
+
+    def test_cp932_fallback_roundtrip(self):
+        source = MINIMAL.replace(b"astver = 2.0", 'astname = "第一"'.encode("cp932"))
+        document = ast.read_ast(source)
+        self.assertEqual(document.encoding, "cp932")
+        self.assertEqual(document.patch(document.rows()), source)
+
+
+class ProbeBoundaryTests(unittest.TestCase):
+    def test_multibyte_character_across_the_probe_boundary(self):
+        head = 'astver = 2.0\nastname = "'.encode("utf-8")
+        body = head + "あ".encode("utf-8") * 40 + b'"\nast = {}\n'
+        for cut in range(len(head) + 1, len(head) + 9):
+            with self.subTest(cut=cut):
+                self.assertTrue(ast.looks_like_ast(body, max_bytes=cut))
+        self.assertTrue(ast.looks_like_ast(b"\xef\xbb\xbf" + body, max_bytes=len(head) + 5))
+
+    def test_cp932_character_across_the_probe_boundary(self):
+        body = 'astname = "'.encode("cp932") + "漢字".encode("cp932") * 20
+        self.assertTrue(ast.looks_like_ast(body, max_bytes=len(body) - 1))
+
+    def test_invalid_bytes_inside_the_prefix_still_fail(self):
+        self.assertFalse(ast.looks_like_ast(b"astver\xff\xfe = 2.0", encoding="utf-8"))
+        self.assertFalse(ast.looks_like_ast(b"\x80\x81 = 1"))
+
+
+class DocumentPatchVerificationTests(unittest.TestCase):
+    def test_document_patch_reuses_its_parse_options(self):
+        source = SOURCE.replace("ですか？".encode("utf-8"), "ですか\\我？".encode("utf-8"))
+        document = read(source, lenient_escapes=True)
+        self.assertTrue(document.lenient_escapes)
+        rows = document.rows()
+        rows[2]["message"] = "「不用了」"
+        after = read(document.patch(rows), lenient_escapes=True)
+        self.assertEqual(after.units[2].message, "「不用了」")
+        broken = SOURCE.replace(b'{"rt2"}', b'{"zzz"}', 1)
+        tagged = read(broken, extra_inline_tags={"zzz"})
+        self.assertEqual(tagged.extra_inline_tags, frozenset({"zzz"}))
+        rows = tagged.rows()
+        rows[3]["message"] = "「好」"
+        self.assertEqual(read(tagged.patch(rows), extra_inline_tags={"zzz"}).units[3].message,
+                         "「好」")
+
+    def test_document_patch_rejects_a_rebuild_that_does_not_reparse_equal(self):
+        document = read()
+        rows = document.rows()
+        rows[2]["message"] = "「不用了」"
+        original = ast.render
+
+        def tampered(doc, new_rows, **kwargs):
+            return original(doc, new_rows, **kwargs).replace("line = 150", "line = 151")
+
+        with mock.patch.object(ast, "render", tampered):
+            with self.assertRaises(ast.AstError) as caught:
+                document.patch(rows)
+        self.assertEqual(caught.exception.code, "verification_failed")
+
+        def wrong_text(doc, new_rows, **kwargs):
+            return original(doc, new_rows, **kwargs).replace("不用了", "不要了")
+
+        with mock.patch.object(ast, "render", wrong_text):
+            with self.assertRaises(ast.AstError) as caught:
+                document.patch(rows)
+        self.assertEqual(caught.exception.code, "verification_failed")
 
 
 class ContractTests(unittest.TestCase):
