@@ -1,4 +1,7 @@
-"""Bounded CatSystem2 INT/CST extraction into the GalTransl exchange layout."""
+"""Bounded CatSystem2 INT/CST extraction into the GalTransl exchange layout.
+
+``pack`` / ``readback`` subcommands live in catsystem2_pack (new updateNN.int).
+"""
 from __future__ import annotations
 
 import argparse
@@ -345,8 +348,43 @@ def extract_game(game_root, *, output=None, exe=None, password: str | None = Non
     return summary
 
 
+def _pack_main(argv) -> int:
+    from python.engines.catsystem2_pack import pack, read_back
+    parser = argparse.ArgumentParser(description="CatSystem2 update INT patch: pack / readback")
+    commands = parser.add_subparsers(dest="command", required=True)
+    for name in ("pack", "readback"):
+        command = commands.add_parser(name)
+        command.add_argument("workspace", help="extraction workspace (or JIS prepared workspace/)")
+        if name == "pack":
+            command.add_argument("output", help="new directory for updateNN.int + reports")
+            command.add_argument("--number", type=int, help="update number (default: highest + 1)")
+            command.add_argument("--translations", help="translation JSON directory; default gt_output")
+            command.add_argument("--readback", help="new directory for the overlay re-extraction")
+        else:
+            command.add_argument("rebuilt", help="pack output directory")
+            command.add_argument("output", help="new readback directory")
+        command.add_argument("--game", dest="game_root", help="game directory (default: from workspace)")
+        command.add_argument("--exe")
+        command.add_argument("--password")
+    args = vars(parser.parse_args(argv))
+    action = args.pop("command")
+    try:
+        result = pack(**args) if action == "pack" else read_back(**args)
+    except (OSError, ValueError) as error:
+        print(json.dumps({"ok": False, "error": f"{type(error).__name__}: {error}"},
+                         ensure_ascii=False, indent=2))
+        return 1
+    print(json.dumps(result, ensure_ascii=False, indent=2))
+    return 0
+
+
 def main(argv=None) -> int:
-    parser = argparse.ArgumentParser(description="Extract CatSystem2 INT/CST dialogue")
+    import sys
+    argv = list(sys.argv[1:] if argv is None else argv)
+    if argv and argv[0] in ("pack", "readback"):
+        return _pack_main(argv)
+    parser = argparse.ArgumentParser(
+        description="Extract CatSystem2 INT/CST dialogue (subcommands: pack, readback)")
     parser.add_argument("game_root")
     parser.add_argument("--output")
     parser.add_argument("--exe")

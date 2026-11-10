@@ -339,5 +339,233 @@ class CatSystemDialogueTests(unittest.TestCase):
             self.assertEqual(rows, [{"message": "encrypted"}])
 
 
+class CatSystemIntWriterTests(unittest.TestCase):
+    def test_encrypted_writer_matches_independent_fixture_and_reads_back(self):
+        member = make_cst([(0x20, "hello")])
+        compact = catsystem2_int.write_int([("scene.cst", member)], encrypted=True,
+                                           password="test-pass", seed=0x12345678, key_slot=0,
+                                           record_prefix=False)
+        self.assertEqual(compact, make_encrypted_int(member))
+        members = [("アbc.cst", member), ("Zz_name.cst", b"short"), ("empty.cst", b"")]
+        data = catsystem2_int.write_int(members, encrypted=True, password="test-pass")
+        archive = catsystem2_int.read_int(data, password="test-pass")
+        self.assertEqual([e.name for e in archive.entries], [m[0] for m in members])
+        for entry, (_, payload) in zip(archive.entries, members):
+            self.assertEqual(catsystem2_int.read_member(data, entry, archive.cipher), payload)
+        layout = catsystem2_int.detect_int_layout(data, archive)
+        self.assertTrue(layout.record_prefix)
+        self.assertEqual((layout.seed, layout.key_slot), (archive.seed, archive.key_slot))
+        again = catsystem2_int.write_int(members, encrypted=True, password="test-pass",
+                                         seed=layout.seed, key_slot=layout.key_slot)
+        self.assertEqual(again, data)
+        self.assertEqual(catsystem2_int.read_int(data).entries[0].name_known, False)
+
+    def test_plain_writer_name_sizes(self):
+        member = make_cst([(0x20, "plain")], compressed=False)
+        self.assertEqual(catsystem2_int.write_int([("plain.cst", member)], encrypted=False,
+                                                  name_size=0x20),
+                         make_plain_int("plain.cst", member))
+        long_name = "n" * 40 + ".cst"
+        data = catsystem2_int.write_int([(long_name, member), ("b.cst", b"x")], encrypted=False)
+        archive = catsystem2_int.read_int(data)
+        self.assertEqual(archive.name_size, 0x40)
+        self.assertEqual([e.name for e in archive.entries], [long_name, "b.cst"])
+        self.assertFalse(catsystem2_int.detect_int_layout(data, archive).record_prefix)
+
+    def test_writer_rejects_bad_input(self):
+        ok = [("a.cst", b"x")]
+        bad_calls = [
+            dict(members=[("a.cst", b"x"), ("A.CST", b"y")], encrypted=False),
+            dict(members=[("n" * 64, b"x")], encrypted=True, password="p"),
+            dict(members=[("n" * 32, b"x")], encrypted=False, name_size=0x20),
+            dict(members=[("汉.cst", b"x")], encrypted=False),
+            dict(members=[("__key__.dat", b"x")], encrypted=True, password="p"),
+            dict(members=[("dir/a.cst", b"x")], encrypted=False),
+            dict(members=[], encrypted=False),
+            dict(members=[("a.cst", "text")], encrypted=False),
+            dict(members=ok, encrypted=True),
+            dict(members=ok, encrypted=True, password="p", key=1),
+            dict(members=ok, encrypted=True, key=1 << 32),
+            dict(members=ok, encrypted=True, key=1, seed=-1),
+            dict(members=ok, encrypted=False, seed=1),
+            dict(members=ok, encrypted=False, record_prefix=True),
+            dict(members=ok, encrypted=False, name_size=0x30),
+            dict(members=[("a.cst", b"12345678")], encrypted=False, max_total=4),
+            dict(members=[("a.cst", b"x"), ("b.cst", b"y")], encrypted=False, max_members=1),
+        ]
+        for call in bad_calls:
+            with self.subTest(call=call), self.assertRaises(ValueError):
+                catsystem2_int.write_int(call.pop("members"), **call)
+        data = catsystem2_int.write_int(ok, encrypted=True, key=7)
+        with self.assertRaises(ValueError):
+            catsystem2_int.verify_int(data, [("a.cst", b"y")], key=7)
+        with self.assertRaises(ValueError):
+            catsystem2_int.verify_int(data, ok, key=8)
+
+
+class CatSystemTextRuleTests(unittest.TestCase):
+    def test_display_name_after_at_is_the_only_writable_part(self):
+        data = make_cst([(0x21, "結灯＠少女"), (0x20, "a"), (0x21, "＠x"), (0x20, "b"),
+                         (0x21, "ID＠"), (0x20, "c")])
+        exported = catsystem2.export_cst(data)
+        self.assertEqual(exported.rows[0], {"name": "少女", "message": "a"})
+        self.assertEqual(exported.locators[0]["name_prefix"], "結灯＠")
+        self.assertEqual(exported.name_policies, ("writable", "writable", "context"))
+        self.assertEqual(exported.rows[1]["name"], "＠x")
+        rows = [dict(r) for r in exported.rows]
+        rows[0]["name"] = "少年"
+        patched = catsystem2.patch_dialogue(data, exported, rows)
+        self.assertEqual(catsystem2.read_cst(patched).records[0].text, "結灯＠少年")
+        for name in ("結灯＠少年", ""):
+            bad = [dict(r) for r in exported.rows]
+            bad[0]["name"] = name
+            with self.subTest(name=name), self.assertRaises(ValueError):
+                catsystem2.patch_dialogue(data, exported, bad)
+        bad = [dict(r) for r in exported.rows]
+        bad[2]["name"] = "changed"
+        with self.assertRaises(ValueError):
+            catsystem2.patch_dialogue(data, exported, bad)
+
+    def test_leading_continuation_newline_is_kept(self):
+        data = make_cst([(0x20, r"\nnext line"), (0x20, "first\\nsecond")])
+        exported = catsystem2.export_cst(data)
+        self.assertEqual(exported.rows[0]["message"], "\nnext line")
+        ok = [{"message": "\n下一行"}, {"message": "一行"}]
+        catsystem2.patch_dialogue(data, exported, ok)
+        for rows in ([{"message": "下一行"}, ok[1]], [ok[0], {"message": "\n一行"}]):
+            with self.subTest(rows=rows), self.assertRaises(ValueError):
+                catsystem2.patch_dialogue(data, exported, rows)
+
+    def test_ruby_brackets_must_stay_well_formed(self):
+        data = make_cst([(0x20, r"[漢字/かんじ]を\f読む")])
+        exported = catsystem2.export_cst(data)
+        for text in ("[漢字/hanzi]読", "漢字読", "[一/yi]と[二/er]"):
+            catsystem2.patch_dialogue(data, exported, [{"message": text + r"\f"}])
+        for text in ("[漢字]読", "[漢字/]読", "漢字/かんじ]読", "[[a/b]]", "[a/b/c]"):
+            with self.subTest(text=text), self.assertRaises(ValueError):
+                catsystem2.patch_dialogue(data, exported, [{"message": text + r"\f"}])
+
+
+def _make_game(root, scripts, *, updates=()):
+    """Encrypted base scene.int (observed record-prefixed layout) + cs2.exe."""
+    root.mkdir()
+    (root / "cs2.exe").write_bytes(make_password_pe("test-pass"))
+    (root / "scene.int").write_bytes(catsystem2_int.write_int(
+        [(name, make_cst(items)) for name, items in scripts], encrypted=True,
+        password="test-pass"))
+    for name, members in updates:
+        (root / name).write_bytes(catsystem2_int.write_int(
+            [(n, make_cst(items)) for n, items in members], encrypted=True, password="test-pass"))
+    return root
+
+
+class CatSystemPackTests(unittest.TestCase):
+    scripts = [
+        ("01_common_02.cst", [(0x21, "結灯＠少女"), (0x20, r"「[漢字/かんじ]」\@"),
+                              (0x20, r"\n続き")]),
+        ("02_other.cst", [(0x20, "untouched")]),
+        ("03_empty.cst", [(0x30, "jump label")]),
+    ]
+
+    def _workspace(self, root, **game):
+        game_root = _make_game(root / "game", self.scripts, **game)
+        summary = extract_game(game_root, output=root / "ws")
+        self.assertEqual(summary["identity_roundtrip"]["failed"], 0)
+        return game_root, root / "ws"
+
+    def _translate(self, ws, rows=None):
+        rows = rows or [{"name": "少年", "message": "「[漢字/hanzi]」\\@"},
+                        {"message": "\n継続"}]
+        (ws / "gt_output" / "01_common_02.json").write_text(
+            json.dumps(rows, ensure_ascii=False), "utf-8")
+
+    def test_pack_only_changed_members_real_names_and_readback(self):
+        from python.engines.catsystem2_pack import pack, read_back
+        from python.common.contract import load_json
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            game, ws = self._workspace(root, updates=[("update01.int", [("02_other.cst", [(0x20, "new")])])])
+            rows = [{"name": "結灯", "message": "「[漢字/かんじ]」\\@"}, {"message": "\n続きだ"}]
+            self._translate(ws, rows)
+            (ws / "gt_output" / "02_other.json").write_bytes((ws / "gt_input" / "02_other.json").read_bytes())
+            result = pack(ws, root / "rebuilt", readback=root / "readback")
+            self.assertEqual(result["archive"], "update02.int")
+            self.assertEqual([m["member"] for m in result["changed_members"]], ["01_common_02.cst"])
+            self.assertEqual(result["unchanged_translation_files"], ["02_other.json"])
+            self.assertTrue(result["encrypted"] and result["record_prefix"])
+            self.assertEqual(sorted(p.relative_to(root / "rebuilt").as_posix()
+                                    for p in (root / "rebuilt").rglob("*") if p.is_file()),
+                             ["README.txt", "reports/verification.json", "update02.int"])
+            packed = (root / "rebuilt" / "update02.int").read_bytes()
+            archive = catsystem2_int.read_int(packed, password="test-pass")
+            self.assertEqual([e.name for e in archive.entries], ["01_common_02.cst"])
+            records = catsystem2.read_cst(catsystem2_int.read_member(
+                packed, archive.entries[0], archive.cipher)).records
+            self.assertEqual(records[0].text, "結灯＠結灯")
+            self.assertEqual(load_json((root / "readback/gt_input/01_common_02.json").read_bytes()), rows)
+            self.assertEqual(load_json((root / "readback/gt_input/02_other.json").read_bytes()),
+                             [{"message": "new"}])
+            self.assertEqual(sorted(p.name for p in (root / "readback/gt_input").iterdir()),
+                             sorted(p.name for p in (ws / "gt_input").iterdir()))
+            again = read_back(ws, root / "rebuilt", root / "readback2")
+            self.assertEqual(again["replaced_members"], 1)
+            with self.assertRaises(ValueError):
+                pack(ws, root / "numbered", number=1)
+            self.assertEqual(pack(ws, root / "numbered", number=7)["archive"], "update07.int")
+
+    def test_pack_rejections(self):
+        from python.engines.catsystem2_pack import pack
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            game, ws = self._workspace(root)
+            original = json.loads((ws / "gt_input" / "01_common_02.json").read_text("utf-8"))
+            cases = {
+                "unchanged": original,
+                "continuation": [original[0], {"message": "続き"}],
+                "id prefix": [dict(original[0], name="結灯＠少年"), original[1]],
+                "ruby": [dict(original[0], message="「[漢字]」\\@"), original[1]],
+                "row count": original[:1],
+            }
+            for label, rows in cases.items():
+                self._translate(ws, rows)
+                with self.subTest(label=label), self.assertRaises(ValueError):
+                    pack(ws, root / f"out-{label.replace(' ', '_')}")
+            self._translate(ws)
+            (ws / "gt_output" / "unknown.json").write_text("[]", "utf-8")
+            with self.assertRaises(ValueError):
+                pack(ws, root / "out-unknown")
+            (ws / "gt_output" / "unknown.json").unlink()
+            with self.assertRaises(ValueError):
+                pack(ws, root / "out-password", password="wrong")
+            with self.assertRaises(ValueError):
+                pack(ws, game / "inside")
+            (game / "update05.int").write_bytes(catsystem2_int.write_int(
+                [("01_common_02.cst", make_cst([(0x20, "newer")]))], encrypted=True,
+                password="test-pass"))
+            with self.assertRaises(ValueError):
+                pack(ws, root / "out-unscanned")
+            self.assertFalse(any((root / name).exists() for name in (
+                "out-unchanged", "out-unknown", "out-password", "out-unscanned")))
+
+    def test_jis_finalize_delivers_update_int(self):
+        from python.common.jis_workflow import finalize, prepare
+        from python.engines.catsystem2_extract import main
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            game, ws = self._workspace(root)
+            self._translate(ws, [{"name": "少年", "message": "「[汉字/hanzi]」\\@"},
+                                 {"message": "\n继续"}])
+            prepare(ws, root / "prep", encoding="cp932", proxy_policy="unused")
+            self.assertEqual(main(["pack", str(root / "prep/workspace"), str(root / "rebuilt")]), 0)
+            self.assertEqual(main(["readback", str(root / "prep/workspace"), str(root / "rebuilt"),
+                                   str(root / "readback")]), 0)
+            finalize(root / "prep", root / "rebuilt", root / "readback/gt_input", root / "deliver")
+            delivered = sorted(p.relative_to(root / "deliver").as_posix()
+                               for p in (root / "deliver").rglob("*") if p.is_file())
+            self.assertIn("update01.int", delivered)
+            self.assertFalse(any(name.endswith(".cst") or name.startswith("gt_input/")
+                                 for name in delivered))
+
+
 if __name__ == "__main__":
     unittest.main()

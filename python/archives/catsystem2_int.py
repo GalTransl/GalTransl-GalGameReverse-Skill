@@ -13,8 +13,14 @@ CRC32-normal (MSB-first, no final xor) of the CP932 passphrase, recoverable from
 exe's V_CODE2/DATA resource, itself Blowfish-LE encrypted with the KEY_CODE/KEY resource
 XORed with 0xCD (default "windmill"). Member bytes then feed
 python/engines/catsystem2.read_cst.
+
+write_int is the inverse (project implementation, same layout). GARbro's own
+INT writer only emits plain archives; the encrypted placement it mirrors (each
+member preceded by a copy of the previous stored index record, opaque u32 at
+0x48) was observed in real encrypted archives, see engines/catsystem2.md.
 """
 from dataclasses import dataclass, field
+import hashlib
 import io
 import os
 import struct
@@ -181,6 +187,28 @@ class IntArchive:
     cipher: object = field(default=None, repr=False)
     names_recovered: bool = True
     source_size: int = 0
+    # Header facts needed to mirror an archive in write_int: encrypted seed (0x4C),
+    # the opaque u32 at 0x48 (offset field of the __key__.dat slot; readers ignore
+    # it), and the plain-index name field width.
+    seed: int | None = None
+    key_slot: int | None = None
+    name_size: int | None = None
+
+
+@dataclass(frozen=True)
+class IntLayout:
+    """Observed member placement (detect_int_layout).
+
+    record_prefix=True: each member i is preceded by a verbatim copy of stored
+    index record i-1 (slot 0 = __key__.dat), as in all examined encrypted
+    archives. False: members follow the index back to back. Both end at EOF in
+    entry order.
+    """
+    encrypted: bool
+    seed: int | None
+    key_slot: int | None
+    name_size: int
+    record_prefix: bool
 
 
 @dataclass(frozen=True)
@@ -323,6 +351,16 @@ class Blowfish:
             l, r = self.decrypt(l, r)
             struct.pack_into("<II", buf, i, l, r)
 
+    def encrypt_block_le(self, buf: bytearray, length: int | None = None) -> None:
+        """Inverse of decrypt_block_le (writer side); same little-endian block I/O."""
+        end = len(buf) if length is None else length
+        if end % 8 or end > len(buf):
+            raise ValueError("blowfish length must be a multiple of 8 within the buffer")
+        for i in range(0, end, 8):
+            l, r = struct.unpack_from("<II", buf, i)
+            l, r = self.encrypt(l, r)
+            struct.pack_into("<II", buf, i, l, r)
+
 
 def _decrypt_name(raw: bytes, key: int) -> str:
     """msg-tool decrypt_name == GARbro DecipherName (alphabet z..aZ..A, step mod 0x34)."""
@@ -341,6 +379,21 @@ def _decrypt_name(raw: bytes, key: int) -> str:
         k = (k + 1) & 0xFFFFFFFF
         i += 1
     return out[:i].decode("cp932", errors="strict")
+
+
+_NAME_ALPHABET = b"zyxwvutsrqponmlkjihgfedcbaZYXWVUTSRQPONMLKJIHGFEDCBA"
+
+
+def _encrypt_name(raw: bytes, key: int) -> bytes:
+    """Exact inverse of _decrypt_name: letters (bytewise, also CP932 trail bytes) only."""
+    out = bytearray(raw)
+    k = ((key >> 24) + (key >> 16) + (key >> 8) + key) & 0xFF
+    for i, v in enumerate(out):
+        if 65 <= v <= 90 or 97 <= v <= 122:
+            j = 0x33 - _NAME_ALPHABET.index(v)
+            out[i] = _NAME_ALPHABET[(j + k % 0x34) % 0x34]
+        k = (k + 1) & 0xFFFFFFFF
+    return bytes(out)
 
 
 def _as_stream(source):
@@ -415,7 +468,7 @@ def probe_int(source, *, max_entries: int = _MAX_ENTRIES,
 
 
 def _parse_unencrypted(stream, file_size: int, count: int,
-                       max_index_size: int) -> tuple[IntEntry, ...]:
+                       max_index_size: int) -> tuple[tuple[IntEntry, ...], int]:
     budget_blocked = False
     for name_size in _NAME_SIZES:
         record_size = name_size + 8
@@ -446,7 +499,7 @@ def _parse_unencrypted(stream, file_size: int, count: int,
                 break
             entries.append(IntEntry(i, name, offset, size))
         if ok:
-            return tuple(entries)
+            return tuple(entries), name_size
     if budget_blocked:
         raise ValueError("INT index exceeds limit")
     raise ValueError("INT index does not match plain layout (name size 0x20/0x40)")
@@ -468,7 +521,7 @@ def read_int(source, *, password: str | None = None, key: int | None = None,
                           max_entries=max_entries, max_index_size=max_index_size)
         count = probe.entry_count
         if probe.encrypted:
-            seed, = struct.unpack_from("<I", header, 0x4C)
+            key_slot, seed = struct.unpack_from("<II", header, 0x48)
             twister = MersenneTwister(seed)
             cipher = Blowfish(struct.pack("<I", twister.rand()))
             if key is None and password is not None:
@@ -493,11 +546,12 @@ def read_int(source, *, password: str | None = None, key: int | None = None,
                     label = repr(name) if names_recovered else str(i)
                     raise ValueError(f"INT entry {label} points outside archive")
                 entries.append(IntEntry(i, name, offset, size, names_recovered))
-            return IntArchive(True, tuple(entries), cipher, names_recovered, file_size)
+            return IntArchive(True, tuple(entries), cipher, names_recovered, file_size,
+                              seed, key_slot, _NAME_FIELD)
         if count == 0:
             return IntArchive(False, (), None, True, file_size)
-        entries = _parse_unencrypted(stream, file_size, count, max_index_size)
-        return IntArchive(False, entries, None, True, file_size)
+        entries, name_size = _parse_unencrypted(stream, file_size, count, max_index_size)
+        return IntArchive(False, entries, None, True, file_size, name_size=name_size)
     finally:
         if close:
             stream.close()
@@ -535,6 +589,221 @@ def read_member(source, entry: IntEntry, cipher: Blowfish | None = None,
         if cipher is not None:
             cipher.decrypt_block_le(raw, len(raw) // 8 * 8)
         return bytes(raw)
+    finally:
+        if close:
+            stream.close()
+
+
+_MAX_WRITE_MEMBERS = 1 << 20
+_MAX_WRITE_TOTAL = 1024 * 1024 * 1024
+
+
+def detect_int_layout(source, archive: IntArchive) -> IntLayout:
+    """Classify member placement of a parsed archive with bounded reads.
+
+    Only the two layouts observed in real archives are accepted; anything else
+    (gaps, overlap, reordering, trailing bytes) is refused instead of guessed.
+    """
+    if not isinstance(archive, IntArchive):
+        raise ValueError("detect_int_layout expects an IntArchive from read_int")
+    stream, close = _as_stream(source)
+    try:
+        total = _size_of(stream)
+        if total != archive.source_size:
+            raise ValueError("INT source differs from the parsed archive")
+        name_size = archive.name_size or _NAME_FIELD
+        record_size = name_size + 8
+        slots = len(archive.entries) + (1 if archive.encrypted else 0)
+        position = 8 + slots * record_size
+        compact, prefixed = True, archive.encrypted
+        for k, entry in enumerate(archive.entries):
+            if compact and entry.offset != position:
+                compact = False
+            if prefixed:
+                if entry.offset != position + _ENTRY_RECORD:
+                    prefixed = False
+                else:
+                    copy = _read_at(stream, position, _ENTRY_RECORD, total, "member prefix")
+                    stored = _read_at(stream, 8 + k * _ENTRY_RECORD, _ENTRY_RECORD, total,
+                                      "index record")
+                    prefixed = copy == stored
+            if not compact and not prefixed:
+                break
+            position = entry.offset + entry.size
+        if position != total:
+            compact = prefixed = False
+        if not compact and not prefixed:
+            raise ValueError("INT member layout is neither contiguous nor record-prefixed")
+        return IntLayout(archive.encrypted, archive.seed, archive.key_slot, name_size,
+                         prefixed and not compact if archive.entries else False)
+    finally:
+        if close:
+            stream.close()
+
+
+def _member_list(members, name_size: int, max_members: int, max_member: int,
+                 max_total: int) -> list[tuple[str, bytes, bytes]]:
+    if not isinstance(members, (list, tuple)):
+        raise ValueError("INT members must be a list of (name, bytes) pairs")
+    if not members:
+        raise ValueError("INT writer needs at least one member")
+    if len(members) > max_members:
+        raise ValueError("INT member count exceeds limit")
+    result, seen, total = [], set(), 0
+    for item in members:
+        if not isinstance(item, (list, tuple)) or len(item) != 2:
+            raise ValueError("INT members must be a list of (name, bytes) pairs")
+        name, data = item
+        if not isinstance(name, str) or not name or "\0" in name or "/" in name or "\\" in name:
+            raise ValueError(f"invalid INT member name: {name!r}")
+        if name.casefold() == _KEY_ENTRY[:-1].decode("ascii"):
+            raise ValueError("__key__.dat is reserved for the encrypted key slot")
+        try:
+            encoded = name.encode("cp932", errors="strict")
+        except UnicodeEncodeError as exc:
+            raise ValueError(f"INT member name is not CP932: {name!r}") from exc
+        if len(encoded) >= name_size:
+            raise ValueError(f"INT member name exceeds {name_size - 1} bytes: {name!r}")
+        if name.casefold() in seen:
+            raise ValueError(f"duplicate INT member name: {name!r}")
+        seen.add(name.casefold())
+        if not isinstance(data, (bytes, bytearray, memoryview)):
+            raise ValueError(f"INT member data must be bytes: {name!r}")
+        data = bytes(data)
+        if len(data) > max_member:
+            raise ValueError(f"INT member exceeds limit: {name!r}")
+        total += len(data)
+        if total > max_total:
+            raise ValueError("INT output exceeds limit")
+        result.append((name, encoded, data))
+    return result
+
+
+def _u32(value, label: str) -> int:
+    if type(value) is not int or not 0 <= value <= 0xFFFFFFFF:
+        raise ValueError(f"INT {label} must be a u32")
+    return value
+
+
+def write_int(members, *, encrypted: bool, password: str | None = None,
+              key: int | None = None, seed: int | None = None, key_slot: int | None = None,
+              record_prefix: bool | None = None, name_size: int = _NAME_FIELD,
+              max_members: int = _MAX_WRITE_MEMBERS, max_member: int = _MAX_MEMBER,
+              max_total: int = _MAX_WRITE_TOTAL) -> bytes:
+    """Build a new INT from ``[(member name, bytes), ...]`` in the given order.
+
+    Encrypted output needs the passphrase (or its CRC key) for filenames; seed
+    (0x4C) and the opaque key_slot (0x48) default to values derived from the
+    content and should be copied from a template archive when mirroring one.
+    record_prefix defaults to the observed layout (True encrypted, False plain).
+    The result is re-read with read_int/read_member before it is returned.
+    """
+    if type(encrypted) is not bool:
+        raise ValueError("encrypted must be a bool")
+    for value, label in ((max_members, "member-count"), (max_member, "member-size"),
+                         (max_total, "total-size")):
+        if type(value) is not int or value < 1:
+            raise ValueError(f"invalid INT {label} limit")
+    if record_prefix is None:
+        record_prefix = encrypted
+    if type(record_prefix) is not bool:
+        raise ValueError("record_prefix must be a bool")
+    if encrypted:
+        if name_size != _NAME_FIELD:
+            raise ValueError("encrypted INT name field is 0x40 bytes")
+        if password is not None and key is not None:
+            raise ValueError("give either an INT password or its key, not both")
+        if password is not None:
+            key = encode_passphrase(password)
+        if key is None:
+            raise ValueError("encrypted INT writer needs the password or key for filenames")
+        key = _u32(key, "password key")
+    else:
+        if password is not None or key is not None or seed is not None or key_slot is not None:
+            raise ValueError("plain INT takes no password, key, seed or key slot")
+        if record_prefix:
+            raise ValueError("record-prefixed layout is only observed for encrypted INT")
+        if name_size not in _NAME_SIZES:
+            raise ValueError("plain INT name field must be 0x20 or 0x40 bytes")
+    items = _member_list(members, name_size, max_members, max_member, max_total)
+
+    if encrypted and (seed is None or key_slot is None):
+        digest = hashlib.sha256(b"catsystem2-int-writer\0")
+        for name, encoded, data in items:
+            digest.update(struct.pack("<I", len(encoded)) + encoded)
+            digest.update(hashlib.sha256(data).digest())
+        derived = digest.digest()
+        seed = int.from_bytes(derived[:4], "little") if seed is None else seed
+        key_slot = int.from_bytes(derived[4:8], "little") if key_slot is None else key_slot
+
+    record_size = name_size + 8
+    slots = len(items) + (1 if encrypted else 0)
+    position = 8 + slots * record_size
+    offsets = []
+    for _, _, data in items:
+        if record_prefix:
+            position += _ENTRY_RECORD
+        offsets.append(position)
+        position += len(data)
+    if position > 0xFFFFFFFF:
+        raise ValueError("INT output exceeds the u32 offset range")
+
+    records = []
+    body = []
+    if encrypted:
+        seed, key_slot = _u32(seed, "seed"), _u32(key_slot, "key slot")
+        twister = MersenneTwister(seed)
+        cipher = Blowfish(struct.pack("<I", twister.rand()))
+        records.append(_KEY_ENTRY.ljust(_NAME_FIELD, b"\0") + struct.pack("<II", key_slot, seed))
+        for i, ((_, encoded, data), offset) in enumerate(zip(items, offsets), 1):
+            twister.s_rand((key + i) & 0xFFFFFFFF)
+            name = _encrypt_name(encoded, twister.rand()).ljust(_NAME_FIELD, b"\0")
+            stored_offset, stored_size = cipher.encrypt(offset, len(data))
+            records.append(name + struct.pack("<II", (stored_offset - i) & 0xFFFFFFFF,
+                                              stored_size))
+            payload = bytearray(data)
+            cipher.encrypt_block_le(payload, len(payload) // 8 * 8)
+            body.append(bytes(payload))
+    else:
+        for (_, encoded, data), offset in zip(items, offsets):
+            records.append(encoded.ljust(name_size, b"\0") + struct.pack("<II", offset, len(data)))
+            body.append(data)
+    out = bytearray(_MAGIC + struct.pack("<I", slots))
+    for record in records:
+        out += record
+    for k, payload in enumerate(body):
+        if record_prefix:
+            out += records[k]
+        out += payload
+    if len(out) != position:
+        raise AssertionError("INT writer size bookkeeping failed")
+    result = bytes(out)
+    verify_int(result, [(name, data) for name, _, data in items], key=key if encrypted else None,
+               record_prefix=record_prefix)
+    return result
+
+
+def verify_int(data, members, *, password: str | None = None, key: int | None = None,
+               record_prefix: bool | None = None) -> IntArchive:
+    """Re-read an INT with read_int/read_member and require exact names, order and bytes."""
+    stream, close = _as_stream(data)
+    try:
+        archive = read_int(stream, password=password, key=key,
+                           max_entries=max(2, len(members) + 1))
+        if archive.encrypted and not archive.names_recovered:
+            raise ValueError("INT readback needs the password/key to compare names")
+        if len(archive.entries) != len(members):
+            raise ValueError("INT readback member count differs")
+        for entry, (name, payload) in zip(archive.entries, members):
+            if entry.name != name:
+                raise ValueError(f"INT readback name differs: {entry.name!r} != {name!r}")
+            if read_member(stream, entry, archive.cipher,
+                           max_member=max(len(payload), 1)) != payload:
+                raise ValueError(f"INT readback bytes differ: {name!r}")
+        layout = detect_int_layout(stream, archive) if record_prefix is not None else None
+        if layout is not None and layout.record_prefix != record_prefix:
+            raise ValueError("INT readback layout differs from the requested layout")
+        return archive
     finally:
         if close:
             stream.close()

@@ -339,14 +339,35 @@
           "input": "CatScene bytes, original record-index -> engine-native str",
           "output": "bounded inflated Scene/all typed records or appended-and-repointed CST",
           "specifics": "zlib wrapper, relative index/pool bases, 01/type/cstring records, inner/outer lengths"
+        },
+        {
+          "module": "python/archives/catsystem2_int.py",
+          "functions": [
+            "write_int",
+            "verify_int",
+            "detect_int_layout"
+          ],
+          "input": "ordered (member name, bytes) list; passphrase/key, seed, opaque 0x48 value, layout",
+          "output": "new plain or encrypted KIF archive, re-read with read_int/read_member",
+          "specifics": "project inverse of the GARbro/msg-tool reader (name substitution, Blowfish offset/size with index subtraction, LE ECB data); record-prefixed member layout observed in real encrypted archives; GARbro's own writer is plain-only"
+        },
+        {
+          "module": "python/engines/catsystem2_pack.py",
+          "functions": [
+            "pack",
+            "read_back"
+          ],
+          "input": "extraction workspace + gt_output; read-only game directory for template archive and passphrase",
+          "output": "new updateNN.int with changed CST members under real names, verification report, overlay readback gt_input",
+          "specifics": "project implementation; update??.INT enumeration string in the executable, numeric update order not verified in game"
         }
       ],
-      "name_policy": "retain all 0x21/0x20 records and empties; do not merge away consecutive names/continuations",
+      "name_policy": "retain all 0x21/0x20 records and empties; do not merge away consecutive names/continuations; only the part after the fullwidth ID separator is writable",
       "limitations": [
-        "writer only permits 0x20 and 0x21",
-        "no 0x30 choice-command or continuation semantics",
+        "writer permits 0x20, 0x21 and recognized 0x30 choice captions",
+        "leading continuation newlines and ruby bracket syntax are validated, not interpreted",
         "screen metadata preserved but not interpreted",
-        "no CSTL/INT keys or full deployment support"
+        "no CSTL; update archive load order and display not verified in game"
       ]
     },
     {

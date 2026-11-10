@@ -42,6 +42,26 @@ class DialogueExport:
 _CONTROL_TOKEN = re.compile(r"\\(?:[@pn]|[A-Za-z][A-Za-z0-9]*(?:\[[^\]\r\n]*\])?)")
 _CHOICE = re.compile(r"^\d+\s+\w+\s+(.+)")
 _DYNAMIC_NAME = re.compile(r"^\$[A-Za-z_][A-Za-z0-9_]*(?:\[[^\]\r\n]+\])?$")
+_NAME_SEPARATOR = "＠"  # fullwidth ＠ in "ID＠displayed name"
+_RUBY = re.compile(r"\[[^\[\]/\r\n]+/[^\[\]/\r\n]+\]")
+
+
+def _split_display_name(name: str) -> tuple[str, str]:
+    """``ID＠表示名`` -> (``ID＠``, ``表示名``); names without ＠ -> ("", name)."""
+    index = name.find(_NAME_SEPARATOR)
+    if index <= 0:
+        return "", name
+    return name[:index + 1], name[index + 1:]
+
+
+def _leading_breaks(message: str) -> int:
+    return len(message) - len(message.lstrip("\n"))
+
+
+def _ruby_residue(message: str) -> str:
+    """Bracket characters left after removing control tokens and [base/reading] ruby."""
+    text = _RUBY.sub("", _CONTROL_TOKEN.sub("", message))
+    return "".join(c for c in text if c in "[]")
 
 
 def read_cst(data: bytes, encoding: str = "cp932", *,
@@ -140,14 +160,22 @@ def export_cst(value, encoding: str = "cp932") -> DialogueExport:
         elif pending_name is None:
             policies.append("absent")
         else:
-            row = {"name": pending_name.text, "message": message}
+            name = pending_name.text
+            prefix, display = _split_display_name(name)
             locator["name_record"] = pending_name.index
             if intervening_commands:
                 locator["intervening_command_records"] = tuple(intervening_commands)
                 name_command_crossings.append((pending_name.index,
                                                tuple(intervening_commands)))
-            policies.append("context" if _DYNAMIC_NAME.fullmatch(pending_name.text)
-                            else "writable")
+            if _DYNAMIC_NAME.fullmatch(name) or (prefix and not display):
+                policies.append("context")
+            else:
+                policies.append("writable")
+                if prefix:
+                    # ID＠表示名: only the displayed part is exported for translation.
+                    locator["name_prefix"] = prefix
+                    name = display
+            row = {"name": name, "message": message}
         tokens = set(_CONTROL_TOKEN.findall(message))
         rows.append(row)
         locators.append(locator)
@@ -184,6 +212,13 @@ def patch_dialogue(data: bytes, exported: DialogueExport, translated_rows,
             raise ValueError(f"row {position}: line break in choice caption")
         if message.count("\n") > before["message"].count("\n"):
             raise ValueError(f"row {position}: translation uses more lines than the source")
+        if "choice_span" not in locator \
+                and _leading_breaks(message) != _leading_breaks(before["message"]):
+            raise ValueError(f"row {position}: leading line break (continuation) changed; "
+                             "keep the source's leading newlines")
+        if _ruby_residue(message) != _ruby_residue(before["message"]):
+            raise ValueError(f"row {position}: malformed ruby brackets; use [base/reading] "
+                             "with non-empty parts or drop the brackets")
         for token in tokens:
             if message.count(token) != before["message"].count(token):
                 raise ValueError(f"row {position}: protected token changed")
@@ -197,9 +232,11 @@ def patch_dialogue(data: bytes, exported: DialogueExport, translated_rows,
                 raise ValueError(f"row {position}: context-only name changed")
         elif policy == "writable":
             name = after.get("name")
-            if not isinstance(name, str) or "\0" in name:
-                raise ValueError(f"row {position}: invalid name")
-            replacements[locator["name_record"]] = name
+            if not isinstance(name, str) or "\0" in name or (not name and before["name"]) \
+                    or name.count(_NAME_SEPARATOR) != before["name"].count(_NAME_SEPARATOR):
+                raise ValueError(f"row {position}: invalid name (empty, NUL or added/removed "
+                                 f"{_NAME_SEPARATOR}; the ID before {_NAME_SEPARATOR} is fixed)")
+            replacements[locator["name_record"]] = locator.get("name_prefix", "") + name
         else:
             raise ValueError(f"row {position}: invalid name policy")
     result = patch_cst(data, replacements, encoding)
