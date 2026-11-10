@@ -754,7 +754,8 @@
       "document": "engines/entis-gls.md",
       "module": "python/engines/entis_gls.py",
       "source_license_ids": [
-        "GPL-3.0-or-later"
+        "GPL-3.0-or-later",
+        "MIT"
       ],
       "source_refs": [
         {
@@ -763,6 +764,39 @@
           "symbols": [
             "SrcXmlScript::extract_messages",
             "SrcXmlScript::import_messages"
+          ]
+        },
+        {
+          "source": "garbro",
+          "path": "ArcFormats/Entis/ArcNOA.cs",
+          "symbols": [
+            "NoaOpener.TryOpen",
+            "NoaOpener.OpenEntry",
+            "IndexReader.ParseDirEntry",
+            "NoaOpener.EncType",
+            "ERISADecodeContext",
+            "BSHFDecodeContext",
+            "ERIBshfBuffer.DecodeBuffer",
+            "NoaOpener.DecodeSimpleCrypt32"
+          ]
+        },
+        {
+          "source": "garbro",
+          "path": "ArcFormats/Entis/ErisaNemesis.cs",
+          "symbols": [
+            "NemesisDecodeContext.DecodeNemesisCodeBytes",
+            "ErisaProbBase",
+            "Nemesis",
+            "NemesisPhraseLookup"
+          ]
+        },
+        {
+          "source": "garbro",
+          "path": "ArcFormats/Entis/EriReader.cs",
+          "symbols": [
+            "ProbDecodeContext.DecodeERISACodeIndex",
+            "ProbDecodeContext.InitializeERISACode",
+            "ErisaProbModel"
           ]
         }
       ],
@@ -775,13 +809,59 @@
           "input": "XML str, optional language, record index -> name/message fields",
           "output": "typed records or semantic XML str",
           "specifics": "xscript/code/msg and select/menu; explicit localized attributes and writable-name evidence"
+        },
+        {
+          "module": "python/archives/entis_erisa.py",
+          "functions": [
+            "decode_nemesis",
+            "decode_bshf"
+          ],
+          "input": "ERISA-N stream bytes and exact (or end-coded) output size; BSHF bytes and ASCII password",
+          "output": "decoded bytes or FormatError",
+          "specifics": "MIT port of GARbro's ERISA library C# port; whole-buffer decoding with output/step/model budgets; short output is an error"
+        },
+        {
+          "module": "python/archives/entis_noa.py",
+          "functions": [
+            "read_index",
+            "read_member",
+            "build_noa",
+            "member_from_entry"
+          ],
+          "input": "NOA stream; optional password/name encoding; members as raw bytes or pass-through stored records",
+          "output": "nested-path index, decoded members, new flat NOA re-read by read_index",
+          "specifics": "GARbro ArcNOA index/encodings; project findings: UTF-8 name flag 0x01000000, ERISA-N u32 XOR trailer, header body size at 0x38; writer never compresses"
+        },
+        {
+          "module": "python/engines/entis_srcxml.py",
+          "functions": [
+            "extract_records",
+            "patch_records"
+          ],
+          "input": "engine-dialect SRCXML str (@ attribute names, &#N; references), language suffix",
+          "output": "msg/menu/open_line_msg records or span-patched str",
+          "specifics": "project lexical reader; record selection follows msg-tool SrcXmlScript; escape convention taken from engine-written files"
+        },
+        {
+          "module": "python/engines/entis_extract.py",
+          "functions": [
+            "extract",
+            "rebuild",
+            "readback",
+            "read_cotomi_config"
+          ],
+          "input": "read-only game directory or workspace + gt_output",
+          "output": "GalTransl workspace; new patch/overlay NOA with raw changed members and readback report",
+          "specifics": "project implementation; archive search order from the EXE IDR_COTOMI resource, overlay by member name not verified in game"
         }
       ],
       "name_policy": "existing msg name attribute writable; absent names and menu context cannot be invented",
       "limitations": [
-        "semantic XML normalization, not byte preservation on edits",
-        "no namespace dialect, CSX v1/v2 compiler or NOA writer",
-        "caller owns file encoding and XML declaration",
+        "semantic XML normalization in entis_gls; byte-preserving edits only in entis_srcxml",
+        "no CSX v1/v2 compiler; NOA writer is flat and raw-only (no ERISA-N encoder)",
+        "BSHF/SimpleCrypt32/ERISA-crypt decoding ported without real encrypted samples; no EXE key recovery",
+        "nested NOA directories follow GARbro layout, not seen in real samples",
+        "patch archive load order and in-game display not verified",
         "32 MiB input character limit"
       ]
     },

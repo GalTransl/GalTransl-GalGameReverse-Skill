@@ -41,6 +41,10 @@ GARbro 的根 MIT **不代表所有内嵌代码**。必须区分已经明确的�
 - 为不完整、宽松或游戏专用的上游路径保留边界，并加入拒绝未知版本、越界、丢失编码和冲突的条件。不能继承未知 opcode 的缺省空模板或解码失败回退原 bytes 后声称成功。
 - 资料中描述的 upstream writer 不一定在本包实现；每篇引擎页及对应 module docstring 才是这份参考的实际适用范围。`source_only` 是上游注册证据，不是当前 Python 能力状态。
 
+### Entis NOA 与 ERISA-N
+
+Entis NOA 索引、BSHF/SimpleCrypt32 解密与 ERISA-N 解码移植自 GARbro-Mod 的 `ArcFormats/Entis/ArcNOA.cs`、`ErisaNemesis.cs` 与 `EriReader.cs`（MIT，Copyright morkt；ERISA 库原作 Leshade Entis / Entis-soft，原通知见 [garbro-archive-notices.md](garbro-archive-notices.md)）。`python/archives/entis_erisa.py`、`entis_noa.py` 保留 MIT 标记；SRCXML 方言读写与工作流为本项目实现，记录选择沿用 msg-tool（GPL-3.0-or-later）。
+
 ### BGI 的 MIT / GPL 来源
 
 BGI 归档/DSC、标准 V1 扫描与工作流参考 GARbro-Mod 的 `ArcFormats/Ethornell/ArcBGI.cs`（MIT）、VNTextPatch-net8 的 `Scripts/Ethornell/`（MIT）与 msg-tool 的 `src/scripts/bgi/`（GPL-3.0-or-later）。精确提交见 `sources.json`，采用的文件/符号范围见当前模块头。MIT 版权、许可和免责声明与 GPL 派生部分的通知、许可及源码义务都须保留，不能把混合改编统一改标 MIT。

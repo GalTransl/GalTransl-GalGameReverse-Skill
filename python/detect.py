@@ -241,7 +241,7 @@ def _ypf_probe(header: bytes):
 
 ENTIS_SUBTYPES = (
     (b"ERISA-Archive file", "noa",
-     "Entis NOA archive (ERISA-Archive file at 0x10); no bundled NOA reader or ERISA-N decoder"),
+     "Entis NOA archive (ERISA-Archive file at 0x10); read with python/archives/entis_noa.py (ERISA-N decoded; raw writer)"),
     (b"Cotopha Image file", "csx",
      "Entis CSX script image (Cotopha Image file at 0x10); distinguish VM versions"),
 )
