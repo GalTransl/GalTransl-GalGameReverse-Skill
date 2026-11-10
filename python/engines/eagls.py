@@ -48,10 +48,12 @@ def read_labels(plain: bytes, *, text_offset: int, label_size: int = 36) -> tupl
 
 
 def fix_label_offsets(plain: bytes, *, text_offset: int, version: int, label_size: int = 36) -> bytes:
-    """Recompute existing labels after editing a decoded script, preserving header/footer.
+    """Legacy search: recompute labels that start a line, preserving header/footer.
 
     Match complete CR/LF line labels, not '$foo' inside '$foobar' or dialogue.
-    Old offsets need not fit the newly shortened body.
+    Old offsets need not fit the newly shortened body. Labels written directly
+    after a command (')$x', '"$x') are not found; the workspace pipeline uses
+    verify_label_offsets/apply_edits_with_labels instead.
     """
     if version not in (1, 2) or not 0 <= text_offset <= len(plain) - version:
         raise ValueError("invalid footer or text offset")
@@ -78,6 +80,78 @@ def fix_label_offsets(plain: bytes, *, text_offset: int, version: int, label_siz
     if not sentinel:
         raise ValueError("missing label-table sentinel")
     return bytes(out)
+
+
+# A stored offset must point at "$label" followed by one of these bytes (or the
+# end of the body), so "$START" never validates "$STARTED". Labels need not
+# start a line: real bodies contain '..."$label' and '...)$label'.
+LABEL_TERMINATORS = b":(\r\n"
+
+
+def _label_entries(plain, text_offset, label_size):
+    if label_size not in (36, 136):
+        raise ValueError("unsupported label record size")
+    seen = set()
+    for pos in range(0, text_offset - label_size + 1, label_size):
+        entry = plain[pos:pos + label_size]
+        if entry[0] == 0:
+            return
+        label = entry[:-4].split(b"\0", 1)[0]
+        if not label or label in seen:
+            raise ValueError("empty/duplicate label")
+        seen.add(label)
+        yield pos, label, struct.unpack_from("<I", entry, label_size - 4)[0]
+    raise ValueError("missing label-table sentinel")
+
+
+def verify_label_offsets(plain: bytes, *, text_offset: int, version: int, label_size: int = 36) -> int:
+    """Check every stored offset lands on its own '$label' token; return label count."""
+    if version not in (1, 2) or not 0 <= text_offset <= len(plain) - version:
+        raise ValueError("invalid footer or text offset")
+    body = plain[text_offset:-version]
+    count = 0
+    for _, label, offset in _label_entries(plain, text_offset, label_size):
+        tag = b"$" + label
+        end = offset + len(tag)
+        if body[offset:end] != tag or (end < len(body) and body[end] not in LABEL_TERMINATORS):
+            raise ValueError(f"label ${label.decode('cp932', 'replace')} offset {offset} "
+                             "does not point at its label token")
+        count += 1
+    return count
+
+
+def apply_edits_with_labels(plain: bytes, edits, *, text_offset: int, version: int,
+                            label_size: int = 36) -> bytes:
+    """Replace absolute byte spans and shift each stored label offset by the
+    cumulative size change of edits ending at or before it.
+
+    ``plain`` must already pass verify_label_offsets. Edits may not overlap
+    each other, the label table, the footer or any '$label' token.
+    """
+    verify_label_offsets(plain, text_offset=text_offset, version=version, label_size=label_size)
+    edits = sorted(edits)
+    labels = list(_label_entries(plain, text_offset, label_size))
+    previous = text_offset
+    for start, end, replacement in edits:
+        if not previous <= start <= end <= len(plain) - version or not isinstance(replacement, bytes):
+            raise ValueError("edit outside text body or overlapping")
+        for _, label, offset in labels:
+            tag_start = text_offset + offset
+            if start < tag_start + len(label) + 1 and end > tag_start:
+                raise ValueError(f"edit overlaps label ${label.decode('cp932', 'replace')}")
+        previous = end
+    out = bytearray()
+    cursor = 0
+    for start, end, replacement in edits:
+        out += plain[cursor:start] + replacement
+        cursor = end
+    out += plain[cursor:]
+    for pos, _, offset in labels:
+        shift = sum(len(r) - (e - s) for s, e, r in edits if e <= text_offset + offset)
+        struct.pack_into("<I", out, pos + label_size - 4, offset + shift)
+    result = bytes(out)
+    verify_label_offsets(result, text_offset=text_offset, version=version, label_size=label_size)
+    return result
 
 
 def dialogue_spans(line: str) -> tuple[tuple[str, int, int], ...]:

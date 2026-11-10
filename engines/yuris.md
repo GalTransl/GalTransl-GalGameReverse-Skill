@@ -15,7 +15,7 @@
 | 层 | 实现与范围 |
 |---|---|
 | v482 YPF | [yuris_482.py](../python/archives/yuris_482.py)：索引、Murmur2 校验、有界解压、模板重封 |
-| v482 YBN | [yuris_text.py](../python/engines/yuris_text.py)：WORD、单字符串 EVAL、姓名定义与选项、独立 manifest、追加式回填 |
+| v482 YBN | [yuris_text.py](../python/engines/yuris_text.py)：WORD、单字符串 EVAL、纯变量 EVAL 透传、姓名定义与选项、独立 manifest、追加式回填 |
 | 工作区 | [yuris_extract.py](../python/engines/yuris_extract.py)：`extract` / `rebuild` CLI |
 | 验证 | [test_yuris_482.py](../tests/test_yuris_482.py)、[来源记录](../provenance/yuris-482.json) |
 
@@ -32,6 +32,7 @@
 ### 对话与显示文字
 
 - raw `WORD` 作为可见文字导出，空 WORD 和空 `_` 不导出。`_`（EVAL）仅支持 YSCM 第一个参数元数据为字符串表达式、且指令只有一个 type=3 参数的完整字符串字面量；空字面量不导出。多参数、动态或组合表达式拒绝，不执行 VM，也不猜片段拼接规则。
+- 表达式字节码按 `u8 opcode + u16 载荷长度 + 载荷` 逐 token 切分，只有 `4D`（`M`）携带字符串。`_` 的全部非空参数均为 type=3、能完整切分且只含已证实的非字符串 token（`B`/`W`/`I` 数值，`H`/`V`/`v` 变量引用，`)` 下标结束及 `+ - * / % = ! , s` 运算符，载荷宽度固定）时，按纯变量计算（如 `$x(239)+$x(240)`）原字节透传，不导出、不报错，数量记入报告 `opaque_eval`。含 `M` 但不是单一完整字面量、出现其他 opcode、载荷宽度不符或切分有残尾的仍拒绝。
 - `【姓名】正文` 分成 `name` 与 `message`，回填恢复括号；正文引号、原有空格与换行保留，不自动排版。
 - `GOSUB ES.CHAR.NAME` 中第一个参数为调用目标，第二个参数（ID 33）为角色键，第三个参数（ID 34）为显示名；只导出第三个参数作为独立姓名定义行（`message` 字段），角色键及后续参数保持原字节。布局不符时拒绝，不沿用选择参数的遍历规则。`ES.SEL.SET` 导出 ID 33..48 的字面量 PSTR 选项，到空参数停止；运行时显示仍须单独验证。
 - 姓名/选项表达式必须是完整 `4D + u16长度 + 引号包围的字面量`；回填更新内层 u16 长度。未知组合表达式不会当普通文字替换。
@@ -42,21 +43,26 @@
 
 ### 可复现命令与产物
 
-在技能根目录运行；路径仅作示例，`<输出目录>` 应是游戏内新建的 `<游戏名>_extract`，可复用已存在的普通空目录，父目录须已存在；已有非空目录不能覆盖。
+在技能根目录运行；`<…>` 均为占位，按实际游戏替换。`<输出目录>` 应是游戏内新建的 `<游戏名>_extract`，可复用已存在的普通空目录，父目录须已存在；已有非空目录不能覆盖。
 
 ```text
-python -m python.engines.yuris_extract extract "<游戏目录>" "<输出目录>" --archive pac/update1.ypf --loose ysbin --uif-config uif_config.json --reference-archive pac/ysbin.ypf --reference-archive update1.ypf --smoke-test
+python -m python.engines.yuris_extract extract "<游戏目录>" "<输出目录>" --archive <剧本包相对路径>.ypf [--loose <原始松散YBN目录>] [--uif-config <映射配置>.json] [--reference-archive <其他包相对路径>.ypf] --smoke-test
 ```
 
-`--archive` 明确指定模板，`--loose` 明确指定本次文本基准；成员集合与 YSCM 必须一致。不自动猜测加载优先级、合并冲突文件或回溯扫描旧提取目录。没有已有字符映射时省略 `--uif-config`。
+- `--archive`：游戏目录内的 v482 剧本包，作为重封模板；其成员集合与 YSCM 决定回填范围。
+- `--loose`（可选）：与模板成员一一对应的**原始**松散 YBN 目录。省略时直接以 `--archive` 包内成员为文本基准（报告 `selected_baseline` 为 `template-archive-members`），成员须全部位于 `ysc.ybn` 所在目录。
+- **基准必须是未改动的原始脚本。** 游戏目录中的松散 `ysbin/` 或更新包可能已被汉化补丁、旧回填或其他工具覆盖；不能确认来源时不要传 `--loose`，改用原始包成员。`--reference-archive` 同样只用于对照原始包，不能把补丁产物当参考来源；报告的 `different_from_loose` 只说明差异，不判断哪一侧是原版。
+- 不自动猜测加载优先级、合并冲突文件或回溯扫描旧提取目录。没有已有字符映射时省略 `--uif-config`。
+
+逐成员处理：某个场景解析或往返失败时只阻断该成员，记录为 `blocked`（含成员名与原因），不生成 JSON，在所有重建包中按原字节保留；其余成员照常导出。存在阻断成员时报告 `status` 为 `partial`、CLI 以非零码退出，须先研究报告 `blocked` 列表中的原因再声称完整提取。
 
 - `gt_input/`：按场景名生成平铺 JSON，无目标文字的场景和配套文件不产生空 JSON。
 - `gt_output/`：接收同名、同顺序译文；测试译文只放 `reports/smoke-translation/`，不混入这里。
-- `original/game/`：原始包、完整松散 YBN、YSCM 和可选 UIF 配置；`metadata/` 保存重新解析可核对的描述符身份及哈希。
+- `original/game/`：原始包、完整基准 YBN、YSCM 和可选 UIF 配置；`metadata/` 保存重新解析可核对的描述符身份及哈希。
 - `rebuilt/roundtrip/`：场景经 parser/writer、原归档经容器 writer 重建后的原文往返结果，配套文件保留。
-- `rebuilt/current/ysbin.ypf`：按选定松散基准生成的完整包，须与松散原件逐成员比对，不与原更新包往返混淆。
-- `rebuilt/smoke-test/`：可选的变长测试脚本和完整包；重新提取验证文本、描述符、原池、指令及行号。
-- `reports/extraction.json`：来源哈希、基准选择、逐成员状态、包间差异及验证结果。
+- `rebuilt/current/<剧本包相对路径>.ypf`：按选定基准生成的完整包，沿用 `--archive` 的相对路径和文件名，须与基准逐成员比对，不与原包往返混淆。
+- `rebuilt/smoke-test/`：可选的变长测试脚本和完整包（同样沿用模板路径）；重新提取验证文本、描述符、原池、指令及行号。
+- `reports/extraction.json`：`status`、来源哈希、基准选择、逐成员状态（`exported`/`empty`/`non_target`/`unsupported_version`/`blocked`）、`opaque_eval` 计数、包间差异及验证结果。
 
 译文按同名文件放回 `gt_output` 后告诉 agent，由 agent 校验并回写：
 
@@ -64,7 +70,7 @@ python -m python.engines.yuris_extract extract "<游戏目录>" "<输出目录>"
 python -m python.engines.yuris_extract rebuild "<输出目录>" "<输出目录>/rebuilt/translated-01"
 ```
 
-输出新目录含松散 `ysbin/` 和完整 `ysbin.ypf`。缺译文的成员保留**选定松散基准**，未知 JSON 文件名拒绝；源文件、原文 JSON 或 manifest 变化也拒绝。没有启动游戏或验证字体、加载优先级与排版，CLI 不安装这些产物。
+输出新目录含按基准相对路径存放的松散 YBN，以及与 `--archive` 同相对路径、同文件名的完整包（例如模板为 `<子目录>/<名>.ypf` 时输出 `<输出目录>/<子目录>/<名>.ypf`），表示替换该模板包的完整新包。缺译文的成员保留**选定基准**；提取时 `blocked` 或 `unsupported_version` 的成员按原字节复制并列入 `copied_unsupported_members`，为其提供的译文按未知文件名拒绝；源文件、原文 JSON 或 manifest 变化也拒绝。没有启动游戏或验证字体、加载优先级与排版，CLI 不安装这些产物。
 
 ## 识别证据
 - YBN 不是单一格式：`YSTB` 是场景，`YSCF` 是配置。

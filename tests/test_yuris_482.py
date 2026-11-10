@@ -46,6 +46,28 @@ def literal_scenario(texts, opcode=3, ids=None):
                                + descriptors + pool + bytes(4), 0x96AC6FD3)
 
 
+def build(instructions):
+    """instructions: [(command code, [(attribute id, type, value bytes), ...]), ...]."""
+    commands, descriptors, pool = bytearray(), bytearray(), bytearray()
+    for code, attrs in instructions:
+        commands.extend(struct.pack('<BBH', code, len(attrs), 0))
+        for aid, typ, value in attrs:
+            descriptors.extend(struct.pack('<HHII', aid, typ, len(value), len(pool)))
+            pool.extend(value)
+    plain = b'YSTB' + struct.pack('<7I', 482, len(instructions), len(commands), len(descriptors),
+                                  len(pool), len(commands), 0)
+    return toggle_ybn_sections(plain + commands + descriptors + pool + bytes(len(commands)), 0x96AC6FD3)
+
+
+def token(op, payload=b''):
+    return op.encode('ascii') + struct.pack('<H', len(payload)) + payload
+
+
+# $x(239)+$x(240): variable, index constant, index closer, then '+'.
+PURE_EVAL = (token('V', b'\x01\x05\x00') + token('W', struct.pack('<H', 239)) + token(')', b'\x01')
+             + token('V', b'\x01\x05\x00') + token('W', struct.pack('<H', 240)) + token(')', b'\x01') + token('+'))
+
+
 def archive(members):
     header_size = 32 + sum(27 + len(n.encode('cp932')) for n in members)
     head = bytearray(b'YPF\0' + struct.pack('<III', 482, len(members), header_size) + bytes(16))
@@ -160,6 +182,65 @@ class Yuris482Tests(unittest.TestCase):
         with self.assertRaises(ValueError):
             export_script(toggle_ybn_sections(bytes(plain), self.profile.key), self.ysc)
 
+    def test_literal_free_eval_passthrough(self):
+        word = '「本文」'.encode('cp932')
+        raw = build([(1, [(0, 3, PURE_EVAL)]), (0, [(0, 0, word)]), (1, [(0, 3, PURE_EVAL)])])
+        stats = {}
+        rows, meta = export_script(raw, self.ysc, Profile(), stats)
+        self.assertEqual(rows, [{'message': '「本文」'}])
+        self.assertEqual(stats, {'opaque_eval': 2})
+        self.assertEqual(rebuild_script(raw, self.ysc, rows, meta), raw)
+        profile = Profile(source_characters='長', target_characters='长')
+        _, meta = export_script(raw, self.ysc, profile)
+        result = rebuild_script(raw, self.ysc, [{'message': '「更长的正文 ABC」'}], meta, profile)
+        before = Scenario(raw, commands_from(self.ysc), self.profile.key)
+        after = Scenario(result, commands_from(self.ysc), self.profile.key)
+        for number in (0, 2):
+            self.assertEqual(after.attrs[number], before.attrs[number])
+            self.assertEqual(after.value(number), PURE_EVAL)
+        self.assertEqual(after.plain[32:32 + 12], before.plain[32:32 + 12])
+
+    def test_eval_with_literal_or_unproven_tokens_rejected(self):
+        literal = token('M', '"abc"'.encode('cp932'))
+        for value in (literal + PURE_EVAL + token('+'),     # literal inside arithmetic
+                      PURE_EVAL + token('<'),               # unproven operator
+                      token('W', b'\x01'),                  # wrong payload width
+                      PURE_EVAL[:-1]):                      # truncated token
+            with self.assertRaises(ValueError):
+                export_script(build([(1, [(0, 3, value)])]), self.ysc)
+        # A pure expression stored with a non-expression type is not passed through.
+        with self.assertRaises(ValueError):
+            export_script(build([(1, [(0, 0, PURE_EVAL)])]), self.ysc)
+
+    def test_workspace_blocked_member_is_partial_and_copied(self):
+        blocked = build([(1, [(0, 3, PURE_EVAL + token('<'))])])
+        members = {'ysbin\\ysc.ybn': self.ysc, 'ysbin\\yst00000.ybn': self.raw, 'ysbin\\yst00001.ybn': blocked}
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); (root / 'pac').mkdir(); (root / 'work').mkdir()
+            (root / 'pac/update.ypf').write_bytes(archive(members))
+            report = extract(root, root / 'work', archive='pac/update.ypf')
+            self.assertEqual(report['status'], 'partial')
+            self.assertEqual(report['selected_baseline'], 'template-archive-members')
+            self.assertEqual([b['source'] for b in report['blocked']], ['ysbin/yst00001.ybn'])
+            self.assertEqual(report['counts']['exported'], 1)
+            self.assertTrue((root / 'work/gt_input/yst00000.json').exists())
+            self.assertFalse((root / 'work/gt_input/yst00001.json').exists())
+            current = archive_members((root / 'work/rebuilt/current/pac/update.ypf').read_bytes())
+            self.assertEqual(current, members)
+            rows, _ = export_script(self.raw, self.ysc); rows[0]['message'] = 'ABC'
+            (root / 'work/gt_output/yst00000.json').write_bytes(dump_rows(rows))
+            (root / 'patch').mkdir()
+            result = rebuild(root / 'work', root / 'patch')
+            self.assertEqual(result['copied_unsupported_members'], ['ysbin/yst00001.ybn'])
+            packed = archive_members((root / 'patch/pac/update.ypf').read_bytes())
+            self.assertEqual(packed['ysbin\\yst00001.ybn'], blocked)
+            self.assertEqual(packed['ysbin\\ysc.ybn'], self.ysc)
+            self.assertNotEqual(packed['ysbin\\yst00000.ybn'], self.raw)
+            (root / 'work/gt_output/yst00001.json').write_bytes(dump_rows([{'message': 'x'}]))
+            (root / 'patch2').mkdir()
+            with self.assertRaises(ValueError):
+                rebuild(root / 'work', root / 'patch2')
+
     def test_raw_control_sequence_roundtrip(self):
         raw=scenario('A\r\nB',False)
         p=bytearray(toggle_ybn_sections(raw,self.profile.key))
@@ -209,7 +290,7 @@ class Yuris482Tests(unittest.TestCase):
             (root / 'patch').mkdir()
             result=rebuild(root/'work',root/'patch')
             self.assertEqual(result['translated_members'],['ysbin/yst00000.ybn'])
-            self.assertEqual(archive_members((root/'patch/ysbin.ypf').read_bytes())['ysbin\\yst00000.ybn'],(root/'patch/ysbin/yst00000.ybn').read_bytes())
+            self.assertEqual(archive_members((root/'patch/pac/update.ypf').read_bytes())['ysbin\\yst00000.ybn'],(root/'patch/ysbin/yst00000.ybn').read_bytes())
             with self.assertRaises(FileExistsError):extract(root,root/'work',archive='pac/update.ypf',loose='ysbin')
 
 

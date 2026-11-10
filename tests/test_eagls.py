@@ -86,6 +86,49 @@ class EaglsTextTests(unittest.TestCase):
         new = dict(read_labels(after, text_offset=144))[b"End"]
         self.assertEqual(new - old, len(after) - len(before))
 
+    def test_labels_glued_to_commands_and_variable_length_shift(self):
+        # Labels directly after ')' or '"' are valid; '$Endless' must not match '$End'.
+        body = '43("a",0)$Start\n&1"before"#花子\r\n&2"ここ"$End\n&3"after $Endless"\r\n'
+        raw = script(body, self.profile)
+        rows, manifest = export_script(raw, self.profile)
+        self.assertEqual(rows, [{"message": "before"}, {"name": "花子", "message": "ここ"},
+                                {"message": "after $Endless"}])
+        self.assertEqual(rebuild_script(raw, rows, manifest, self.profile), raw)
+        for first, second in (("much longer narration text", "迟い台詞をもっと長くする"), ("x", "短")):
+            changed = copy.deepcopy(rows)
+            changed[0]["message"], changed[1]["message"] = first, second
+            modified = rebuild_script(raw, changed, manifest, self.profile)
+            plain, actual, _ = parse_script(modified, self.profile)
+            self.assertEqual(actual, changed)
+            labels = dict(read_labels(plain, text_offset=144))
+            text = plain[144:-2]
+            self.assertEqual(labels[b"Start"], text.index(b"$Start"))
+            self.assertEqual(text[labels[b"End"]:labels[b"End"] + 5], b"$End\n")
+            self.assertEqual(text[labels[b"End"] - 1:labels[b"End"]], b'"')
+
+    def test_wrong_stored_label_offset_reports_label_and_offset(self):
+        raw = script('$Start\n&1"text"\r\n$End\r\n', self.profile)
+        plain = bytearray(crypt_script(raw, text_offset=144, key=self.profile.key, version=2))
+        struct.pack_into("<I", plain, 36 + 32, 3)
+        bad = crypt_script(bytes(plain), text_offset=144, key=self.profile.key, version=2)
+        with self.assertRaisesRegex(ValueError, r"\$End offset 3"):
+            export_script(bad, self.profile)
+        # A prefix of a longer label is not its label token.
+        raw = script('$Start\n&1"text"\r\n$Endless\r\n$End\r\n', self.profile)
+        plain = bytearray(crypt_script(raw, text_offset=144, key=self.profile.key, version=2))
+        struct.pack_into("<I", plain, 36 + 32, bytes(plain[144:]).index(b"$Endless"))
+        bad = crypt_script(bytes(plain), text_offset=144, key=self.profile.key, version=2)
+        with self.assertRaises(ValueError):
+            export_script(bad, self.profile)
+        with tempfile.TemporaryDirectory() as root:
+            root = Path(root)
+            idx, pak = archive([("sc02.dat", bad)])
+            (root / "SCPACK.idx").write_bytes(idx)
+            (root / "SCPACK.pak").write_bytes(pak)
+            (root / "work").mkdir()
+            with self.assertRaisesRegex(ValueError, r"sc02\.dat.*\$End offset"):
+                extract(root, root / "work", profile=self.profile, key=b"key")
+
     def test_invalid_translation_and_manifest(self):
         original, manifest = export_script(self.raw, self.profile)
         for value in ('bad"quote', 'bad\nline', 'injected#', '😀', '遅'):

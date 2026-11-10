@@ -5,7 +5,7 @@
 | 层 | 模块与接口 |
 |---|---|
 | 归档 | [archives/eagls.py](../python/archives/eagls.py)：`MSVCRTRand`、`crypt_index`、`read_index`、`pack_archive` |
-| 脚本 | [engines/eagls.py](../python/engines/eagls.py)：`crypt_script`、`read_labels`、`fix_label_offsets`、`dialogue_spans` |
+| 脚本 | [engines/eagls.py](../python/engines/eagls.py)：`crypt_script`、`read_labels`、`verify_label_offsets`、`apply_edits_with_labels`、`fix_label_offsets`、`dialogue_spans` |
 | 对白 | [eagls_text.py](../python/engines/eagls_text.py)：`Profile`、`export_script`、`rebuild_script` |
 | 工作区 CLI | [eagls_extract.py](../python/engines/eagls_extract.py)：提取、原文往返、译文重封包 |
 
@@ -22,11 +22,15 @@
 
 ## 免安装准备：INI 与 wave 目录
 
-处理 EAGLS 游戏时，由 agent 检查并完成下面的免安装准备，不要仅提示用户手动修改。这是本引擎针对配置和音频位置的处理步骤；操作前保留可恢复的 INI 备份及文件移动清单，不扩大到其他游戏文件。
+部分 EAGLS 游戏未经安装器运行时需要关闭注册检查并调整音频目录。游戏目录只读：agent 先检查并报告，**不直接修改 INI 或移动游戏文件**。
 
-1. 找到实际游戏程序使用的 `EAGLS.INI`，排除备份、补丁备份和提取结果目录中的副本。将生效的 `EnableRegister=1` 改为 `EnableRegister=0`；已为 `0` 则不改。保留原编码、换行、节名、注释及其他配置，写回后重新读取确认。找不到文件或该键时记录情况，不凭空创建配置。
-2. 检查游戏的 `wave/` 下是否存在 `22/` 或 `44/` 子目录。若存在 `wave/22/`，将其中的文件移到 `wave/` 下，使文件直接位于音频根目录；移动前确认解析后的源和目标路径都在当前游戏目录内。同名且内容相同的目标保持原样；同名但内容不同的文件不覆盖，记录冲突。保留子目录，不递归删除。
-3. 两个子目录都不存在时，无需处理音频目录。仅存在 `wave/44/` 而没有 `wave/22/` 时，不套用搬移 `22` 的步骤，也不自行改搬 `44`；两者都有时只处理 `22`，保留 `44`。完成后向用户报告 INI 是否修改、移动文件数量及未处理项。
+1. **检查**：找到实际游戏程序使用的 `EAGLS.INI`，排除备份、补丁备份和提取结果目录中的副本，报告生效的 `EnableRegister` 值；找不到文件或该键时如实记录，不凭空创建配置。检查 `wave/` 下是否存在 `22/` 或 `44/` 子目录，列出 `wave/22/` 中的文件及其在 `wave/` 根下的同名冲突（同名且内容相同、同名但内容不同）。
+2. **报告并请求授权**：向用户说明检查结果、建议的改动（`EnableRegister=1` 改为 `0`；`wave/22/` 中文件移到 `wave/` 根）及影响范围，等待明确授权。
+3. **获得授权后，在交付目录生成产物**，仍不写游戏目录：
+   - 修改后的 `EAGLS.INI` 副本：只把生效的 `EnableRegister=1` 改为 `0`，保留原编码、换行、节名、注释及其他配置，重新读取确认；已为 `0` 则不生成。
+   - 需移动文件清单：列出源与目标相对路径，确认解析后都在游戏目录内；同名且内容相同的标为无需移动，同名但内容不同的标为冲突、不建议覆盖；保留子目录，不建议递归删除。
+   - 部署说明：用户（或用户另行明确授权覆盖游戏文件时由 agent）按清单放置 INI 并移动文件，先备份原 INI。
+4. 两个子目录都不存在时无需处理音频目录。仅存在 `wave/44/` 而没有 `wave/22/` 时，不套用搬移 `22` 的步骤，也不自行建议改搬 `44`；两者都有时只处理 `22`，保留 `44`。最终报告 INI 当前值、是否生成修改副本、清单文件数量、冲突及未处理项。
 
 ## 包索引线索
 - 原工具依据索引尺寸启发式选择短/长 offset 版本。
@@ -63,13 +67,11 @@
 - ALIS 源工具常用 text_offset `136000`，这里不把它硬编码为普适值。
 - [read_labels](../python/engines/eagls.py) 验证表边界和每个 offset。
 - 标签名不能重名，表必须存在终止空记录。
-- [fix_label_offsets](../python/engines/eagls.py) 更新已有标签地址。
-- 它在修改后的正文中查找完整行首 `$label`，不是任意子串。
-- 标签后可接 `:`、`(`、CR/LF 或正文结束。
-- 这避免把 `$START` 错配到 `$STARTED` 或台词里的引用。
-- 标签必须唯一出现；缺失、歧义或容量问题均中止。
-- 修复函数不要求旧 offset 仍适合缩短后的新文本。
-- 它保留原标签名、未用槽位、正文和 footer，只改四字节 offset。
+- **标签表存储的 offset 是权威值。** 标签不一定位于行首，常紧跟在命令之后，例如 `…",0)$LABEL` 或 `…"$LABEL`；不能靠行首搜索重新推导。
+- [verify_label_offsets](../python/engines/eagls.py) 校验每个 offset 处的正文以 `$` + 标签名开头，且其后紧接 `:`、`(`、CR、LF 或正文结束；这避免把 `$START` 错配到 `$STARTED`。不符时报错并给出标签名与 offset。
+- [apply_edits_with_labels](../python/engines/eagls.py) 先校验原 offset，再按字节跨度替换正文，把每个标签的原 offset 加上其之前全部编辑的长度差，最后重新校验。编辑跨度不能重叠、越出正文或覆盖 `$label` 记号。
+- 两者保留原标签名、未用槽位、正文和 footer，只改四字节 offset。工作区提取与回填使用这两个函数。
+- [fix_label_offsets](../python/engines/eagls.py) 是旧的行首搜索辅助：只找完整行首 `$label` 且要求唯一出现，紧跟命令的标签会被判为缺失；仅用于没有编辑跨度、标签全部位于行首的场景。
 - 没有实现新建标签或全语言语法的标签发现。
 
 ## 文本提取与 name
@@ -91,7 +93,7 @@
 1. 确認 IDX/PAK 参数，提取完整成员及标签/文本/footer 分界。
 2. 按正确版本解密成员，严格解码正文。
 3. 只改经核实的文本跨度，保留标签和控制语法。
-4. 拼回原标签区与 footer，调用 fix_label_offsets。
+4. 拼回原标签区与 footer，用 apply_edits_with_labels 按编辑长度差平移原 offset。
 5. 调用 crypt_script 恢复成员密文。
 6. 用匹配版本的完整封包器更新 PAK 与 IDX。
 - 工作区 CLI 会执行以上步骤，并验证原文逐成员与整包往返一致后才发布提取结果。
@@ -130,7 +132,8 @@ python -m python.engines.eagls_extract rebuild "<游戏目录>/game_extract" "<�
 ## 验证与局限
 - 合成测试有 MSVCRT 已知向量，不只测自身加解密互逆。
 - 测试覆盖 v1/v2、负 seed、隔字节变换、索引 footer 保留。
-- 标签测试验证新 offset 和禁止前缀误匹配。
+- 标签测试验证新 offset、禁止前缀误匹配、紧跟 `)` 或 `"` 的标签，以及变长/缩短回填后的 offset 平移。
+- 提取或回填失败时，错误信息带成员名和 PAK 位置；标签错误另带标签名与 offset。
 - 文本规则测试验证 name 与 message 在同一行的提取。
 - [test_eagls.py](../tests/test_eagls.py) 覆盖短/长索引、零/非零基址、变长重定位、填充保留、坏偏移、重名/路径、跨行姓名、选择槽、映射、篡改 manifest 和工作区回填。
 - ALIS 的验证边界为合成标签、脚本和归档布局；不支持新建标签或有空隙的归档。

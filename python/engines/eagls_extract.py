@@ -60,8 +60,12 @@ def extract(source, output, *, profile=Profile(), key=DEFAULT_INDEX_KEY,
     smoke = None
     for entry, filename in zip(entries, names):
         raw = pak[entry.offset:entry.offset + entry.size]
-        rows, manifest = export_script(raw, profile)
-        rebuilt = rebuild_script(raw, rows, manifest, profile)
+        try:
+            rows, manifest = export_script(raw, profile)
+            rebuilt = rebuild_script(raw, rows, manifest, profile)
+        except (ValueError, UnicodeError) as exc:
+            # Label errors already name the label and its stored offset.
+            raise ValueError(f"member {entry.name} (pak offset {entry.offset}, size {entry.size}): {exc}") from exc
         if rebuilt != raw:
             raise ValueError(f"no-edit roundtrip differs: {entry.name}")
         replacements[entry.name] = rebuilt
@@ -148,7 +152,10 @@ def rebuild(workspace, output):
             raise ValueError("original JSON or manifest changed")
         if filename in available:
             translated = load_json(read_bounded(workspace / "gt_output" / filename))
-            replacements[entry.name] = rebuild_script(raw, translated, manifest, profile)
+            try:
+                replacements[entry.name] = rebuild_script(raw, translated, manifest, profile)
+            except (ValueError, UnicodeError) as exc:
+                raise ValueError(f"member {entry.name} ({filename}): {exc}") from exc
             changed.append(entry.name)
     new_idx, new_pak = pack_archive(index, pak, replacements, key=key, long_offsets=long_offsets)
     result = {"translated_members": changed, "copied_members": len(entries) - len(changed),

@@ -6,7 +6,7 @@ new bounded integration, not a general EAGLS command compiler.
 """
 import re
 from dataclasses import dataclass
-from .eagls import crypt_script, fix_label_offsets, read_labels
+from .eagls import apply_edits_with_labels, crypt_script, read_labels, verify_label_offsets
 from ..common.contract import make_manifest, validate_translation
 
 
@@ -52,9 +52,9 @@ def parse_script(encrypted: bytes, profile: Profile):
     """
     plain = crypt_script(encrypted, text_offset=profile.text_offset, key=profile.key, version=profile.version)
     read_labels(plain, text_offset=profile.text_offset, label_size=profile.label_size)
-    if fix_label_offsets(plain, text_offset=profile.text_offset, version=profile.version,
-                         label_size=profile.label_size) != plain:
-        raise ValueError("original label offsets disagree with body")
+    # Stored offsets are authoritative; they only have to land on their token.
+    verify_label_offsets(plain, text_offset=profile.text_offset, version=profile.version,
+                         label_size=profile.label_size)
     body = plain[profile.text_offset:-profile.version]
     text = body.decode(profile.encoding, "strict")
     offsets = [0]
@@ -134,11 +134,9 @@ def rebuild_script(encrypted: bytes, rows: list, manifest: dict, profile: Profil
             if value != before[field]:
                 start, end = loc[field]
                 edits.append((start, end, profile.encode(value)))
-    result = plain
-    for start, end, replacement in sorted(edits, reverse=True):
-        result = result[:start] + replacement + result[end:]
-    result = fix_label_offsets(result, text_offset=profile.text_offset, version=profile.version,
-                               label_size=profile.label_size)
+    # Shift original offsets by the size change of preceding edits; no search.
+    result = apply_edits_with_labels(plain, edits, text_offset=profile.text_offset,
+                                     version=profile.version, label_size=profile.label_size)
     result = crypt_script(result, text_offset=profile.text_offset, key=profile.key, version=profile.version)
     _, reparsed, _ = parse_script(result, profile)
     if reparsed != rows:

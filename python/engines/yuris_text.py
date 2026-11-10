@@ -137,8 +137,42 @@ def literal(value):
     return value[4:-1].decode("cp932", "strict")
 
 
-def _rows(scenario, profile):
+# Expression bytecode is a sequence of ``u8 opcode + u16 payload length +
+# payload`` tokens; 0x4D ('M') is the only token carrying string bytes. The
+# non-string tokens below (with their fixed payload widths) are the ones seen
+# in v482 scenario expressions: numeric constants B/W/I, variable references
+# H/V/v, the ')' index closer and payload-free operators. Anything else is
+# unproven and keeps the conservative rejection path.
+_OPAQUE_TOKENS = {ord("B"): 1, ord("W"): 2, ord("I"): 4, ord("H"): 3, ord("V"): 3, ord("v"): 3,
+                  ord(")"): 1, **{ord(c): 0 for c in "+-*/%=!,s"}}
+
+
+def expression_tokens(value):
+    """Split expression bytecode into (opcode, payload); reject a ragged tail."""
+    tokens, pos = [], 0
+    while pos < len(value):
+        if pos + 3 > len(value):
+            raise ValueError("truncated expression token")
+        size = struct.unpack_from("<H", value, pos + 1)[0]
+        if pos + 3 + size > len(value):
+            raise ValueError("expression token exceeds attribute")
+        tokens.append((value[pos], value[pos + 3:pos + 3 + size]))
+        pos += 3 + size
+    return tokens
+
+
+def literal_free_expression(value):
+    """True only for a fully tokenized expression made of proven non-string tokens."""
+    try:
+        tokens = expression_tokens(value)
+    except ValueError:
+        return False
+    return bool(tokens) and all(_OPAQUE_TOKENS.get(op) == len(payload) for op, payload in tokens)
+
+
+def _rows(scenario, profile, stats=None):
     rows, locations = [], []
+    opaque_eval = 0
     for instruction, (command, attributes) in enumerate(scenario.instructions):
         selected = []
         if command == "WORD":
@@ -146,7 +180,13 @@ def _rows(scenario, profile):
                 raise ValueError("unsupported WORD attribute layout")
             selected = [(attributes[0], "dialogue")]
         elif command == "_":
-            if any(scenario.value(a) for a in attributes):
+            values = [scenario.value(a) for a in attributes]
+            if any(values) and all((scenario.attrs[a][1] & 255) == 3 and literal_free_expression(v)
+                                   for a, v in zip(attributes, values) if v):
+                # Pure variable arithmetic such as $x(1)+$x(2): no string
+                # token exists, so the whole instruction stays byte-identical.
+                opaque_eval += 1
+            elif any(values):
                 if (not scenario.literal_eval or len(attributes) != 1
                         or scenario.attrs[attributes[0]][1] != 3
                         or literal(scenario.value(attributes[0])) is None):
@@ -197,6 +237,8 @@ def _rows(scenario, profile):
                 loc["name_wrapper"] = "【】"
             rows.append(row)
             locations.append(loc)
+    if stats is not None:
+        stats["opaque_eval"] = opaque_eval
     return rows, locations
 
 
@@ -210,10 +252,11 @@ def ystb_version(raw):
     return version
 
 
-def export_script(raw, ysc, profile=Profile()):
+def export_script(raw, ysc, profile=Profile(), stats=None):
+    """``stats`` (optional dict) receives ``opaque_eval``: passed-through EVALs."""
     version = ystb_version(raw)
     s = Scenario(raw, commands_from(ysc, version), profile.key)
-    rows, locations = _rows(s, profile)
+    rows, locations = _rows(s, profile, stats)
     variant = "482-word-raw" if version == WRITE_VERSION else f"{version}-word-raw-readonly"
     manifest = make_manifest(engine="yuris", variant=variant, reference="yuris_text/2",
                              sources={"member.ybn": raw, "ysc.ybn": ysc}, rows=rows, locators=locations,
