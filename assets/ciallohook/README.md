@@ -29,7 +29,7 @@
 按上游文档调整 JIS 交付的配置时注意：
 
 - 上游示例和常见问题里的 `CnJpMapJson = subs_cn_jp.json` 不适用，始终指向本批 `uif_config.json`（原因见下文）。
-- 上游常见问题对乱码给出的 `Charset = 0x86`、`[CodePage]` 932→936、LE 转区，适用于直接写入 GBK 的汉化，不适用于 JIS 替换回注：剧本仍是 CP932，改这些会让未映射的日文和代理字一起乱码。
+- 上游常见问题对乱码给出的 `Charset = 0x86`、`[CodePage]` 932→936、LE 转区，适用于直接写入 GBK 的汉化，不适用于 JIS 替换回注：剧本仍是 CP932，改这些会让未映射的日文和代理字一起乱码。引擎本身跟随系统 ACP 时应改走 GBK 路线而不是 JIS，此时这些设置通常也不需要，见[运行时码页判定](../../guides/jis-substitution.md#先判定运行时码页)。
 - 开启 `[FilePatch]`、`[TextReplace]`、`[CodePage]`、`[LocaleEmulator]` 等会改变游戏读取文件或编码的行为，只在确有需要时开启，并记录在交付说明里。
 
 上游仓库根目录与本地源码目录均未发现 LICENSE 文件，GitHub license 元数据为 null；本仓库不将此第三方二进制重新标为 GPL。源码静态链接 Microsoft Detours、miniz、zstd、LZMA SDK 等组件，其许可以上游源码为准。

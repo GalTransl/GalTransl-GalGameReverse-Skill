@@ -17,6 +17,7 @@ import struct
 import sys
 
 from .binary import FormatError
+from .codepage_probe import MAX_SITES, probe_codepage
 from .contract import dump_rows, load_json, sha256, validate_rows
 from .jis_substitution import (HOOKS, JisSubstitution, batch_mapping_sha256, format_reserved_codepoints,
                                is_cp932, parse_reserved_codepoints)
@@ -634,8 +635,25 @@ def main():
         command.add_argument(name)
     command = commands.add_parser("arch", help="print a game EXE's PE machine and matching --hook values")
     command.add_argument("exe")
+    command = commands.add_parser("codepage", help="read-only static probe: fixed CP932 or system-ACP text "
+                                                   "decoding, before choosing JIS or direct GBK re-injection")
+    command.add_argument("exe", nargs="+")
+    command.add_argument("--max-sites", type=int, default=MAX_SITES,
+                         help="cap each listed call/compare site list (summary keeps totals); 0 = unlimited")
     args = vars(parser.parse_args())
     action = args.pop("command")
+    if action == "codepage":
+        results, failed = [], False
+        for exe in args["exe"]:
+            try:
+                results.append(probe_codepage(exe, max_sites=args["max_sites"]))
+            except (FormatError, OSError) as error:
+                failed = True
+                results.append({"ok": False, "file": exe, "error": f"{type(error).__name__}: {error}"})
+        _emit(results[0] if len(results) == 1 else {"ok": not failed, "results": results})
+        if failed:
+            raise SystemExit(1)
+        return
     try:
         if action == "arch":
             machine = pe_machine(args["exe"])

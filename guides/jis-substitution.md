@@ -1,10 +1,45 @@
 # CP932 中文回注：公共 JSON JIS 流程
 
-确认**脚本正文**使用 CP932 后，中文回注优先走本页的公共流程。不要为了 JIS 给每个引擎增加 codec 参数、专用开关、冲突检查和 hook 配置生成逻辑。引擎只负责原有的文本语义、长度/偏移、加密和归档读写；公共层负责 JSON 中真实中文与 CP932 代理字符的转换及显示核对。
+确认**脚本正文**使用 CP932、且引擎**固定按 CP932 解码**后，中文回注优先走本页的公共流程。不要为了 JIS 给每个引擎增加 codec 参数、专用开关、冲突检查和 hook 配置生成逻辑。引擎只负责原有的文本语义、长度/偏移、加密和归档读写；公共层负责 JSON 中真实中文与 CP932 代理字符的转换及显示核对。
+
+## 先判定运行时码页
+
+剧本以 CP932 存储只说明它在日文系统上被写出，不说明引擎运行时怎样解码。两类引擎需要不同路线：
+
+| 运行时行为 | 典型证据 | 简中系统（ACP 936）上的表现 | 回注路线 |
+|---|---|---|---|
+| 固定 CP932 | `MultiByteToWideChar(932, …)`；自带 SJIS 表；A 接口配合固定 `SHIFTJIS_CHARSET` 字体 | 原版不转区也能正常显示日文 | 本页 JIS 流程 + hook |
+| 跟随系统 ACP | `MultiByteToWideChar(CP_ACP=0, …)`；`GetACP()` 结果按 932/936/950/949 分支选字体 charset | 原版不转区时日文乱码，需 LE/日文区域才正常 | 整体转码为 GBK 回写，不用 JIS |
+
+ACP 跟随的引擎上 JIS 代理必然失败：代理文件中未被代理的常用字仍是 CP932 字节，按 936 解码即乱码；代理字在进入映射表前已被错误解码，hook 只能偶然命中字节恰好也是合法 GBK 的少数字；代理字度量也与中文不同。叠加字体替换、charset 伪装、码页 hook 也无法可靠补救。
+
+判定步骤：
+
+1. 只读探测实际加载脚本、绘制文本的 EXE（不是启动器）：
+
+   ```text
+   python -m python.common.jis_workflow codepage "游戏目录/实际启动的.exe"
+   ```
+
+   输出 `verdict`：`acp-following`、`fixed-cp932`、`mixed` 或 `undetermined`，以及 `confidence`、调用点（`conversion_calls`，CodePage 解不出记 `unknown`）、`getacp_calls`、`embedded_sjis_table`、`packing` 与 `reasons`。这是字节模式启发式，不是反汇编，只作选路线的证据；只对多字节 ANSI 剧本有意义，UTF-8/UTF-16 剧本不必看。多个 EXE 可一次传入。
+   - `acp-following` + `strong`：`GetACP()` 之后紧跟按 932/936/950/949 分支或载入字体 charset（0x80/0x86/0x88/0x81），是最直接的证据。`weak` 只有若干 `CP_ACP` 转换调用，可能只用于路径或系统文本，需旁证。
+   - `fixed-cp932`：转换调用的 CodePage 为 932，或程序内嵌 SJIS→Unicode 表。
+   - `mixed`：两类证据都有，常见于少量 `CP_ACP` 处理路径、剧本另走 932 或自带表的引擎。不能据此直接选 GBK；默认仍走 JIS，并按第 3 步做小样本对照确认。
+   - `undetermined`：疑似加壳、导入表不可读、只有 A 接口绘制或解不出常量；A 接口按 DC 字体 charset 对应码页解释字节，仅 `DEFAULT_CHARSET` 时才用 ACP。
+   - 不在 `GetACP` 附近的码页常量比较（C 运行库的码页→区域表到处都有）只列出，不计入结论。
+2. 结合用户的运行环境：原版在简中系统不转区就乱码、需要 Locale Emulator 才正常，是 ACP 跟随的旁证；已有 GBK 汉化在简中系统直接可用也是旁证。
+3. `undetermined` 或 `mixed` 时先小样本对照：同一开场句分别做 JIS 版本与 GBK 版本，在用户的目标系统码页下各试一次，以实际显示决定路线。
+
+确认 ACP 跟随后：
+
+- **整体转码**：所有运行时按 ACP 读取的文本成员（剧本、姓名表、选项、未翻译行）都从 CP932 严格转码为 GBK，不能只改译文行而留下 CP932 字节，否则同一文件两种语义。GBK 无法表示的字符须逐个报告并由译者/agent 明确给出替换，不静默替换。需要引擎 writer 支持指定输出编码（例如 [SystemC](../engines/systemc.md) 的 `--output-encoding gbk`）；writer 不支持时先补齐实现，不手工拼接字节。
+- **运行条件**：补丁只能在 ACP 为 936 的系统上正确显示，**不能再开 Locale Emulator 或日文区域**（ACP 变回 932 后整篇乱码）。交付时把这一点明确告诉用户。
+- **hook 配置**：不需要字形映射。若仍用 CialloHook（例如换字体），设 `EnableCnJpMap = false`，`[CodePage]` 关闭，`Charset` 保持 `0x00`（引擎自己按 ACP 选 charset）；只有默认字体缺中文字形时才设 `Font`。不交付 `uif_config.json`/UIF。
+- 繁中系统（ACP 950）、韩文系统（949）同理只能用对应编码，一份 GBK 补丁不能跨系统通用。
 
 ## 入口与适用条件
 
-- [jis_workflow.py](../python/common/jis_workflow.py)：通用 `prepare` / `finalize` / `arch` CLI，`prepare --jis-preflight` 只读预检，以及不依赖引擎的 `preflight_translations` / `prepare_translations` API。没有引擎分支或注册表，不修改全局 codec。
+- [jis_workflow.py](../python/common/jis_workflow.py)：通用 `prepare` / `finalize` / `arch` / `codepage` CLI，`prepare --jis-preflight` 只读预检，以及不依赖引擎的 `preflight_translations` / `prepare_translations` API。没有引擎分支或注册表，不修改全局 codec。
 - [jis_substitution.py](../python/common/jis_substitution.py)：SExtractor 固定映射、冲突检测、私用代理字分配、保留码位、配置及 hook 产物。仅依赖标准库，无需安装外部项目。
 - 工作区采用主 Skill 的 `original/metadata/reports/gt_input/gt_output` 结构；引擎接受 UTF-8 的最小 name/names/message JSON，并已有严格 CP932 writer 与真实重提取能力。
 - 必须确认**存储编码**。JSON 本身是 UTF-8，某些 manifest 的 encoding 也是交换层 UTF-8；都不能代替脚本编码证据。严格 shift_jis、UTF-8、UTF-16、GBK 不使用此流程，Kirikiri PSB/SCN 不因 XP3 文件名编码而触发它。`--encoding` 的实际写法（如 `cp932`、`CP932`、`windows-31j`）原样记入报告的 `script_encoding`。
