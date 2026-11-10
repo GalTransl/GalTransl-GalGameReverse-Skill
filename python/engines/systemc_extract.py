@@ -10,7 +10,7 @@ import sys
 from ..archives.systemc import read_fpk_index_stream, read_fpk_member, unpack_fpk, rebuild_fpk
 from ..common.binary import FormatError
 from ..common.contract import dump_rows, load_json, sha256
-from ..common.jis_workflow import preflight_translations
+from ..common.jis_workflow import add_hook_arguments, hook_artifacts, preflight_translations
 from ..common.safety import write_new_tree, validate_new_tree_destination
 from . import systemc_codepage as codepage
 from .systemc import MAX_BYTES, VARIANT, export_act, inject_act
@@ -215,13 +215,15 @@ def extract(game, destination, *, verify_edits=False):
 
 def pack(workspace, destination=None, *, translations=None, jis_mode=None, jis_preflight=False,
          base_confirmed=False, output_encoding="cp932", gbk_replace=(), gbk_replace_table=None,
-         gbk_preflight=False, gbk_keep_members=()):
+         gbk_preflight=False, gbk_keep_members=(), hook="auto", exe=None, force_cp932="auto"):
     """Rebuild a complete data.fpk.
 
     ``output_encoding="cp932"`` keeps the original code page (JIS proxy by
     default). ``"gbk"`` transcodes every runtime text member for executables
     that decode script text with the system ANSI code page; it implies
-    ``jis_mode="off"`` and rejects an explicit ``"auto"``.
+    ``jis_mode="off"`` and rejects an explicit ``"auto"``. JIS delivery files
+    follow the shared policy (``hook``/``exe``/``force_cp932``, see
+    ``jis_workflow.hook_artifacts``).
     """
     from python.common.jis_substitution import JisSubstitution
 
@@ -315,7 +317,10 @@ def pack(workspace, destination=None, *, translations=None, jis_mode=None, jis_p
     result.update(output_sha256=sha256(repacked), size=len(repacked), reparsed_exactly=True,
                   byte_identical=repacked == raw)
     result["text_encoding"] = text_codec.summary() if text_codec is not None else {"mode": "strict-cp932"}
-    extras = text_codec.artifacts(hook="uif") if text_codec is not None else []
+    extras = []
+    if text_codec is not None:
+        extras, delivery = hook_artifacts(text_codec, hook=hook, exe=exe, force_cp932=force_cp932)
+        result["jis_delivery"] = delivery
     result["jis_artifacts"] = [name for name, _ in extras]
     write_new_tree(destination, [("data.fpk", repacked), ("verification.json", _json(result)), *extras])
     return result
@@ -442,6 +447,7 @@ def main():
                     help="keep a non-ASCII member byte-for-byte (only if the runtime never decodes it via ACP)")
     pk.add_argument("--gbk-preflight", action="store_true",
                     help="list every GBK-unencodable character without writing a package")
+    add_hook_arguments(pk)
     args = parser.parse_args()
     if args.command == "pack":
         if not (args.jis_preflight or args.gbk_preflight) and args.output is None:
@@ -454,7 +460,8 @@ def main():
                             jis_mode=args.jis_mode, jis_preflight=args.jis_preflight,
                             base_confirmed=args.base_confirmed, output_encoding=args.output_encoding,
                             gbk_replace=args.gbk_replace, gbk_replace_table=args.gbk_replace_table,
-                            gbk_preflight=args.gbk_preflight, gbk_keep_members=args.gbk_keep_member))
+                            gbk_preflight=args.gbk_preflight, gbk_keep_members=args.gbk_keep_member,
+                            hook=args.hook, exe=args.exe, force_cp932=args.force_cp932))
     except (FormatError, ValueError, OSError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         raise SystemExit(1)

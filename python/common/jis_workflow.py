@@ -504,6 +504,45 @@ def runtime_codepage(exe, mode, hook, warnings):
     return record
 
 
+def hook_artifacts(codec, *, hook="auto", exe=None, force_cp932="auto", machine=None):
+    """Shared engine entry for JIS delivery files.
+
+    Same policy as ``prepare``: ``hook`` is "auto", a CLI alias from
+    HOOK_CHOICES or a bundled hook name; "auto" picks CialloHook by the EXE's
+    PE machine (``machine`` is a fallback hint when an engine recorded it
+    without an EXE). An explicit hook of another bitness is refused. Forced
+    ACP 932 follows ``runtime_codepage``. Returns (files, record).
+    """
+    warnings = []
+    hook = HOOK_CHOICES.get(hook, hook) if hook != "auto" else hook
+    exe = Path(exe) if exe else None
+    if exe is not None and not exe.is_file():
+        raise FormatError(f"--exe is not a file: {exe}")
+    if hook == "auto" and exe is None and machine in AUTO_HOOKS:
+        name = AUTO_HOOKS[machine]
+        warnings.append("未提供 --exe：按记录的 PE 位数选择 hook，未探测运行时码页")
+    else:
+        name = resolve_hook(hook, exe, warnings) if hook is not None else None
+    if name is not None and exe is not None:
+        _check_hook_machine(exe, name)
+    record = runtime_codepage(exe, force_cp932, name, warnings)
+    files = codec.artifacts(include_hook=name is not None, hook=name or "ciallohook",
+                            force_cp932=record["force_cp932"])
+    return files, {"hook": name, "force_cp932": record["force_cp932"],
+                   "runtime_codepage": record, "warnings": warnings}
+
+
+def add_hook_arguments(parser):
+    """CLI options shared by engines that emit JIS delivery files."""
+    parser.add_argument("--hook", choices=("auto", *HOOK_CHOICES), default="auto",
+                        help="auto (default): CialloHook matching the --exe PE machine; "
+                             "uif-x86/x86: UIF fallback; none: no DLL")
+    parser.add_argument("--exe", help="game EXE that draws text: hook bitness and runtime code-page probe")
+    parser.add_argument("--force-cp932", choices=FORCE_CP932_MODES, default="auto",
+                        help="CialloHook LE/LEP restart under ACP 932; auto: on unless the --exe probe "
+                             "verdict is fixed-cp932 (off without --exe)")
+
+
 def prepare(workspace, output=None, *, encoding, extra_texts=(), include_hook=False,
             hook="auto", proxy_policy="fixed", jis_preflight=False, translations=None,
             reserve_scope="untranslated", reserved_codepoints=(), max_locations=MAX_LOCATIONS, exe=None,

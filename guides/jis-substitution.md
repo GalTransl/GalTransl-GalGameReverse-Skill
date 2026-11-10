@@ -44,7 +44,7 @@ ACP 跟随的引擎有两条路：
 
 ## 入口与适用条件
 
-- [jis_workflow.py](../python/common/jis_workflow.py)：通用 `prepare` / `finalize` / `arch` / `codepage` CLI，`prepare --jis-preflight` 只读预检，以及不依赖引擎的 `preflight_translations` / `prepare_translations` API。没有引擎分支或注册表，不修改全局 codec。
+- [jis_workflow.py](../python/common/jis_workflow.py)：通用 `prepare` / `finalize` / `arch` / `codepage` CLI，`prepare --jis-preflight` 只读预检，以及不依赖引擎的 `preflight_translations` / `prepare_translations` API。没有引擎分支或注册表，不修改全局 codec。引擎自带 JIS 输出（如 SystemC `pack`、ExHIBIT `rebuild`）一律调用 `hook_artifacts(codec, hook=, exe=, force_cp932=)` 并用 `add_hook_arguments()` 提供同名 `--hook`/`--exe`/`--force-cp932`，不得自行选择 DLL。
 - [jis_substitution.py](../python/common/jis_substitution.py)：SExtractor 固定映射、冲突检测、私用代理字分配、保留码位、配置及 hook 产物。仅依赖标准库，无需安装外部项目。
 - 工作区采用主 Skill 的 `original/metadata/reports/gt_input/gt_output` 结构；引擎接受 UTF-8 的最小 name/names/message JSON，并已有严格 CP932 writer 与真实重提取能力。
 - 必须确认**存储编码**。JSON 本身是 UTF-8，某些 manifest 的 encoding 也是交换层 UTF-8；都不能代替脚本编码证据。严格 shift_jis、UTF-8、UTF-16、GBK 不使用此流程，Kirikiri PSB/SCN 不因 XP3 文件名编码而触发它。`--encoding` 的实际写法（如 `cp932`、`CP932`、`windows-31j`）原样记入报告的 `script_encoding`。

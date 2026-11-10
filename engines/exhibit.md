@@ -122,9 +122,9 @@ python -m python.common.jis_workflow finalize "JIS准备目录" "重建目录" "
 
 当前实现保守地预留全部原始字符串（包括未分类 UI），所以少量中文试注也可能与原日文代理字冲突。不得关闭冲突检查强行输出；先选可编码或无冲突的短句检查加载，再决定完整译文的映射/字体策略。未经证实不能直接把 CP932 改为 GBK/UTF-8。
 
-使用了替换字符才生成 `uif_config.json`、`jis-mapping.json` 和 `JIS-部署说明.txt`；已确认主 EXE 为 x86 时一并输出随包 `winmm.dll`。只有 seed、没有 EXE 架构证据时不擅自选 DLL。
+使用了替换字符才生成 `uif_config.json`、`jis-mapping.json` 和 `JIS-部署说明.txt`。hook 按公共策略：`rebuild --exe` 或提取时记录且仍存在的主 EXE 决定 CialloHook 位数，并在码页探针未确认固定 CP932 时强制 ACP 932（附 LE/LEP 依赖）；EXE 已不在时只按记录的 PE 位数选 hook、不强制 932；`--hook`、`--force-cp932` 与 [JIS 公共流程](../guides/jis-substitution.md) 相同，UIF 仅以 `--hook uif-x86` 手动兜底。只有 seed、没有 EXE 架构证据时不擅自选 DLL。
 
-让用户先试一个开场文件。回注结果按原 `rld/` 相对路径部署，并保留原备份；这是松散脚本替换。使用 hook 时将兼容的 `winmm.dll` 与同批 `uif_config.json` 放在实际主 EXE 目录，现有 hook/配置先检查合并；也可选映射版本一致、无冲突的专用日繁/JIS 替换字体，并确认游戏实际选用。游戏加载、hook 和字形效果需要用户实测，再决定批量翻译策略。
+让用户先试一个开场文件。回注结果按原 `rld/` 相对路径部署，并保留原备份；这是松散脚本替换。使用 hook 时将结果目录中的 hook DLL、其配置（及强制 932 时的 LE/LEP 依赖）与同批 `uif_config.json` 放在实际主 EXE 目录，现有 hook/配置先检查合并；也可选映射版本一致、无冲突的专用日繁/JIS 替换字体，并确认游戏实际选用。游戏加载、hook 和字形效果需要用户实测，再决定批量翻译策略。
 
 ## 验证与新方言适配
 

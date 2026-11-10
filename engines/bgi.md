@@ -83,7 +83,7 @@
 
 `patch_v1` 默认严格按 CP932 编码；部分中文汉字可直接表示，但不可表示的简体字会触发 `encoding_error`。中文回注优先考虑随包 [JIS 替换](../guides/jis-substitution.md)：由调用层用同一个替换会话校验真实中文，并将 `codec.encode(text).decode("cp932")` 得到的代理文本交给 `patch_v1`；重解析后用 `codec.display()` 核对真实译文。先预留未改显示文本，冲突、缺映射、控制码变化均拒绝。脚本资源名和内部字符串不做替换。
 
-当前叶子 writer 不自动生成 JIS 配置；调用层须在全部校验通过后将 `codec.artifacts()` 与脚本一并放入新结果目录，并告知 hook/字体用法。先核对实际游戏进程位数：仓库的 `winmm.dll` 是 x86，64 位程序应使用兼容构建或匹配映射的替换字体，调用 `artifacts(include_hook=False)` 排除不兼容 DLL。不能仅改 `encoding='utf-8'` 就声称完成转换，因为它也参与原脚本解析；改变注入编码须另行确认加载器和字符串读写规则。
+当前叶子 writer 不自动生成 JIS 配置；调用层须在全部校验通过后将 `codec.artifacts()` 与脚本一并放入新结果目录，并告知 hook/字体用法。hook 与强制 932 按公共策略用 `jis_workflow.hook_artifacts(codec, exe=实际游戏EXE)` 生成：按 EXE 位数选 CialloHook，探针未确认固定 CP932 时强制 ACP 932；UIF 只作手动兜底。不能仅改 `encoding='utf-8'` 就声称完成转换，因为它也参与原脚本解析；改变注入编码须另行确认加载器和字符串读写规则。
 
 ## DSC 与归档写回
 

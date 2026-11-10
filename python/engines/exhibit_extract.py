@@ -10,6 +10,7 @@ import struct
 
 from ..common.contract import dump_rows, load_json, sha256
 from ..common.jis_substitution import JisSubstitution
+from ..common.jis_workflow import add_hook_arguments, hook_artifacts
 from ..common.safety import _check_existing_ancestors, validate_names, write_new_tree, validate_new_tree_destination
 from .exhibit_keys import PE, recover_def_seed, scenario_seed
 from .exhibit_rld import MAX_FILE, PROFILE, crypt, export_rld, parse, rebuild_rld
@@ -359,13 +360,13 @@ def extract(source, output, *, exe=None, ini=None, resident=None, scripts_dir=No
         "rebuilt/growth-test：若存在，仅为增加 ABC 的离线增长测试，不能当正式译文。\n"
         "reports/extraction.json：范围、哈希、密钥恢复方式、未解析姓名与验证状态。\n"
         "部署时按原 rld/ 路径替换选中的副本；本工具不会修改游戏或执行游戏。\n"
-        "CP932 中文回注默认优先使用 JIS 替换，生成匹配配置与兼容时的 x86 hook；\n"
+        "CP932 中文回注默认优先使用 JIS 替换，按 EXE 位数生成 CialloHook 及配置（需要时强制 932）；\n"
         "先试注少量中文，确认加载、字体和显示后再批量翻译。\n").encode("utf-8")
     write_new_tree(output, list(files.items()))
     return report
 
 
-def rebuild(workspace, output, *, jis_mode="auto"):
+def rebuild(workspace, output, *, jis_mode="auto", hook="auto", exe=None, force_cp932="auto"):
     workspace = Path(workspace)
     report = load_json(read_bounded(workspace / "reports/extraction.json"))
     if report["engine"] != "exhibit" or report["profile"] != PROFILE:
@@ -419,9 +420,17 @@ def rebuild(workspace, output, *, jis_mode="auto"):
               "sha256": {name: sha256(raw) for name, raw in files.items()}, "runtime_verified": False}
     if codec is not None:
         result["jis_substitution"] = codec.summary()
-        # An explicit seed without an EXE is enough to write scripts, but not
-        # enough evidence to choose a DLL architecture.
-        files.update(codec.artifacts(include_hook=report["keys"].get("machine") == 0x14C, hook="uif"))
+        # Shared policy: CialloHook by EXE bitness, forced ACP 932 unless the
+        # probe proves fixed CP932. Without --exe the EXE recorded at extract
+        # time is reused if still present, else only its PE machine; an
+        # explicit seed alone is not enough evidence to choose a DLL.
+        recorded = report.get("key_evidence", {}).get("exe", {}).get("path")
+        if exe is None and recorded and Path(recorded).is_file():
+            exe = recorded
+        extras, delivery = hook_artifacts(codec, hook=hook, exe=exe, force_cp932=force_cp932,
+                                          machine=report["keys"].get("machine"))
+        result["jis_delivery"] = delivery
+        files.update(extras)
     files["reports/rebuild.json"] = json_bytes(result)
     files["README.txt"] = ("ExHibit 回注结果：只包含有变化的 rld/ 文件。\n"
         "先备份游戏原文件，再按原相对路径部署；不得把 original/rld 的明文当回注文件。\n"
@@ -508,6 +517,7 @@ def main():
     command.add_argument("workspace")
     command.add_argument("output", help="new result directory; only changed RLDs")
     command.add_argument("--jis-mode", choices=("auto", "off"), default="auto")
+    add_hook_arguments(command)
     command = sub.add_parser("readback", help="re-extract a rebuild result merged over workspace originals")
     command.add_argument("workspace")
     command.add_argument("rebuilt", help="rebuild output directory (rld/*.rld)")

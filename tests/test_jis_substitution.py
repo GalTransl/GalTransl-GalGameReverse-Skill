@@ -169,7 +169,8 @@ class JisTests(unittest.TestCase):
             changed[1]["message"] = "你好，这是中文。"
             translated = dump_rows(changed)
             (work / "gt_output/ACT_A.json").write_bytes(translated)
-            result = pack(work, root / "rebuilt")
+            # Explicit UIF fallback; the default CialloHook policy is covered in test_systemc.
+            result = pack(work, root / "rebuilt", hook="uif-x86", force_cp932="off")
             self.assertEqual(hashlib.sha256((root / "rebuilt/winmm.dll").read_bytes()).hexdigest(), HOOK_SHA256)
             self.assertGreater(result["text_encoding"]["used_count"], 0)
             config = json.loads((root / "rebuilt/uif_config.json").read_bytes())["character_substitution"]

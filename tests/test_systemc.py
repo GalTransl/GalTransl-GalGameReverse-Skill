@@ -301,6 +301,39 @@ class ScriptTests(unittest.TestCase):
             with self.assertRaises(FileExistsError):
                 extract(game, work)
 
+    def test_jis_delivery_follows_shared_hook_policy(self):
+        from tests.test_jis_force_cp932 import x64_exe, x86_exe
+        with tempfile.TemporaryDirectory() as temp:
+            game = Path(temp)
+            members = fixture()
+            members["ACT_A.txt"] = members["ACT_A.txt"].replace(b"$S", b"").replace(b"$L", b"")
+            (game / "data.fpk").write_bytes(archive(members))
+            work = game / "extract"
+            work.mkdir()
+            extract(game, work)
+            translated = json.loads((work / "gt_input/ACT_A.json").read_text(encoding="utf-8"))
+            translated[0]["message"] = "这是中文显示测试。"
+            (work / "gt_output/ACT_A.json").write_text(json.dumps(translated, ensure_ascii=False), encoding="utf-8")
+            (game / "acp.exe").write_bytes(x86_exe([0]))
+            (game / "fixed64.exe").write_bytes(x64_exe([932, 932]))
+            forced = pack(work, game / "acp", exe=game / "acp.exe")
+            self.assertEqual(forced["jis_delivery"]["hook"], "ciallohook")
+            self.assertTrue(forced["jis_delivery"]["force_cp932"])
+            self.assertIn("version.dll", forced["jis_artifacts"])
+            self.assertIn("LoaderDll_x86.dll", forced["jis_artifacts"])
+            self.assertNotIn("winmm.dll", forced["jis_artifacts"])
+            self.assertIn("[LocaleEmulator]", (game / "acp/version.ini").read_text("utf-8"))
+            fixed = pack(work, game / "fixed", exe=game / "fixed64.exe")
+            self.assertEqual(fixed["jis_delivery"]["hook"], "ciallohook-x64")
+            self.assertFalse(fixed["jis_delivery"]["force_cp932"])
+            self.assertFalse(any(n.startswith(("LoaderDll", "LocaleEmulator")) for n in fixed["jis_artifacts"]))
+            bare = pack(work, game / "bare")
+            self.assertIsNone(bare["jis_delivery"]["hook"])
+            self.assertTrue(bare["jis_delivery"]["warnings"])
+            self.assertNotIn("version.dll", bare["jis_artifacts"])
+            with self.assertRaises(FormatError):
+                pack(work, game / "wrong", hook="ciallohook-x86", exe=game / "fixed64.exe")
+
 
 class DiagnosticsTests(unittest.TestCase):
     def test_non_cp932_line_reports_member_line_hex_and_gbk_hint(self):

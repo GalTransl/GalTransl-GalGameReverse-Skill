@@ -261,7 +261,20 @@ class WorkspaceTests(unittest.TestCase):
             saved = (root / "packed/rld/start.rld").read_bytes()
             decoded = parse(crypt(saved, 23))
             self.assertEqual(decoded.ops[0].strings[1].translate(table), rows[0]["message"])
-            self.assertTrue((root / "packed/winmm.dll").is_file())
+            # Shared JIS policy: CialloHook by the recorded EXE's bitness; the
+            # synthetic EXE cannot prove fixed CP932, so ACP 932 is forced.
+            self.assertTrue((root / "packed/version.dll").is_file())
+            self.assertFalse((root / "packed/winmm.dll").exists())
+            self.assertEqual(result["jis_delivery"]["hook"], "ciallohook")
+            self.assertTrue(result["jis_delivery"]["force_cp932"])
+            self.assertIn("[LocaleEmulator]", (root / "packed/version.ini").read_text("utf-8"))
+            self.assertTrue((root / "packed/LoaderDll_x86.dll").is_file())
+            fallback = rebuild(work, root / "uif", hook="uif-x86", force_cp932="off")
+            self.assertEqual(fallback["jis_delivery"]["hook"], "uif")
+            self.assertTrue((root / "uif/winmm.dll").is_file())
+            self.assertFalse((root / "uif/version.dll").exists())
+            with self.assertRaises(Exception):
+                rebuild(work, root / "uif-forced", hook="uif-x86", force_cp932="on")
             self.assertEqual((game / "rld/start.rld").read_bytes(), raw)
             (work / "original/encrypted/start.rld").write_bytes(raw + b"\0")
             with self.assertRaises(ValueError):

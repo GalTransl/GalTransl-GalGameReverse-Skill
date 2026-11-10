@@ -102,7 +102,7 @@ python -m python.common.jis_workflow finalize "JIS_PREP" "JIS_REBUILD" "JIS_READ
 
 `reports/jis-extra-text.txt` 在提取时生成，旧工作区没有这个文件，需要从哈希验证通过的原归档重新提取到新目录。无法按 CP932 解码的池项不会写入这个文件，而是逐成员列在 `reports/extraction.json` 的 `jis_extra_text.undecodable_cp932_strings`，需要单独核对。
 
-不假设存在通用 `patch.med` 加载机制。交付的是同名完整剧情归档；备份和部署依授权处理，不覆盖原游戏。最终告诉用户配置所在位置，以及将兼容的 `winmm.dll` 与 `uif_config.json` 放到实际游戏 EXE 目录的用法；存在其他 hook 时先核对合并。字体路线必须是映射匹配的专用替换字体，普通日文或繁体字体无效。离线往返与中文还原不等于游戏内显示已验证。
+不假设存在通用 `patch.med` 加载机制。交付的是同名完整剧情归档；备份和部署依授权处理，不覆盖原游戏。最终告诉用户配置所在位置，以及将结果目录中按 EXE 位数选择的 CialloHook（`version.dll`/`version.ini`，强制 932 时含 LE/LEP 依赖）与 `uif_config.json` 放到实际游戏 EXE 目录的用法；存在其他 hook 时先核对合并。字体路线必须是映射匹配的专用替换字体，普通日文或繁体字体无效。离线往返与中文还原不等于游戏内显示已验证。
 
 [合成测试](../tests/test_med.py) 覆盖归档间隙/重封包、空脚本、帧/索引错误、姓名关联、原池复用隔离、变长引用、控制符、JIS 回读、回读目录与重建目录分离、extra-text 导出及工作区拒绝覆盖。新方言须先核实长度字段、引用基准和加载端读取方式，再添加独立 profile 或有证据的形状/语义；不按游戏名另建脚本。
 
