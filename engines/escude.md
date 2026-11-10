@@ -38,10 +38,9 @@
 
 ### 容器到剧本路线
 1. 若文件是 ESC-ARC2，先用随包容器模块解码，而非直接解析剧本；ESC-ARC1 当前不支持。
-2. 参考 `msg-tool/src/scripts/escude/archive.rs`、`crypto.rs`、`lzw.rs`。
-3. GARbro-Mod `ArcFormats/Escude/ArcBIN.cs` 也提供容器识别线索。
-4. 提取 ESCR1_00 成员，保存 VM、字符串索引及原始 bytes。
-5. 需要姓名上下文时，再单独获取同版本 enum script 并证明映射。
+2. 容器索引解密与 acp LZW 见下文 [ESC-ARC2 与 acp](#esc-arc2-与-acp)，算法已随包实现。
+3. 提取 ESCR1_00 成员，保存 VM、字符串索引及原始 bytes。
+4. 需要姓名上下文时，再单独获取同版本 enum script 并证明映射。
 - 模块不自动读取 enum 文件或依赖任何原工具安装。
 
 ### 源码与算法对应
@@ -106,7 +105,7 @@ assert read_escr(changed).strings[0].endswith('下一行'.encode('cp932'))
 
 ## 分离消息格式
 
-适用证据为 `ESC-ARC2` 中同名 `.bin` / `.001`，分别以 `@code:__` / `@mess:__` 开头。代码中的 `Haison` 是现有字节码 profile 标识；须核对下述指令和原生过程表，不能推广到所有版本。
+适用证据为 `ESC-ARC2` 中同名 `.bin` / `.001`，分别以 `@code:__` / `@mess:__` 开头。代码与 manifest 中的 `haison` 字样（`escude-mess-haison/1`、`haison-code-mess`、`escude-haison-extraction/2`）只是现有字节码 profile 与 schema 标识，须与实现保持一致，不代表适用范围；须核对下述指令和原生过程表，不能推广到所有版本。
 
 ### 随包模块与实际范围
 
@@ -138,7 +137,7 @@ assert read_escr(changed).strings[0].endswith('下一行'.encode('cp932'))
 
 `.001` 使用普通 CP932；`!?`、半角片假名都按普通 CP932 保留。旧 ESCR 的 `decode_engine_string` 会改变这些字符，不能复用。`@code` 的内部字符串区与 `.001` 消息区是两个独立池，不可混合导出。
 
-Haison 指令是 u8 opcode 加固定个数 i32 操作数，显式支持 1..45。核心定位：`40=NAME`（人物行号），`41=TEXT`（消息索引），`42=PAGE`，`43=OPTION`（消息索引、代码跳转地址），`45=LINE`（源脚本行号）。扫描全部代码，不按字节搜 `0x29`；所有跳转、调用与选项目标必须落到已解析指令边界。
+该 profile 的指令是 u8 opcode 加固定个数 i32 操作数，显式支持 1..45。核心定位：`40=NAME`（人物行号），`41=TEXT`（消息索引），`42=PAGE`，`43=OPTION`（消息索引、代码跳转地址），`45=LINE`（源脚本行号）。扫描全部代码，不按字节搜 `0x29`；所有跳转、调用与选项目标必须落到已解析指令边界。
 
 `extract_pair` 要求 TEXT/OPTION 的引用顺序恰好等于消息池索引顺序，每项恰好引用一次。遇到未引用、重复引用、次序差异、`PUSH_MESS` 间接消费、未知 opcode/native、消息数不匹配时拒绝当前成员，不能只导出已解析的前半段。它不沿某次游戏执行路径收集文本，因此不会漏掉另一条选择分支。
 
@@ -160,7 +159,7 @@ PAGE、分支合流或不能证明的调用结束局部姓名证据。**这不�
 python -m python.engines.escude_extract "游戏目录" "新的输出目录"
 ```
 
-[escude_extract.py](../python/engines/escude_extract.py) 只读取根目录的 `script.bin`、`data.bin`，不递归扫描旧 `_extract`，不载入图片、音频包或汉化 PK02。这是上述 Haison profile 的入口，不是所有 Escu:de 游戏的自动适配器。目标须不存在或为普通空目录；已有非空结果时另选新目录，绝不覆盖。每个源包上限 8 MiB、成员解码上限 16 MiB、累计解码上限 128 MiB；更大的其他游戏应先核对格式和预算。
+[escude_extract.py](../python/engines/escude_extract.py) 只读取根目录的 `script.bin`、`data.bin`，不递归扫描旧 `_extract`，不载入图片、音频包或已有汉化资源包（PK02）。这是上述 `@code`/`@mess` profile 的入口，不是所有 Escu:de 游戏的自动适配器。目标须不存在或为普通空目录；已有非空结果时另选新目录，绝不覆盖。每个源包上限 8 MiB、成员解码上限 16 MiB、累计解码上限 128 MiB；更大的其他游戏应先核对格式和预算。
 
 入口校验整个脚本包的类型、配对、代码边界、消息引用和人物表，逐文件执行原文及变长回填测试，全部通过后才用 `write_new_tree` 发布。遗漏配对、未知成员及平铺文件名冲突会拒绝本次发布，不能把部分结果宣称完整；发生重名时需补充带归档/成员序号的映射后重试。原包与成员、三份配套源 manifest、每个输出映射及本次统计一起保存到新目录。报告不复用旧提取目录里的测试数或统计常量。
 
@@ -208,7 +207,7 @@ assert rebuilt == message_bytes
 
 `patch_mess` 严格编码指定槽，重建所有偏移和 poolSize，再恢复 XOR。原文相同的槽保留原 bytes；不增删池项，不改 `.bin`，因此代码跳转及消息索引不需重定位。输出后再次解析并验证译文、原始代码哈希和未改槽。
 
-原文可逐字节往返；变长 CP932 译文通过结构检查。当前 writer 只接受 CP932，中文字符不一定可表示，不能用 `errors='replace'`。原生中文显示、字体、其他编码、松散文件优先级和补丁加载均未验证。已有汉化的 `haison_cn.pk2` 是独立 `PK02` 资源，本次提取与重封的是原版 `script.bin` 日文，不能称为汉化补丁中文提取，也不能假定汉化启动器会优先加载新的原版脚本包。
+原文可逐字节往返；变长 CP932 译文通过结构检查。当前 writer 只接受 CP932，中文字符不一定可表示，不能用 `errors='replace'`。原生中文显示、字体、其他编码、松散文件优先级和补丁加载均未验证。已有汉化资源包（PK02）是独立资源，本工具提取与重封的是原版 `script.bin` 文本，不能称为从汉化补丁提取中文，也不能假定汉化启动器会优先加载新的原版脚本包。
 
 ### 从 gt_output 回填并重封 script.bin
 
@@ -218,7 +217,7 @@ assert rebuilt == message_bytes
 python -m python.engines.escude_pack "提取工作区" "新的打包输出目录"
 ```
 
-输出目录的父目录必须存在，目标须不存在或为普通空目录。入口读取工作区 `gt_output/` 的同名 JSON，缺少译文的剧本仍经过原文 parser/writer 校验；不认识的文件名拒绝，`.keep` 可忽略。所有译文必须保留数组顺序、姓名上下文与控制标签。输出 `script.bin` 和 `verification.json`，不会安装、替换游戏文件或处理 PK02 汉化补丁。
+输出目录的父目录必须存在，目标须不存在或为普通空目录。入口读取工作区 `gt_output/` 的同名 JSON，缺少译文的剧本仍经过原文 parser/writer 校验；不认识的文件名拒绝，`.keep` 可忽略。所有译文必须保留数组顺序、姓名上下文与控制标签。输出 `script.bin` 和 `verification.json`，不会安装、替换游戏文件或处理已有汉化资源包（PK02）。
 
 回填前在临时目录重新解析工作区保存的两个原始归档，核对报告、全部已保存成员、原文 JSON 和重新生成的完整 manifest。这样不依赖可编辑 sidecar 中的地址，也不会静默忽略人物库或零消息代码文件的变化。译文逐条通过 CP932、姓名、控制码与池索引检查，回填后重新解析配对代码，比较消息与非文本绑定。最终新归档的全部成员再次解包核对。换行保护项调整后，旧 metadata 无法通过 manifest 比对；应从哈希验证通过的原件重新提取到新目录，再放回同名译文。
 
