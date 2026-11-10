@@ -63,6 +63,10 @@ Hx 名称提示的分阶段顺序（启动 TJS、TJS 全字符串池、场景列
 
 名称哈希域/mediaName 的取值、扩展名补全位置和 CG 标签/差分映射的行为观察参考 cxdec-hxv4-static-analysis；该仓库未声明许可证，只采纳格式观察，未复制代码。详见 [Kirikiri 算法来源](kirikiri-sources.json) 中的同名条目。
 
+### Unity 容器层
+
+UnityFS、serialized v17–v22、TypeTree 公共字符串表与 TextAsset 布局为独立 Python 实现，对照 UnityPy、AssetStudio（均为 MIT）的公开格式描述核对字段顺序与标志含义，LZ4 块解码按 LZ4 块格式说明（BSD-2-Clause）编写；未复制上游代码。来源、采用范围与偏差见 [unity-containers.json](unity-containers.json)。
+
 ## 不随包提供的内容
 
 游戏专有资源、可执行文件、私有密钥、完整上游工作树、.NET BinaryFormatter `Formats.dat`、GUI或 native `.pyd`。如格式需要用户游戏的辅助表或授权获取的密钥，调用者必须显式提供，不会后台下载或猜测成功。

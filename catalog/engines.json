@@ -193,6 +193,8 @@
           "extract",
           "volume_paths",
           "resolve_volumes",
+          "offset_table",
+          "trailing_matches_offset_table",
           "build",
           "repack"
         ],
@@ -244,6 +246,8 @@
           "extract",
           "volume_paths",
           "resolve_volumes",
+          "offset_table",
+          "trailing_matches_offset_table",
           "build",
           "repack"
         ],
@@ -291,6 +295,8 @@
           "extract",
           "volume_paths",
           "resolve_volumes",
+          "offset_table",
+          "trailing_matches_offset_table",
           "build",
           "repack"
         ],
@@ -485,12 +491,14 @@
       "python_references": [
         "python/archives/catsystem2_int.py",
         "python/engines/catsystem2.py",
-        "python/engines/catsystem2_extract.py"
+        "python/engines/catsystem2_extract.py",
+        "python/engines/catsystem2_pack.py"
       ],
       "public_symbols": {
         "python/archives/catsystem2_int.py": [
           "IntEntry",
           "IntArchive",
+          "IntLayout",
           "IntProbe",
           "encode_passphrase",
           "MersenneTwister",
@@ -499,6 +507,9 @@
           "read_int",
           "probe_member",
           "read_member",
+          "detect_int_layout",
+          "write_int",
+          "verify_int",
           "extract_exe_password"
         ],
         "python/engines/catsystem2.py": [
@@ -513,6 +524,13 @@
         "python/engines/catsystem2_extract.py": [
           "extract_game",
           "main"
+        ],
+        "python/engines/catsystem2_pack.py": [
+          "update_number",
+          "overlay_order",
+          "choose_update_name",
+          "pack",
+          "read_back"
         ]
       },
       "scope": "version/stage-limited references; read the engine page",
@@ -628,6 +646,8 @@
           "crypt_script",
           "read_labels",
           "fix_label_offsets",
+          "verify_label_offsets",
+          "apply_edits_with_labels",
           "dialogue_spans"
         ],
         "python/engines/eagls_extract.py": [
@@ -784,7 +804,9 @@
           "digest",
           "json_bytes",
           "require",
+          "read_archive_file",
           "extract",
+          "readback",
           "main"
         ],
         "python/engines/escude_mdb.py": [
@@ -842,8 +864,14 @@
           "json_bytes",
           "read_bounded",
           "flat_names",
+          "eudc_fonts",
+          "tte_codepoints",
+          "eudc_reservation",
+          "compact_codepoints",
+          "with_reserved",
           "extract",
           "rebuild",
+          "readback",
           "main"
         ],
         "python/engines/exhibit_keys.py": [
@@ -860,6 +888,7 @@
           "parse",
           "choice_fields",
           "records",
+          "protected_tokens",
           "patch",
           "export_rld",
           "rebuild_rld"
@@ -1245,9 +1274,15 @@
           "js",
           "regular",
           "read_file",
+          "scn_variant",
           "manifest_for",
           "verify_archive",
+          "member_name_keys",
+          "speaker_key_conflicts",
+          "name_scan_archives",
+          "flat_patch_members",
           "extract",
+          "build_patch",
           "pack",
           "main"
         ],
@@ -1511,9 +1546,11 @@
         "python/engines/med_extract.py": [
           "json_bytes",
           "read_bounded",
+          "extra_strings",
           "member_info",
           "extract",
           "pack",
+          "read_back",
           "main"
         ],
         "python/engines/med_script.py": [
@@ -2089,6 +2126,8 @@
           "records",
           "text_records",
           "export",
+          "TranslationErrors",
+          "row_error",
           "patch"
         ]
       },
@@ -2471,11 +2510,14 @@
           "FpkEntry",
           "FpkIndex",
           "read_fpk_index",
+          "read_fpk_index_stream",
+          "read_fpk_member",
           "unpack_fpk",
           "rebuild_fpk"
         ],
         "python/engines/systemc.py": [
           "systemc_name_header",
+          "cp932_error",
           "export_act",
           "inject_act"
         ],
@@ -2709,7 +2751,7 @@
     },
     {
       "id": "unity",
-      "title": "Unity：Utage 剧情表、serialized asset 与 .bin/.idx 容器",
+      "title": "Unity：UnityFS / serialized 容器、TextAsset、Utage 剧情表与 .bin/.idx 容器",
       "aliases": [
         "UTAGE",
         "Unity UTAGE mono DAT"
@@ -2718,8 +2760,11 @@
       "python_references": [
         "python/archives/unity_arc.py",
         "python/archives/unity_serialized.py",
+        "python/archives/unityfs.py",
         "python/engines/unity.py",
+        "python/engines/unity_scan.py",
         "python/engines/unity_snr.py",
+        "python/engines/unity_textasset.py",
         "python/engines/unity_utage.py",
         "python/engines/unity_utage_extract.py"
       ],
@@ -2735,13 +2780,37 @@
         ],
         "python/archives/unity_serialized.py": [
           "Reader",
+          "TypeNode",
+          "SerializedType",
           "Object",
           "Index",
+          "read_type_tree",
+          "read_header",
           "read_index",
           "open_checked",
           "read_object",
           "read_file",
-          "rebuild"
+          "rebuild",
+          "Field",
+          "walk_object",
+          "NodeStream"
+        ],
+        "python/archives/unityfs.py": [
+          "lz4_block",
+          "lzma_block",
+          "decompress",
+          "Block",
+          "Node",
+          "Bundle",
+          "padding_flag_is_alignment",
+          "is_unityfs",
+          "read_header",
+          "BundleReader",
+          "read_bundle",
+          "build",
+          "rebuild",
+          "verify",
+          "describe"
         ],
         "python/engines/unity.py": [
           "AlignedString",
@@ -2749,11 +2818,37 @@
           "encode_aligned_string",
           "replace_aligned_string"
         ],
+        "python/engines/unity_scan.py": [
+          "Budget",
+          "mono_script",
+          "behaviour_header",
+          "scan_serialized",
+          "resolve",
+          "scan",
+          "summarize",
+          "main"
+        ],
         "python/engines/unity_snr.py": [
           "SnrLine",
           "pack_string",
           "open_snr",
           "apply_snr_texts"
+        ],
+        "python/engines/unity_textasset.py": [
+          "TextAsset",
+          "read_textasset",
+          "encode_script",
+          "patch_textasset",
+          "guess_encoding",
+          "entropy",
+          "Container",
+          "open_container",
+          "text_assets",
+          "rebuild_container",
+          "verify_container",
+          "extract",
+          "pack",
+          "main"
         ],
         "python/engines/unity_utage.py": [
           "Writer",
@@ -2775,6 +2870,7 @@
           "character_names",
           "controls",
           "export_book",
+          "TranslationErrors",
           "patch_book"
         ],
         "python/engines/unity_utage_extract.py": [
@@ -3039,6 +3135,7 @@
           "json_bytes",
           "profile_from",
           "archive_members",
+          "baseline_from_archive",
           "extract",
           "rebuild",
           "main"
@@ -3054,6 +3151,8 @@
           "Scenario",
           "commands_from",
           "literal",
+          "expression_tokens",
+          "literal_free_expression",
           "ystb_version",
           "export_script",
           "rebuild_script"

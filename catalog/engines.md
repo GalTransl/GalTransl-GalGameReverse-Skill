@@ -95,7 +95,7 @@
 | U-GOS：.o 指针引用的字符串块 | [ugos](../engines/ugos.md) |
 | U-MeSoft：PK 尾索引与 SCR/TBL literal 封装 | [umesoft](../engines/umesoft.md) |
 | Unison / Softpal Lazy：VAL 分离式字符串池 | [unison](../engines/unison.md) |
-| Unity：Utage 剧情表、serialized asset 与 .bin/.idx 容器 | [unity](../engines/unity.md) |
+| Unity：UnityFS / serialized 容器、TextAsset、Utage 剧情表与 .bin/.idx 容器 | [unity](../engines/unity.md) |
 | VALKYRIA：DAT 容器与 SDT 文本片段 | [valkyria](../engines/valkyria.md) |
 | Violent BIN 规则：只读 JIS 候选证据 | [violent](../engines/violent.md) |
 | Whale：文本行结构、SELECT 与 [n] | [whale](../engines/whale.md) |
