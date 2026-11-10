@@ -9,20 +9,40 @@ and using an actual engine re-extraction as readback evidence.
 import argparse
 from dataclasses import dataclass
 import json
+import os
 from pathlib import Path
 import re
 import stat
+import struct
+import sys
 
 from .binary import FormatError
 from .contract import dump_rows, load_json, sha256, validate_rows
-from .jis_substitution import JisSubstitution, is_cp932
+from .jis_substitution import (HOOKS, JisSubstitution, batch_mapping_sha256, format_reserved_codepoints,
+                               is_cp932, parse_reserved_codepoints)
 from .safety import Limits, _check_existing_ancestors, validate_names, write_new_tree, validate_new_tree_destination
 
 SCHEMA = "jis-json-workflow/1"
 ROOTS = ("original", "metadata", "reports", "gt_input")
-# CLI --hook value -> bundled x86 hook; plain "x86" stays the UIF alias.
-HOOK_CHOICES = {"none": None, "x86": "uif", "uif-x86": "uif", "ciallohook-x86": "ciallohook"}
+# CLI --hook value -> bundled hook. Plain "x86" stays the UIF alias; there is
+# no x64 UIF, so "x64" means CialloHook x64.
+HOOK_CHOICES = {"none": None, "x86": "uif", "uif-x86": "uif", "ciallohook-x86": "ciallohook",
+                "x64": "ciallohook-x64", "ciallohook-x64": "ciallohook-x64"}
 CIALLOHOOK_INI_NAMES = {"ciallohook.ini", "version.ini", "winmm.ini"}
+RESERVE_SCOPES = ("untranslated", "all")
+# Engine manifests (metadata/*.json, top-level "settings") may declare
+# codepoints the engine/game already uses; 'unused' never allocates them.
+RESERVED_CODEPOINTS_KEY = "reserved_codepoints"
+MAX_LOCATIONS = 20
+PE_MACHINES = {0x14C: "x86", 0x8664: "x64", 0xAA64: "arm64"}
+
+
+class JisDiagnosticsError(FormatError):
+    """Preparation refused; .report has the same shape as the preflight JSON."""
+
+    def __init__(self, message, report):
+        super().__init__(message)
+        self.report = report
 
 
 def _json(value):
@@ -67,25 +87,180 @@ class TranslationPlan:
                 "stored_rows_verified": True, "display_rows_verified": True, "runtime_verified": False}
 
 
-def prepare_translations(original, translated, *, encoding, extra_texts=(), proxy_policy="fixed"):
-    """Pure shared API. All source text is conservatively reserved before encoding.
+def _paired(original, translated):
+    """Yield (gt_input location, original text, translated text or None)."""
+    for name, rows in sorted(original.items()):
+        after_rows = translated.get(name)
+        for index, values in enumerate(rows):
+            after = after_rows[index] if after_rows is not None else None
+            for field, value in values.items():
+                location = {"source": "gt_input", "file": name, "row": index + 1, "field": field}
+                if field != "names":
+                    yield location, value, after[field] if after is not None else None
+                    continue
+                for slot, text in enumerate(value):
+                    yield (dict(location, slot=slot + 1), text,
+                           after[field][slot] if after is not None else None)
 
-    Only the minimal JSON display fields are transformed. The original manifest
-    and engine control/name/offset checks still run in the ordinary writer.
-    Extra decoded UI/control/resource text can reserve additional literal
-    characters. Existing runtime mappings must be handled before this function.
+
+@dataclass
+class _Scope:
+    reserved: list   # (location, text) still displayed; their characters are literal
+    replaced: list   # original texts fully replaced by a translation (not reserved)
+    outputs: list    # (location, text) changed translation fields
+
+
+def _scope(original, translated, reserve_scope):
+    """'untranslated': reserve every original text still displayed somewhere.
+
+    A text is released only at locations whose translation differs; the same
+    text at another untouched location is still reserved there. 'all' keeps
+    the older conservative behaviour of reserving every original text.
+    """
+    if reserve_scope not in RESERVE_SCOPES:
+        raise FormatError(f"unsupported JIS reserve scope: {reserve_scope}")
+    scope = _Scope([], [], [])
+    for location, before, after in _paired(original, translated):
+        changed = after is not None and after != before
+        if changed and reserve_scope == "untranslated":
+            scope.replaced.append(before)
+        else:
+            scope.reserved.append((location, before))
+        if changed:
+            scope.outputs.append((dict(location, source="gt_output"), after))
+    return scope
+
+
+def _reserved_sources(reserved_codepoints):
+    """{origin: spec list} or a plain spec list (origin 'api') -> {origin: ranges}."""
+    if isinstance(reserved_codepoints, dict):
+        sources = reserved_codepoints
+    elif reserved_codepoints in ((), [], None, ""):
+        sources = {}
+    else:
+        sources = {"api": reserved_codepoints}
+    return {origin: parse_reserved_codepoints(spec) for origin, spec in sources.items()}
+
+
+def _codec(encoding, scope, extra, reserved_sources):
+    ranges = [item for ranges in reserved_sources.values() for item in ranges]
+    codec = JisSubstitution(encoding, reserved_codepoints=[
+        f"U+{a:04X}-U+{b:04X}" for a, b in ranges])
+    for _, text in scope.reserved:
+        codec.reserve(text)
+    for text in extra.values():
+        codec.reserve(text)
+        codec.avoid_private(text)
+    for text in scope.replaced:
+        # A replaced line no longer reserves its characters, but its private
+        # glyphs (EUDC/engine codepoints) stay out of the 'unused' pool.
+        codec.avoid_private(text)
+    return codec
+
+
+def _next_steps(report, reserve_scope, proxy_policy):
+    steps = []
+    if report["missing_characters"]:
+        steps.append("译文含固定表没有、也不能直接用 CP932 存储的字符（missing_characters）："
+                     "在 gt_output 中改写为常用字或 CP932 可直接编码的字符后重试；unused 策略也不会为它们分配代理。")
+    if report["conflicts"]:
+        if proxy_policy != "unused":
+            steps.append("固定表代理字与仍会显示的日文/UI 字冲突：试注阶段改用 `--proxy-policy unused`，"
+                         "并按游戏 EXE 位数配 hook（32 位 `--hook uif-x86` 或 `ciallohook-x86`，"
+                         "64 位 `--hook ciallohook-x64`）；全量翻译后可按固定表重新预检。")
+        if reserve_scope == "all":
+            steps.append("当前 `--reserve-scope all` 连已被译文替换的原文也预留；"
+                         "没有证据表明这些原文仍会显示时，改用默认 `--reserve-scope untranslated`。")
+        if any(item.get("reserved_codepoint") for item in report["conflicts"]):
+            steps.append("部分固定代理字落在 reserved_codepoints 内，只能用 `--proxy-policy unused` 重新分配。")
+    if not steps:
+        steps.append("预检通过：可正式 prepare；固定映射可配 hook，或使用映射版本匹配的预设字体。")
+    return steps
+
+
+def _locate(report, scope, extra, reserved_sources, max_locations):
+    """Attach capped literal/translation locations plus total counts."""
+    limit = None if max_locations is None or max_locations <= 0 else max_locations
+    literal = {item["proxy"]: [0, []] for item in report["conflicts"]}
+    translation = {item["character"]: [0, []] for item in report["conflicts"]}
+
+    def add(bucket, char, location):
+        entry = bucket[char]
+        entry[0] += 1
+        if limit is None or len(entry[1]) < limit:
+            entry[1].append(location)
+
+    for location, text in scope.reserved:
+        for char in sorted(set(text).intersection(literal)):
+            add(literal, char, location)
+    for location, text in scope.outputs:
+        present = set(text)
+        for char in sorted(present.intersection(literal)):
+            add(literal, char, location)
+        for char in sorted(present.intersection(translation)):
+            add(translation, char, location)
+    for name, text in extra.items():
+        for line, value in enumerate(text.split("\n"), 1):
+            for char in sorted(set(value).intersection(literal)):
+                add(literal, char, {"source": "extra_texts", "file": name, "line": line})
+    for origin, ranges in reserved_sources.items():
+        for char in literal:
+            if any(a <= ord(char) <= b for a, b in ranges):
+                add(literal, char, {"source": "reserved_codepoints", "origin": origin})
+    for item in report["conflicts"]:
+        count, locations = literal[item["proxy"]]
+        item.update(literal_locations=locations, literal_location_count=count)
+        count, locations = translation[item["character"]]
+        item.update(translation_locations=locations, translation_location_count=count)
+    report["max_locations"] = limit
+
+
+def _diagnose(codec, original, translated, scope, extra, reserved_sources, *, encoding,
+              reserve_scope, proxy_policy, max_locations):
+    report = codec.preflight(text for rows in translated.values() for text in _texts(rows))
+    report.update(schema="jis-json-preflight/1", script_encoding=encoding, reserve_scope=reserve_scope,
+                  reserved_codepoints={origin: format_reserved_codepoints(ranges)
+                                       for origin, ranges in reserved_sources.items()},
+                  original_files=sorted(original), translated_files=sorted(translated),
+                  missing_translations=sorted(set(original) - set(translated)), runtime_verified=False)
+    if report["conflicts"]:
+        _locate(report, scope, extra, reserved_sources, max_locations)
+    report["next_steps"] = _next_steps(report, reserve_scope, proxy_policy)
+    return report
+
+
+def prepare_translations(original, translated, *, encoding, extra_texts=(), proxy_policy="fixed",
+                         reserve_scope="untranslated", reserved_codepoints=(), max_locations=MAX_LOCATIONS):
+    """Pure shared API: one deterministic proxy plan for the whole package.
+
+    reserve_scope="untranslated" (default) reserves original text only where it
+    is still displayed (unchanged rows/fields/name slots and untranslated
+    files); "all" also reserves fully replaced lines. Extra decoded UI/control/
+    resource text is always reserved. reserved_codepoints (spec list or
+    {origin: spec list}) are never used as proxies. A refusal raises
+    JisDiagnosticsError whose .report matches preflight_translations().
+    Only display fields are transformed; the engine writer still runs its own
+    manifest, control, name and offset checks.
     """
     if proxy_policy not in ("fixed", "unused"):
         raise FormatError("unsupported JIS proxy policy")
     original, translated = _translation_inputs(original, translated, encoding)
-    codec = JisSubstitution(encoding)
-    for rows in original.values():
-        for text in _texts(rows):
-            codec.reserve(text)
-    for text in _extra_texts(extra_texts).values():
-        codec.reserve(text)
-    # One deterministic plan for the entire package. 'unused' is an explicit
-    # custom mapping, not a claim of compatibility with SExtractor preset fonts.
+    extra = _extra_texts(extra_texts)
+    scope = _scope(original, translated, reserve_scope)
+    reserved_sources = _reserved_sources(reserved_codepoints)
+    codec = _codec(encoding, scope, extra, reserved_sources)
+    report = _diagnose(codec, original, translated, scope, extra, reserved_sources, encoding=encoding,
+                       reserve_scope=reserve_scope, proxy_policy=proxy_policy, max_locations=max_locations)
+    if report["missing_characters"] or (report["conflicts"] and proxy_policy == "fixed"):
+        report.update(ok=False, stage="prepare", proxy_policy=proxy_policy)
+        if report["missing_characters"]:
+            char = report["missing_characters"][0]
+            message = f"missing JIS substitution: U+{ord(char):04X}"
+        else:
+            message = ("JIS proxy also occurs as literal display text or reserved codepoint: "
+                       + " ".join(f"{c['character']}->{c['proxy']}" for c in report["conflicts"]))
+        raise JisDiagnosticsError(message, report)
+    # 'unused' is an explicit custom mapping, not SExtractor preset-font compatible.
     codec.plan((text for rows in translated.values() for text in _texts(rows)),
                remap_conflicts=proxy_policy == "unused")
     stored = {n: _map_rows(rows, lambda text: codec.encode(text).decode("cp932"))
@@ -122,78 +297,59 @@ def _extra_texts(texts):
     return named
 
 
-def preflight_translations(original, translated, *, encoding, extra_texts=()):
+def preflight_translations(original, translated, *, encoding, extra_texts=(), reserve_scope="untranslated",
+                           reserved_codepoints=(), max_locations=MAX_LOCATIONS):
     """Read-only fixed-mapping diagnostics for any engine's display JSON.
 
     extra_texts accepts decoded strings or a relative source-name -> text dict.
     Engine parsers remain responsible for supplying unexported display text.
+    Location lists are capped at max_locations (<= 0: unlimited); *_count
+    fields always give the totals.
     """
     original, translated = _translation_inputs(original, translated, encoding)
     extra = _extra_texts(extra_texts)
-    codec = JisSubstitution(encoding)
-    for text in (text for rows in original.values() for text in _texts(rows)):
-        codec.reserve(text)
-    for text in extra.values():
-        codec.reserve(text)
-    report = codec.preflight(text for rows in translated.values() for text in _texts(rows))
-    report.update(schema="jis-json-preflight/1", script_encoding="cp932",
-                  original_files=sorted(original), translated_files=sorted(translated),
-                  missing_translations=sorted(set(original) - set(translated)), runtime_verified=False)
-    if not report["conflicts"]:
-        return report
-    literal_locations = {item["proxy"]: [] for item in report["conflicts"]}
-    translation_locations = {item["character"]: [] for item in report["conflicts"]}
-    for rows, source in ((original, "gt_input"), (translated, "gt_output")):
-        for location, text in _located_texts(rows, source):
-            for char in set(text).intersection(literal_locations):
-                literal_locations[char].append(location)
-            if source == "gt_output":
-                for char in set(text).intersection(translation_locations):
-                    translation_locations[char].append(location)
-    for name, text in extra.items():
-        for line, value in enumerate(text.split("\n"), 1):
-            for char in set(value).intersection(literal_locations):
-                literal_locations[char].append({"source": "extra_texts", "file": name, "line": line})
-    for item in report["conflicts"]:
-        item.update(literal_locations=literal_locations[item["proxy"]],
-                    translation_locations=translation_locations[item["character"]])
-    return report
-
-
-def _located_texts(files, source):
-    for name, rows in sorted(files.items()):
-        for row, values in enumerate(rows, 1):
-            for field, value in values.items():
-                location = {"source": source, "file": name, "row": row, "field": field}
-                if field != "names":
-                    yield location, value
-                    continue
-                for slot, text in enumerate(value, 1):
-                    yield dict(location, slot=slot), text
+    scope = _scope(original, translated, reserve_scope)
+    reserved_sources = _reserved_sources(reserved_codepoints)
+    codec = _codec(encoding, scope, extra, reserved_sources)
+    return _diagnose(codec, original, translated, scope, extra, reserved_sources, encoding=encoding,
+                     reserve_scope=reserve_scope, proxy_policy="fixed", max_locations=max_locations)
 
 
 def _read(path, limit=128 << 20):
     path = Path(path)
     _check_existing_ancestors(path.parent)
-    info = path.lstat()
+    return _read_entry(path, path.lstat(), limit)
+
+
+def _read_entry(path, info, limit):
+    """Read a file whose ancestors were already checked; info is its lstat."""
     if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1 or getattr(info, "st_file_attributes", 0) & 0x400:
         raise FormatError(f"not an ordinary, unlinked file: {path}")
     if info.st_size > limit:
         raise FormatError(f"input exceeds budget: {path}")
     with path.open("rb") as stream:
-        data = stream.read(limit + 1)
+        opened = os.fstat(stream.fileno())
+        if info.st_ino and opened.st_ino and (opened.st_ino, opened.st_dev) != (info.st_ino, info.st_dev):
+            raise FormatError(f"input replaced while reading: {path}")
+        # read(n) preallocates n bytes: size the first read from lstat, and only
+        # continue (still bounded) if the file grew after lstat.
+        want = min(info.st_size, limit) + 1
+        data = stream.read(want)
+        if len(data) == want and want <= limit:
+            data += stream.read(limit + 1 - len(data))
     if len(data) > limit:
         raise FormatError("input grew beyond budget")
     return data
 
 
 def _tree(root, limits=Limits()):
+    """Bounded tree read. Ancestors of root are checked once; every entry below
+    is lstat-checked before descent/read, so no per-file ancestor walk."""
     root = Path(root)
     _check_existing_ancestors(root)
     files, total, pending, visited = {}, 0, [root], 0
     while pending:
         directory = pending.pop()
-        _check_existing_ancestors(directory)
         for path in directory.iterdir():
             visited += 1
             if visited > limits.max_entries:
@@ -204,7 +360,7 @@ def _tree(root, limits=Limits()):
             if stat.S_ISDIR(info.st_mode):
                 pending.append(path)
             else:
-                raw = _read(path, limits.max_file_bytes)
+                raw = _read_entry(path, info, limits.max_file_bytes)
                 total += len(raw)
                 if total > limits.max_total_bytes:
                     raise FormatError("workspace exceeds byte budget")
@@ -213,11 +369,14 @@ def _tree(root, limits=Limits()):
     return files
 
 
-def _rows(directory):
-    files = _tree(directory)
+def _json_rows(files):
     selected = {n: raw for n, raw in files.items() if n.lower().endswith(".json")}
     _names(selected)
     return {n: validate_rows(load_json(raw)) for n, raw in selected.items()}
+
+
+def _rows(directory):
+    return _json_rows(_tree(directory))
 
 
 def _reject_mapping(value):
@@ -242,15 +401,46 @@ def _reject_ciallohook_map(raw):
         raise FormatError("existing CialloHook EnableCnJpMap cannot be stacked")
 
 
+def pe_machine(path):
+    """Return the PE header Machine of an EXE/DLL (bounded header read only)."""
+    with Path(path).open("rb") as stream:
+        head = stream.read(64)
+        if len(head) < 64 or head[:2] != b"MZ":
+            raise FormatError(f"not a PE file: {path}")
+        offset = struct.unpack_from("<I", head, 0x3C)[0]
+        if offset > 1 << 20:
+            raise FormatError(f"PE header offset out of range: {path}")
+        stream.seek(offset)
+        header = stream.read(6)
+    if len(header) != 6 or header[:4] != b"PE\0\0":
+        raise FormatError(f"not a PE file: {path}")
+    return struct.unpack_from("<H", header, 4)[0]
+
+
+def _check_hook_machine(exe, hook):
+    machine = pe_machine(exe)
+    expected = HOOKS[hook]["machine"]
+    if machine != expected:
+        raise FormatError(f"hook {hook} is {HOOKS[hook]['architecture']} but EXE machine is "
+                          f"0x{machine:04X} ({PE_MACHINES.get(machine, 'unknown')}); "
+                          "a DLL of another bitness is never loaded")
+    return machine
+
+
 def prepare(workspace, output=None, *, encoding, extra_texts=(), include_hook=False,
-            hook="uif", proxy_policy="fixed", jis_preflight=False, translations=None):
+            hook="uif", proxy_policy="fixed", jis_preflight=False, translations=None,
+            reserve_scope="untranslated", reserved_codepoints=(), max_locations=MAX_LOCATIONS, exe=None):
     """Create a bounded private workspace; original gt_output stays real Chinese.
 
     Copy original/metadata/reports/gt_input byte-for-byte, not earlier rebuilt
     outputs. Artifacts stay private under support/ until finalize verifies an
     actual engine readback. No changes to engine files, profiles or manifests.
+    reserved_codepoints adds to those declared by metadata manifests under
+    settings.reserved_codepoints.
     """
     workspace = Path(workspace)
+    if hook not in HOOKS:
+        raise FormatError(f"unknown JIS hook: {hook}")
     if jis_preflight and proxy_policy != "fixed":
         raise FormatError("JIS preflight reports the fixed mapping; use --proxy-policy fixed")
     if not jis_preflight:
@@ -258,13 +448,22 @@ def prepare(workspace, output=None, *, encoding, extra_texts=(), include_hook=Fa
             raise FormatError("JIS prepare requires an output destination")
         output = Path(output)
         validate_new_tree_destination(output)
+    machine = _check_hook_machine(exe, hook) if exe is not None and include_hook else None
     translated_dir = Path(translations) if translations is not None else workspace / "gt_output"
-    original, translated = _rows(workspace / "gt_input"), _rows(translated_dir)
-    payloads = _workspace_payloads(workspace)
+    payloads, declared = _workspace_payloads(workspace)
+    original = _json_rows({n[len("workspace/gt_input/"):]: raw for n, raw in payloads.items()
+                           if n.startswith("workspace/gt_input/")})
+    translated = _rows(translated_dir)
+    reserved = dict(declared)
+    if isinstance(reserved_codepoints, dict):
+        reserved.update(reserved_codepoints)
+    elif reserved_codepoints not in ((), [], None, ""):
+        reserved["cli"] = reserved_codepoints
+    options = dict(encoding=encoding, extra_texts=extra_texts, reserve_scope=reserve_scope,
+                   reserved_codepoints=reserved, max_locations=max_locations)
     if jis_preflight:
-        return preflight_translations(original, translated, encoding=encoding, extra_texts=extra_texts)
-    plan = prepare_translations(original, translated, encoding=encoding, extra_texts=extra_texts,
-                                proxy_policy=proxy_policy)
+        return preflight_translations(original, translated, **options)
+    plan = prepare_translations(original, translated, proxy_policy=proxy_policy, **options)
     for name, rows in plan.stored.items():
         payloads["workspace/gt_output/" + name] = dump_rows(rows)
         payloads["chinese/" + name] = dump_rows(translated[name])
@@ -275,7 +474,11 @@ def prepare(workspace, output=None, *, encoding, extra_texts=(), include_hook=Fa
     # trusts a generic transformation as proof the game writer worked.
     config = dict(plan.codec.summary(), schema=SCHEMA, files=sorted(original), translated_files=sorted(translated),
                   include_hook=include_hook, hook=hook if include_hook else None,
-                  proxy_policy=proxy_policy,
+                  hook_architecture=HOOKS[hook]["architecture"] if include_hook else None,
+                  exe_machine=f"0x{machine:04X}" if machine is not None else None,
+                  proxy_policy=proxy_policy, reserve_scope=reserve_scope,
+                  reserved_codepoint_sources={k: format_reserved_codepoints(parse_reserved_codepoints(v))
+                                              for k, v in reserved.items()},
                   snapshot={n: sha256(raw) for n, raw in payloads.items()},
                   support=[n for n in payloads if n.startswith("support/")],
                   status="prepared-only; engine rebuild and re-extraction still required")
@@ -288,11 +491,14 @@ def prepare(workspace, output=None, *, encoding, extra_texts=(), include_hook=Fa
         "不要用 workspace/gt_output/ 冒充实际资源回读结果。\n").encode("utf-8")
     write_new_tree(output, list(payloads.items()))
     return {"prepared_workspace": str(output / "workspace"), "json_files": len(original),
-            "translated_files": len(translated), **plan.codec.summary()}
+            "translated_files": len(translated), "proxy_policy": proxy_policy,
+            "reserve_scope": reserve_scope, **plan.codec.summary()}
 
 
 def _workspace_payloads(workspace):
-    payloads, copied_bytes = {}, 0
+    """Copy the four source roots once; also collect manifest-declared
+    settings.reserved_codepoints as {"metadata/<path>": spec}."""
+    payloads, declared, copied_bytes = {}, {}, 0
     for name in ROOTS:
         directory = workspace / name
         if not directory.exists():
@@ -305,12 +511,18 @@ def _workspace_payloads(workspace):
                 raise FormatError("workspace copy exceeds budget")
             payloads[f"workspace/{name}/{relative}"] = raw
             if relative.lower().endswith(".json") and name in ("metadata", "reports"):
-                _reject_mapping(load_json(raw))
+                value = load_json(raw)
+                _reject_mapping(value)
+                settings = value.get("settings") if isinstance(value, dict) else None
+                if name == "metadata" and isinstance(settings, dict) and RESERVED_CODEPOINTS_KEY in settings:
+                    spec = settings[RESERVED_CODEPOINTS_KEY]
+                    parse_reserved_codepoints(spec)
+                    declared[f"metadata/{relative}"] = spec
             if name == "original" and Path(relative).name.casefold() == "uif_config.json":
                 _reject_mapping(load_json(raw))
             if name == "original" and Path(relative).name.casefold() in CIALLOHOOK_INI_NAMES:
                 _reject_ciallohook_map(raw)
-    return payloads
+    return payloads, declared
 
 
 def finalize(prepared, rebuilt, readback, output):
@@ -336,13 +548,17 @@ def finalize(prepared, rebuilt, readback, output):
     chinese = {name: validate_rows(load_json(_read(prepared / "chinese" / name))) for name in settings["translated_files"]}
     if set(originals) != set(settings["files"]) or set(proxies) != set(chinese):
         raise FormatError("prepared JSON file set changed")
-    substitution = {}
+    substitution, mapping = {}, {}
     if settings["used_count"]:
         config = load_json(_read(prepared / "support/uif_config.json"))["character_substitution"]
         a, b = config["source_characters"], config["target_characters"]
         if len(a) != len(b) or len(set(a)) != len(a) or len(set(b)) != len(b):
             raise FormatError("ambiguous prepared character mapping")
         substitution = str.maketrans(a, b)
+        mapping = dict(zip(b, a))
+    batch_hash = batch_mapping_sha256(mapping)
+    if settings.get("batch_mapping_sha256", batch_hash) != batch_hash:
+        raise FormatError("prepared uif_config.json differs from the planned batch mapping")
     actual = _rows(readback)
     if set(actual) != set(originals):
         raise FormatError("JIS readback must contain exactly the full exported file set")
@@ -364,10 +580,14 @@ def finalize(prepared, rebuilt, readback, output):
     report_name = "reports/jis-workflow.json"
     if report_name in files:
         raise FormatError("rebuild output already contains JIS workflow report")
-    result = {"schema": SCHEMA, "script_encoding": "cp932", "verified_files": len(actual),
+    result = {"schema": SCHEMA, "script_encoding": settings.get("script_encoding", "cp932"),
+              "verified_files": len(actual),
               "verified_rows": sum(map(len, actual.values())), "translated_files": sorted(chinese),
               "used_count": settings["used_count"], "stored_rows_verified": True,
               "remapped_count": settings["remapped_count"],
+              "mapping_sha256": settings.get("mapping_sha256"), "batch_mapping_sha256": batch_hash,
+              "proxy_policy": settings.get("proxy_policy"), "reserve_scope": settings.get("reserve_scope"),
+              "hook": settings.get("hook"), "hook_architecture": settings.get("hook_architecture"),
               "preset_font_compatible": settings["preset_font_compatible"],
               "display_rows_verified": True, "runtime_verified": False,
               "artifacts": [n[8:] for n in settings["support"]],
@@ -375,6 +595,13 @@ def finalize(prepared, rebuilt, readback, output):
     files[report_name] = _json(result)
     write_new_tree(output, list(files.items()))
     return result
+
+
+def _emit(value):
+    """Machine-readable UTF-8 JSON on stdout (not ASCII-escaped)."""
+    sys.stdout.flush()
+    sys.stdout.buffer.write((json.dumps(value, ensure_ascii=False, indent=2) + "\n").encode("utf-8"))
+    sys.stdout.buffer.flush()
 
 
 def main():
@@ -388,29 +615,55 @@ def main():
     command.add_argument("--translations", help="translation JSON directory; default: workspace/gt_output")
     command.add_argument("--jis-preflight", action="store_true", help="report fixed JIS proxy conflicts without writing a workspace")
     command.add_argument("--hook", choices=tuple(HOOK_CHOICES), default="none",
-                         help="x86/uif-x86: UIF winmm.dll; ciallohook-x86: CialloHook version.dll+ini; "
-                              "only after verifying the game EXE is 32-bit")
+                         help="x86/uif-x86: UIF winmm.dll; ciallohook-x86: CialloHook x86 version.dll+ini; "
+                              "x64/ciallohook-x64: CialloHook x64 version.dll+ini (no x64 UIF); "
+                              "match the game EXE PE machine (see the 'arch' command)")
+    command.add_argument("--exe", help="game EXE; refuse a hook whose bitness differs from its PE machine")
     command.add_argument("--proxy-policy", choices=("fixed", "unused"), default="fixed",
                          help="unused: resolve preset collisions with private CP932 proxies; requires matching hook/custom font")
+    command.add_argument("--reserve-scope", choices=RESERVE_SCOPES, default="untranslated",
+                         help="untranslated: reserve original text only where it is still displayed; "
+                              "all: also reserve lines replaced by translations. Extra text is always reserved")
+    command.add_argument("--reserve-codepoints", action="append", default=[],
+                         help="never use as proxies, e.g. U+E000 or U+E000-U+E0FF (comma list, repeatable); "
+                              "added to manifest settings.reserved_codepoints")
+    command.add_argument("--max-locations", type=int, default=MAX_LOCATIONS,
+                         help="cap per-conflict location lists (totals are always reported); 0 = unlimited")
     command = commands.add_parser("finalize")
     for name in ("prepared", "rebuilt", "readback", "output"):
         command.add_argument(name)
+    command = commands.add_parser("arch", help="print a game EXE's PE machine and matching --hook values")
+    command.add_argument("exe")
     args = vars(parser.parse_args())
     action = args.pop("command")
-    if action == "prepare":
-        if not args["jis_preflight"] and args["output"] is None:
-            parser.error("prepare requires output unless --jis-preflight is selected")
-        if args["jis_preflight"] and args["proxy_policy"] != "fixed":
-            parser.error("--jis-preflight requires --proxy-policy fixed")
-        args["extra_texts"] = {f"{i}-{Path(p).name}": _read(p).decode("utf-8-sig", "strict")
-                               for i, p in enumerate(args.pop("extra_text"), 1)}
-        args["hook"] = HOOK_CHOICES[args["hook"]]
-        args["include_hook"] = args["hook"] is not None
-        args["hook"] = args["hook"] or "uif"
-        result = prepare(**args)
-    else:
-        result = finalize(**args)
-    print(json.dumps({k: v for k, v in result.items() if k != "sha256"}, ensure_ascii=True))
+    try:
+        if action == "arch":
+            machine = pe_machine(args["exe"])
+            arch = PE_MACHINES.get(machine, "unknown")
+            choices = [k for k, v in HOOK_CHOICES.items() if v and HOOKS[v]["machine"] == machine]
+            _emit({"machine": f"0x{machine:04X}", "architecture": arch, "hook_choices": choices})
+            return
+        if action == "prepare":
+            if not args["jis_preflight"] and args["output"] is None:
+                parser.error("prepare requires output unless --jis-preflight is selected")
+            if args["jis_preflight"] and args["proxy_policy"] != "fixed":
+                parser.error("--jis-preflight requires --proxy-policy fixed")
+            args["extra_texts"] = {f"{i}-{Path(p).name}": _read(p).decode("utf-8-sig", "strict")
+                                   for i, p in enumerate(args.pop("extra_text"), 1)}
+            args["reserved_codepoints"] = args.pop("reserve_codepoints")
+            args["hook"] = HOOK_CHOICES[args["hook"]]
+            args["include_hook"] = args["hook"] is not None
+            args["hook"] = args["hook"] or "uif"
+            result = prepare(**args)
+        else:
+            result = finalize(**args)
+    except JisDiagnosticsError as error:
+        _emit(error.report)
+        raise SystemExit(1)
+    except (FormatError, OSError) as error:
+        _emit({"ok": False, "error": f"{type(error).__name__}: {error}"})
+        raise SystemExit(1)
+    _emit({k: v for k, v in result.items() if k != "sha256"})
     if action == "prepare" and args["jis_preflight"] and not result["ok"]:
         raise SystemExit(1)
 

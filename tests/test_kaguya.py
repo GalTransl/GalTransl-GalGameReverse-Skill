@@ -9,9 +9,11 @@ import tempfile
 import unittest
 
 from python.archives import kaguya_link as link
+from python.common.binary import FormatError
 from python.common.contract import dump_rows
 from python.engines import kaguya
 from python.engines.kaguya_extract import export, inject, extract, pack
+from python.engines.kaguya_extract import pack as kaguya_pack
 
 
 def document():
@@ -181,6 +183,70 @@ class KaguyaWorkflowTests(unittest.TestCase):
                 pack(out, out / "packed")
             with self.assertRaises(FileExistsError):
                 extract(root, out)
+
+
+class KaguyaJisWorkflowTests(unittest.TestCase):
+    """Kaguya through the shared JIS workflow with private ('unused') proxies."""
+
+    def workspace(self, root):
+        doc = kaguya.Document(kaguya.MAGIC + b"\x01\xff", ("名前",), (),
+                              (kaguya.Message("測試の本文\n"), kaguya.Message("二つ目\n")),
+                              (kaguya.Group(0, (0, 1)), kaguya.Group(-1, (0,))))
+        game = root / "game"
+        game.mkdir()
+        (game / "message.dat").write_bytes(kaguya.write_message_dat(doc))
+        extract(game, root / "work")
+        rows = json.loads((root / "work/gt_input/message.json").read_text(encoding="utf-8"))
+        rows[0]["message"] = "测试\n"   # 测/试 fixed proxies are 測/試, still shown in row 3
+        rows[1]["message"] = "第二句\n"
+        (root / "work/gt_output/message.json").write_bytes(dump_rows(rows))
+        return root / "work", rows
+
+    def test_manifest_reserves_f040_and_unused_roundtrip(self):
+        from python.common.jis_workflow import finalize, prepare
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            work, rows = self.workspace(root)
+            manifest = json.loads((work / "metadata/message.json").read_text(encoding="utf-8"))
+            self.assertEqual(manifest["settings"]["reserved_codepoints"], ["U+E000"])
+            report = prepare(work, encoding="cp932", jis_preflight=True)
+            self.assertEqual({c["character"] for c in report["conflicts"]}, {"测", "试"})
+            self.assertEqual(report["reserved_codepoints"], {"metadata/message.json": ["U+E000"]})
+            info = prepare(work, root / "prepared", encoding="cp932", proxy_policy="unused")
+            self.assertEqual(info["remapped_count"], 2)
+            self.assertEqual(info["reserved_codepoints"], ["U+E000"])
+            kaguya_pack(root / "prepared/workspace", root / "packed")
+            extract(root / "packed", root / "readback")
+            result = finalize(root / "prepared", root / "packed", root / "readback/gt_input", root / "delivery")
+            self.assertTrue(result["display_rows_verified"])
+            self.assertEqual(result["batch_mapping_sha256"], info["batch_mapping_sha256"])
+            config = json.loads((root / "delivery/uif_config.json").read_text(encoding="utf-8"))
+            source = config["character_substitution"]["source_characters"]
+            self.assertNotIn("\ue000", source)
+            self.assertIn("\ue757", source)
+
+    def test_reserved_e000_never_allocated_and_legacy_error_has_location(self):
+        from python.common.jis_workflow import prepare
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            work, rows = self.workspace(root)
+            # Only U+E000 would remain; the manifest reservation exhausts the pool instead.
+            with self.assertRaisesRegex(FormatError, "pool exhausted"):
+                prepare(work, root / "exhausted", encoding="cp932", proxy_policy="unused",
+                        reserved_codepoints=["U+E001-U+E757"])
+            self.assertFalse((root / "exhausted").exists())
+            # A workspace exported before the setting existed still packs.
+            path = work / "metadata/message.json"
+            manifest = json.loads(path.read_text(encoding="utf-8"))
+            del manifest["settings"]["reserved_codepoints"]
+            path.write_text(json.dumps(manifest, ensure_ascii=False), encoding="utf-8")
+            original = json.loads((work / "gt_input/message.json").read_text(encoding="utf-8"))
+            self.assertEqual(inject((work / "original/message.dat").read_bytes(), original, manifest, original),
+                             (work / "original/message.dat").read_bytes())
+            bad = copy.deepcopy(original)
+            bad[1]["message"] = "\ue000\n"
+            with self.assertRaisesRegex(FormatError, r"row 2 \(r00000002\) field message: U\+E000"):
+                inject((work / "original/message.dat").read_bytes(), original, manifest, bad)
 
 
 if __name__ == "__main__":

@@ -99,7 +99,9 @@ class SystemcPreflightTests(unittest.TestCase):
         self.assertEqual(report["missing_characters"], ["😀"])
         self.assertEqual(report["conflicts"], [{"character": "测", "proxy": "測",
             "literal_locations": [{"source": "gt_output", "file": "ACT_A.json", "row": 2, "field": "message"}],
-            "translation_locations": [{"source": "gt_output", "file": "ACT_A.json", "row": 1, "field": "message"}]}])
+            "literal_location_count": 1,
+            "translation_locations": [{"source": "gt_output", "file": "ACT_A.json", "row": 1, "field": "message"}],
+            "translation_location_count": 1}])
 
     def test_cli_exit_status_and_external_translation_directory(self):
         translated = deepcopy(self.rows)
@@ -107,7 +109,7 @@ class SystemcPreflightTests(unittest.TestCase):
         (self.work / "gt_output/ACT_A.json").write_bytes(dump_rows(translated))
         command = [sys.executable, "-B", "-m", "python.engines.systemc_extract", "pack", str(self.work), "--jis-preflight"]
         output = self.root / "unused"
-        failed = subprocess.run([*command, "--output", str(output)], cwd=ROOT, capture_output=True, text=True)
+        failed = subprocess.run([*command, "--output", str(output)], cwd=ROOT, capture_output=True, text=True, encoding="utf-8")
         self.assertEqual(failed.returncode, 1, failed.stderr)
         self.assertEqual(len(json.loads(failed.stdout)["jis_preflight"]["conflicts"]), 2)
         self.assertFalse(output.exists())
@@ -115,12 +117,12 @@ class SystemcPreflightTests(unittest.TestCase):
         external.mkdir()
         translated[1]["message"] = "测试。"
         (external / "ACT_A.json").write_bytes(dump_rows(translated))
-        passed = subprocess.run([*command, "--translations", str(external)], cwd=ROOT, capture_output=True, text=True)
+        passed = subprocess.run([*command, "--translations", str(external)], cwd=ROOT, capture_output=True, text=True, encoding="utf-8")
         self.assertEqual(passed.returncode, 0, passed.stderr)
         self.assertTrue(json.loads(passed.stdout)["jis_preflight"]["ok"])
-        missing_output = subprocess.run(command[:-1], cwd=ROOT, capture_output=True, text=True)
+        missing_output = subprocess.run(command[:-1], cwd=ROOT, capture_output=True, text=True, encoding="utf-8")
         self.assertEqual(missing_output.returncode, 2)
-        disabled = subprocess.run([*command, "--jis-mode", "off"], cwd=ROOT, capture_output=True, text=True)
+        disabled = subprocess.run([*command, "--jis-mode", "off"], cwd=ROOT, capture_output=True, text=True, encoding="utf-8")
         self.assertEqual(disabled.returncode, 2)
 
     def test_source_identity_and_no_translation(self):
@@ -192,27 +194,27 @@ class SharedPreflightTests(unittest.TestCase):
             command = [sys.executable, "-B", "-m", "python.common.jis_workflow", "prepare",
                        str(work), "--encoding", "cp932", "--jis-preflight"]
             failed = subprocess.run([*command[:6], str(output), *command[6:], "--extra-text", str(extra)],
-                                    cwd=ROOT, capture_output=True, text=True)
+                                    cwd=ROOT, capture_output=True, text=True, encoding="utf-8")
             self.assertEqual(failed.returncode, 1, failed.stderr)
             conflict = json.loads(failed.stdout)["conflicts"][0]
             self.assertEqual(conflict["literal_locations"], [
                 {"source": "extra_texts", "file": "1-ui.txt", "line": 1}])
             self.assertFalse(output.exists())
             self.assertEqual(before, {p.relative_to(root): p.read_bytes() for p in root.rglob("*") if p.is_file()})
-            passed = subprocess.run(command, cwd=ROOT, capture_output=True, text=True)
+            passed = subprocess.run(command, cwd=ROOT, capture_output=True, text=True, encoding="utf-8")
             self.assertEqual(passed.returncode, 0, passed.stderr)
             self.assertTrue(json.loads(passed.stdout)["ok"])
             with self.assertRaisesRegex(FormatError, "output destination"):
                 prepare(work, encoding="cp932")
             invalid = subprocess.run([*command, "--proxy-policy", "unused"],
-                                     cwd=ROOT, capture_output=True, text=True)
+                                     cwd=ROOT, capture_output=True, text=True, encoding="utf-8")
             self.assertEqual(invalid.returncode, 2)
             with self.assertRaisesRegex(FormatError, "fixed mapping"):
                 prepare(work, encoding="cp932", jis_preflight=True, proxy_policy="unused")
             external = root / "external"
             write_new_tree(external, [("a.json", dump_rows([{"message": "😀"}]))])
             missing = subprocess.run([*command, "--translations", str(external)],
-                                     cwd=ROOT, capture_output=True, text=True)
+                                     cwd=ROOT, capture_output=True, text=True, encoding="utf-8")
             self.assertEqual(missing.returncode, 1, missing.stderr)
             self.assertEqual(json.loads(missing.stdout)["missing_characters"], ["😀"])
 

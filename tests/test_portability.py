@@ -46,7 +46,9 @@ class PortabilityTests(unittest.TestCase):
         allowed = {"assets/uif/winmm.dll":
                    "b83f896edd06662078eadd5ea7970ab5bfd320cd8ec319e72b1455473c897e41",
                    "assets/ciallohook/version.dll":
-                   "45a690c147467bf34168ecdeedb1d682848e99617dde41402faf83c291dc54ad"}
+                   "45a690c147467bf34168ecdeedb1d682848e99617dde41402faf83c291dc54ad",
+                   "assets/ciallohook/x64/version.dll":
+                   "37257c9e71aaef006d21391998e89603ff4d8a09409a87496a5f8d1afc88c958"}
         for relative, expected_hash in allowed.items():
             self.assertEqual(hashlib.sha256((ROOT / relative).read_bytes()).hexdigest(),
                              expected_hash, relative)

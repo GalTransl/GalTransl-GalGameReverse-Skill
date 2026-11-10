@@ -151,6 +151,8 @@ patched = patch_tblstr(data, archive, {0: "译文"}, encoding="gbk")
 
 ver4 正文、姓名和选项使用严格 CP932，语音名使用 UTF-16LE。`F040` 与全角百分号相互映射，按 SJIS 字符边界处理。单独的"％"姓名是不可改上下文；改写字段保持特殊百分号数量，LF 可以比原文少但不能新增，也不得凭空增加空白首尾行。姓名也可能含 LF。
 
+`F040` 在标准 CP932 中是私用区 `U+E000`，在本格式中却被读成"％"，所以 `U+E000` 无法往返。ver4 manifest 在 `settings.reserved_codepoints` 中声明 `["U+E000"]`，公共 JIS 流程的私用代理字不会使用它；其他私用码位（`F041..F9FC`）按标准 CP932 往返。缺少该键的旧工作区仍可打包，但走 `--proxy-policy unused` 前应重新提取，或加 `--reserve-codepoints U+E000`。回填拒绝时报告 `message.json` 的记录号（从 1 开始）、记录 ID、字段及首个无法往返的字符。
+
 中文超出 CP932 时优先使用[公共 JIS 替换流程](../guides/jis-substitution.md)，将代理 JSON 交给现有 writer，不逐引擎实现编码器。重读输出后验证代理文本及还原中文，再交付对应映射和字体或 hook 配置。字节回填成功不等于已验证游戏显示。
 
 ## LINK6 容器

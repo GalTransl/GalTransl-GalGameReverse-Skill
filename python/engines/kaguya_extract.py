@@ -20,6 +20,9 @@ from . import kaguya
 
 VARIANT = "ver4-cp932-preserved-suffix"
 MAX_BYTES = 64 << 20
+# CP932 F040 (U+E000) is stored for the full-width percent sign, so U+E000
+# itself cannot roundtrip; shared JIS 'unused' proxies must never use it.
+RESERVED_CODEPOINTS = ["U+E000"]
 
 
 def _json(value):
@@ -65,37 +68,63 @@ def export(data: bytes) -> tuple[list[dict], dict]:
         sources={"message.dat": data}, rows=rows, locators=locators, encoding="cp932",
         name_policies=policies, protected_tokens=tokens,
         settings={"suffix": "preserve-exactly; not-interpreted", "suffix_sha256": sha256(doc.trailer),
-                  "suffix_size": len(doc.trailer), "name_percent": "context-only"})
+                  "suffix_size": len(doc.trailer), "name_percent": "context-only",
+                  "reserved_codepoints": list(RESERVED_CODEPOINTS)})
     return rows, manifest
+
+
+def _same_manifest(expected, manifest):
+    """Also accept workspaces exported before settings.reserved_codepoints."""
+    if expected == manifest:
+        return True
+    legacy = dict(expected, settings=dict(expected["settings"]))
+    del legacy["settings"]["reserved_codepoints"]
+    return legacy == manifest
+
+
+def _unrepresentable(text):
+    """First character that does not survive the F040-aware CP932 roundtrip."""
+    for char in text:
+        try:
+            if kaguya._decode(kaguya._encode(char)) != char:
+                return char
+        except (UnicodeError, ValueError):
+            return char
+    return None
 
 
 def inject(data: bytes, original_rows: list[dict], manifest: dict, translated_rows: list[dict]) -> bytes:
     expected_rows, expected_manifest = export(data)
-    if expected_rows != original_rows or expected_manifest != manifest:
+    if expected_rows != original_rows or not _same_manifest(expected_manifest, manifest):
         raise FormatError("Kaguya export/manifest no longer matches the source parser")
     translated = validate_translation(manifest, {"message.dat": data}, original_rows, translated_rows)
     doc = kaguya.read_message_dat(data, allow_trailer=True)
     names, choices, messages, groups = map(list, (doc.names, doc.choices, doc.messages, doc.groups))
     group_names = {}
     group_messages = {}
-    for before, after, record in zip(original_rows, translated, manifest["records"]):
+    for row, (before, after, record) in enumerate(zip(original_rows, translated, manifest["records"]), 1):
         for field in before:
             text = after[field]
             if text == before[field]:
                 continue
+            where = f"message.json row {row} ({record['id']}) field {field}"
             if any(ord(c) < 32 and c != "\n" for c in text):
-                raise FormatError("unsupported Kaguya text control")
+                raise FormatError(f"unsupported Kaguya text control: {where}")
             if text.count("\n") > before[field].count("\n"):
-                raise FormatError("Kaguya translation uses more lines than the source")
+                raise FormatError(f"Kaguya translation uses more lines than the source: {where}")
             # Do not create an empty first/last line that the source lacked.
             if ((text.startswith("\n") and not before[field].startswith("\n"))
                     or (text.endswith("\n") and not before[field].endswith("\n"))):
-                raise FormatError("Kaguya translation adds a blank edge line")
+                raise FormatError(f"Kaguya translation adds a blank edge line: {where}")
             if text.count("％") != before[field].count("％"):
-                raise FormatError("Kaguya special percent codepoint changed")
+                raise FormatError(f"Kaguya special percent codepoint changed: {where}")
+            bad = _unrepresentable(text)
+            if bad is not None:
+                raise FormatError(f"Kaguya text is not losslessly CP932 representable: {where}: "
+                                  f"U+{ord(bad):04X} {bad!r}")
             encoded = kaguya._encode(text)
             if len(encoded) > MAX_BYTES or kaguya._decode(encoded) != text:
-                raise FormatError("Kaguya text is not losslessly CP932 representable")
+                raise FormatError(f"Kaguya text is not losslessly CP932 representable: {where}")
         loc = record["locator"]
         if loc["kind"] == "choice":
             choices[loc["choice_index"]] = after["message"]

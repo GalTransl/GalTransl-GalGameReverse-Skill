@@ -76,7 +76,7 @@ JSON 中姓名在正文前；偏移、原字节和控制码映射放入 metadata
 
 表格后推荐一个具体 JSON，优先选容易触发的开场脚本；无法确认开场时说明依据。建议先翻译该文件或只将前几句改为中文，按同名放入 `gt_output`，由 agent 回注测试。保留全部记录、顺序、姓名槽与控制码；用户要求代填测试句时由 agent 完成，不覆盖已有译文。
 
-根据试注结果调整：补丁未生效查加载顺序；乱码查编码；缺字、方框查字体；崩溃、截断或错位查长度、指针和控制码。只有确认引擎支持时才改变编码。每次调整后重新试注，显示正常再批量翻译。运行记录仅放结果目录，不收入 Skill。
+根据试注结果调整：补丁未生效查加载顺序；乱码查编码；缺字、方框查字体；崩溃、截断或错位查长度、指针和控制码。只有确认引擎支持时才改变编码。每次调整后重新试注，显示正常再批量翻译。CP932 日文原作试注时译文常与未译日文的固定代理字冲突，按 [JIS 公共流程](guides/jis-substitution.md#常规路线试注用-unused--hook全量后再看固定表) 用 `--proxy-policy unused` 配匹配位数的 hook，全量翻译后再按固定表预检。运行记录仅放结果目录，不收入 Skill。
 
 ## 译文回填流程
 
@@ -86,7 +86,7 @@ JSON 中姓名在正文前；偏移、原字节和控制码映射放入 metadata
 4. 重解析并比对译文与非文本结构，按已确认加载规则生成松散补丁、补丁归档或重封包。格式往返不代表运行时可加载。
 5. 交代产物、数量、验证状态和未验证项，详见[验证与部署](guides/validation-and-deployment.md)。
 
-JIS 交付可将随包 [UIF x86 winmm.dll](assets/uif/README.md) 或 [CialloHook x86 version.dll](assets/ciallohook/README.md) 与配置一并写入新结果目录，无需另问复制许可；两者读取同一 `uif_config.json`，只选其一，UIF 未生效或需换字体时改用 CialloHook；64 位游戏须另选兼容构建。最终说明配置路径及用法：将匹配位数的 DLL、其配置和 `uif_config.json` 放到实际游戏 EXE 目录，或选用同批映射对应的专用替换字体。普通日文/繁体字体不能代替它；已有 DLL/配置须先检查合并。交付结果不等于已授权安装或验证显示。
+JIS 交付可将随包 [UIF x86 winmm.dll](assets/uif/README.md) 或 [CialloHook x86/x64 version.dll](assets/ciallohook/README.md) 与配置一并写入新结果目录，无需另问复制许可；两者读取同一 `uif_config.json`，只选其一，UIF 未生效或需换字体时改用 CialloHook；64 位游戏只能用 CialloHook x64，位数以游戏 EXE 的 PE Machine 为准。最终说明配置路径及用法：将匹配位数的 DLL、其配置和 `uif_config.json` 放到实际游戏 EXE 目录，或选用同批映射对应的专用替换字体。普通日文/繁体字体不能代替它；已有 DLL/配置须先检查合并。交付结果不等于已授权安装或验证显示。
 
 ## 通用指南与资料
 
