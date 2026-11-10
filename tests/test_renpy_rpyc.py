@@ -317,13 +317,247 @@ class RPAAndWorkspaceTests(unittest.TestCase):
             rows = json.loads((root / "both/gt_input/story.json").read_text(encoding="utf-8"))
             self.assertEqual(rows[0]["name"], "Alice")
 
-    def test_source_override_and_path_traversal_rejected(self):
-        for members in ({"../intro.rpyc": sample()}, {"intro.rpyc": sample(), "intro.rpy": b"source"}):
-            with tempfile.TemporaryDirectory() as temp:
-                root = Path(temp); (root / "story.arc").write_bytes(archive(members))
-                with self.assertRaises(ValueError):
-                    workflow.load_archives(root, ["story.arc"])
+    def test_path_traversal_rejected_and_archived_source_is_only_noted(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp); (root / "story.arc").write_bytes(archive({"../intro.rpyc": sample()}))
+            with self.assertRaises(ValueError):
+                workflow.load_archives(root, ["story.arc"])
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp); game = root / "game"; game.mkdir()
+            (game / "story.arc").write_bytes(archive({"intro.rpyc": sample(), "intro.rpy": b"source"}))
+            report = workflow.extract(game, root / "work", archives=["story.arc"])
+            self.assertEqual(report["loader_notes"][0]["name"], "intro.rpy")
+            self.assertIn("never loaded", report["loader_notes"][0]["note"])
 
+
+
+def translate_sample(extra_say=False, caption="Pick this", with_identifier=True):
+    """Ren'Py 8 style: slot 1 plain Say, slot 2 Translate/TranslateSay with identifiers."""
+    def nodes(transformed):
+        say = dict(who="e", what="Hello  [player]", attributes=("happy",), with_="dissolve", interact=True,
+                   arguments=None, temporary_attributes=None)
+        voice = obj("UserStatement", dict(line="voice 'v/1'", translatable=True, filename="game/story.rpy",
+                                          linenumber=19, name=("story", 123, 19), next=None))
+        narr = node("Say", 20, who=None, what='Quote "x" BACKSLASH end'.replace("BACKSLASH", chr(92)),
+                    attributes=None, with_=None, interact=False, arguments=None, temporary_attributes=None)
+        literal = dict(who="'Stranger'", what="Hi", attributes=None, with_=None, interact=True,
+                       arguments=None, temporary_attributes=None)
+        out = []
+        if transformed and with_identifier:
+            out += [node("TranslateSay", 10, identifier="start_1a2b3c4d", language=None, alternate=None, **say),
+                    node("Translate", 19, identifier="start.local_5e6f", language=None, alternate=None,
+                         block=[voice, narr]),
+                    node("TranslateSay", 25, identifier="start_9999aaaa", language=None, alternate=None, **literal)]
+        else:
+            out += [node("Say", 10, **say), voice, narr, node("Say", 25, **literal)]
+        out.append(node("Menu", 30, items=[(caption, "True", []), ("", "True", [])]))
+        if extra_say:
+            out.append(node("Say", 40, who=None, what="unwrapped", attributes=None, with_=None, interact=True,
+                            arguments=None, temporary_attributes=None))
+        return out
+    return envelope(program(nodes(False)), program(nodes(True)))
+
+
+def game_dir(root, members=None, loose=None):
+    game = root / "game"
+    game.mkdir()
+    if members is not None:
+        (game / "story.arc").write_bytes(archive(members))
+    for name, data in (loose or {}).items():
+        path = game.joinpath(*name.split("/"))
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(data)
+    return game
+
+
+def write_rows(path, rows):
+    path.write_text(json.dumps(rows, ensure_ascii=False), encoding="utf-8")
+
+
+class LooseSourceTests(unittest.TestCase):
+    def test_loose_overrides_archive_and_packs_loose_path(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            game = game_dir(root, {"chapters/intro.rpyc": sample("Archived {b}x{/b}"), "other.rpyc": sample("Other")},
+                            {"chapters/intro.rpyc": sample("Loose {b}x{/b}"), "cache/skip.rpyc": b"junk"})
+            with self.assertRaisesRegex(ValueError, "add --loose"):
+                workflow.extract(game, root / "w0", archives=["story.arc"])
+            report = workflow.extract(game, root / "work", archives=["story.arc"], loose=True, smoke_test=True)
+            self.assertEqual(report["overrides"],
+                             [{"name": "chapters/intro.rpyc", "effective": "loose", "shadowed": "story.arc"}])
+            self.assertEqual([f["name"] for f in report["loose"]["files"]], ["chapters/intro.rpyc"])
+            rows = json.loads((root / "work/gt_input/intro.json").read_text(encoding="utf-8"))
+            self.assertEqual(rows[0]["message"], "Loose {b}x{/b}")
+            self.assertTrue((root / "work/rebuilt/growth-test/game/chapters/intro.rpyc").exists())
+            rows[0]["message"] = "松散来源的更长中文 {b}x{/b}"
+            write_rows(root / "work/gt_output/intro.json", rows)
+            result = workflow.pack(root / "work", root / "packed")
+            self.assertEqual(result["archives"], [])
+            self.assertFalse((root / "packed/changed-archives").exists())
+            data = (root / "packed/loose/game/chapters/intro.rpyc").read_bytes()
+            self.assertEqual(rpyc.export(rpyc.parse(data))[0][0]["message"], rows[0]["message"])
+
+    def test_loose_only_without_archives(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            game = game_dir(root, None, {"script.rpyc": sample()})
+            report = workflow.extract(game, root / "work", loose=True)
+            self.assertEqual((report["scripts"], report["archives"]), (1, []))
+            with self.assertRaises(ValueError):
+                workflow.extract(game, root / "w2")
+
+    def test_rpy_digest_rules(self):
+        import hashlib
+        source = b"label start:\n    'x'\n"
+        compiled = sample()[:-16] + hashlib.md5(source).digest()
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            game = game_dir(root, None, {"script.rpyc": compiled, "script.rpy": source})
+            report = workflow.extract(game, root / "ok", loose=True)
+            self.assertIn("MD5 equals", report["loader_notes"][0]["note"])
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            game = game_dir(root, None, {"script.rpyc": sample(), "script.rpy": source})
+            with self.assertRaisesRegex(ValueError, "--rpy"):
+                workflow.extract(game, root / "bad", loose=True)
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            game = game_dir(root, {"script.rpyc": sample()}, {"script.rpy": source})
+            with self.assertRaisesRegex(ValueError, "both load"):
+                workflow.extract(game, root / "bad", archives=["story.arc"])
+
+    def test_project_root_rejected(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            (root / "renpy").mkdir()
+            (root / "game").mkdir()
+            with self.assertRaisesRegex(ValueError, "game/ directory"):
+                workflow.discover_loose(root)
+
+
+class NewLanguageTests(unittest.TestCase):
+    def test_duplicate_identifier_and_existing_language_refused(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            game = game_dir(root, {"story.rpyc": translate_sample(), "side.rpyc": translate_sample()})
+            with self.assertRaisesRegex(ValueError, "duplicate translation identifier"):
+                workflow.extract(game, root / "dup", archives=["story.arc"], tl_language="schinese")
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            game = game_dir(root, {"story.rpyc": translate_sample(), "tl/english/x.rpyc": envelope(program([]))})
+            with self.assertRaisesRegex(ValueError, "already exists"):
+                workflow.extract(game, root / "w", archives=["story.arc"], tl_language="english")
+
+    def test_tl_generation_readback_and_pack(self):
+        from python.engines import renpy_tl as tl
+        bs = chr(92)
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            game = game_dir(root, {"story.rpyc": translate_sample()})
+            report = workflow.extract(game, root / "work", archives=["story.arc"], tl_language="schinese",
+                                      smoke_test=True)
+            self.assertEqual(report["mode"], "tl-new")
+            self.assertTrue((root / "work/rebuilt/growth-test/game/tl/schinese/story.rpy").exists())
+            rows = json.loads((root / "work/gt_input/story.json").read_text(encoding="utf-8"))
+            self.assertEqual(rows, [{"message": "Hello  [player]"}, {"message": 'Quote "x" ' + bs + " end"},
+                                    {"name": "Stranger", "message": "Hi"}, {"message": "Pick this"}])
+            rows[0]["message"] = "你好  [player]，这是一段明显更长的中文句子"
+            rows[1]["message"] = '引号 "x" ' + bs + " 结束"
+            rows[3]["message"] = "选这个"
+            write_rows(root / "work/gt_output/story.json", rows)
+            result = workflow.pack(root / "work", root / "packed", font="fonts/cjk.ttf")
+            self.assertEqual(result["written"][0]["identifiers"], 3)
+            raw = (root / "packed/new-language/game/tl/schinese/story.rpy").read_bytes()
+            self.assertTrue(raw.startswith(b"\xef\xbb\xbf"))
+            text = raw.decode("utf-8")
+            self.assertIn("translate schinese start_local_5e6f:", text)
+            self.assertIn('    e happy "你好 ' + bs + ' [player]，这是一段明显更长的中文句子" with dissolve', text)
+            self.assertIn("    voice 'v/1'", text)
+            self.assertIn("    'Stranger' \"Hi\"", text)
+            self.assertIn(' nointeract', text)
+            parsed = tl.parse(text)
+            self.assertEqual([b.get("identifier") for b in parsed],
+                             ["start_1a2b3c4d", "start_local_5e6f", "start_9999aaaa", None])
+            self.assertEqual(parsed[0]["items"][0]["what"], rows[0]["message"])
+            self.assertEqual(parsed[1]["items"][1]["what"], rows[1]["message"])
+            self.assertFalse(parsed[1]["items"][1]["interact"])
+            self.assertEqual(parsed[3]["pairs"], [("Pick this", "选这个")])
+            font = (root / "packed/new-language/game/tl/schinese/gt_font.rpy").read_text(encoding="utf-8")
+            self.assertIn('gui.text_font = "fonts/cjk.ttf"', font)
+            with self.assertRaises(ValueError):
+                workflow.pack(root / "work", root / "badfont", font='x".ttf')
+            rows[0]["message"] = "缺少控制码"
+            write_rows(root / "work/gt_output/story.json", rows)
+            with self.assertRaisesRegex(rpyc.TranslationErrors, r"story\.json #0: changed controls"):
+                workflow.pack(root / "work", root / "bad")
+            self.assertFalse((root / "bad").exists())
+
+    def test_shared_menu_caption_exported_once(self):
+        from python.engines import renpy_tl as tl
+        script = rpyc.parse(translate_sample())
+        seen = set()
+        first = tl.rows(tl.plan(script, filename="a.rpyc"), {}, seen)[0]
+        second = tl.rows(tl.plan(script, filename="b.rpyc"), {}, seen)[0]
+        self.assertEqual(len(first) - len(second), 1)
+
+    def test_missing_identifier_refused(self):
+        from python.engines import renpy_tl as tl
+        for raw in (translate_sample(extra_say=True), translate_sample(with_identifier=False),
+                    envelope(program([node("Say", 1, who=None, what="only slot one")]))):
+            with self.subTest(), self.assertRaises(tl.MissingIdentifier):
+                tl.plan(rpyc.parse(raw), filename="x.rpyc")
+
+
+class SourceWorkspaceTests(unittest.TestCase):
+    SCRIPT = ('define e = Character("艾琳", color="#fff",\r\n    who_bold=True)\r\n'
+              'label start:\r\n'
+              '    e happy "Hello  there" with dissolve\r\n'
+              '    "Narration {b}bold{/b}"\r\n'
+              '    mystery "Unknown speaker"\r\n'
+              '    menu:\r\n'
+              '        "Choice A" if flag:\r\n'
+              '            pass\r\n'
+              'translate english strings:\r\n'
+              '    old "Start"\r\n'
+              '    new "Begin' + chr(92) + 'tnow"\r\n')
+
+    def test_rpy_workspace_roundtrip(self):
+        from python.engines import renpy_source
+        bs = chr(92)
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            game = game_dir(root, None, {"script.rpy": b"\xef\xbb\xbf" + self.SCRIPT.encode("utf-8")})
+            report = renpy_source.extract(game, root / "work")
+            self.assertIn("mystery", report["warnings"][0])
+            rows = json.loads((root / "work/gt_input/script.json").read_text(encoding="utf-8"))
+            self.assertEqual(rows, [{"name": "艾琳", "message": "Hello there"}, {"message": "Narration {b}bold{/b}"},
+                                    {"message": "Choice A"}, {"message": "Begin\tnow"}])
+            report2 = renpy_source.extract(game, root / "work2", speakers=["mystery"])
+            self.assertNotIn("warnings", report2)
+            rows[0]["message"] = '你好  “引号” "直引号" ' + bs + " 反斜线"
+            rows[1]["message"] = "旁白 {b}粗体{/b}"
+            rows[3]["message"] = "开始\t吧"
+            write_rows(root / "work/gt_output/script.json", rows)
+            result = workflow.pack(root / "work", root / "packed")
+            self.assertEqual(result["changed"][0]["changed_rows"], 3)
+            data = (root / "packed/loose/game/script.rpy").read_bytes()
+            self.assertTrue(data.startswith(b"\xef\xbb\xbf"))
+            self.assertEqual(renpy_source.export_rows_only("script.rpy", data, report["speakers"], {"e": "艾琳"}), rows)
+            self.assertEqual(data.count(b"\r\n"), self.SCRIPT.count("\r\n"))
+            rows[1]["message"] = "缺控制码"
+            write_rows(root / "work/gt_output/script.json", rows)
+            with self.assertRaisesRegex(rpyc.TranslationErrors, r"script\.json #1"):
+                workflow.pack(root / "work", root / "bad")
+
+    def test_cli_rpy_flag_conflicts(self):
+        import subprocess, sys
+        repo = Path(__file__).resolve().parents[1]
+        with tempfile.TemporaryDirectory() as temp:
+            done = subprocess.run([sys.executable, "-X", "utf8", "-m", "python.engines.renpy_extract", "extract",
+                                   temp, str(Path(temp) / "o"), "--rpy", "--loose"], cwd=repo,
+                                  capture_output=True, text=True, encoding="utf-8")
+            self.assertEqual(done.returncode, 1)
+            self.assertIn("cannot be combined", done.stderr)
 
 if __name__ == "__main__":
     unittest.main()

@@ -71,6 +71,10 @@ Hx 名称提示的分阶段顺序（启动 TJS、TJS 全字符串池、场景列
 
 UnityFS、serialized v17–v22、TypeTree 公共字符串表与 TextAsset 布局为独立 Python 实现，对照 UnityPy、AssetStudio（均为 MIT）的公开格式描述核对字段顺序与标志含义，LZ4 块解码按 LZ4 块格式说明（BSD-2-Clause）编写；未复制上游代码。来源、采用范围与偏差见 [unity-containers.json](unity-containers.json)。
 
+### Ren'Py 加载规则与 tl 文件格式
+
+Ren'Py（MIT，Copyright Tom Rothamel 及贡献者）8.x 的 `renpy/loader.py`、`renpy/script.py`、`renpy/lexer.py`、`renpy/translation/__init__.py`、`renpy/translation/generation.py`、`renpy/common/00start.rpy` 仅作为格式与加载规则依据：松散文件先于归档、归档内 `.rpy` 不加载、`.rpy` 与 `.rpyc` 按源码 MD5 取舍、say 字符串转义与空白折叠、tl 文件布局及 `translate strings` 去重规则。`renpy.py`、`renpy_tl.py`、`renpy_source.py`、`renpy_extract.py` 为独立 Python 实现，未复制上游代码，也不导入或执行 Ren'Py 模块。
+
 ## 不随包提供的内容
 
 游戏专有资源、可执行文件、私有密钥、完整上游工作树、.NET BinaryFormatter `Formats.dat`、GUI或 native `.pyd`。如格式需要用户游戏的辅助表或授权获取的密钥，调用者必须显式提供，不会后台下载或猜测成功。
