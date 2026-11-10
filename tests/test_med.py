@@ -213,9 +213,20 @@ class WorkflowTests(unittest.TestCase):
             rows = load_json((work / "gt_input/scene.json").read_bytes())
             rows[0]["message"] = "長い文章に変更するテスト。"
             (work / "gt_output/scene.json").write_bytes(dump_rows(rows))
-            result = workflow.pack(work, root / "changed")
+            result = workflow.pack(work, root / "changed", readback=root / "changed-readback")
             self.assertEqual(result["changed_members"], ["scene"])
-            self.assertEqual(load_json((root / "changed/readback/gt_input/scene.json").read_bytes()), rows)
+            # The published rebuild holds only the archive and reports; readback is separate.
+            self.assertEqual(sorted(p.relative_to(root / "changed").as_posix()
+                                    for p in (root / "changed").rglob("*") if p.is_file()),
+                             ["README.txt", "md_scr.med", "reports/rebuild.json"])
+            self.assertEqual(load_json((root / "changed-readback/gt_input/scene.json").read_bytes()), rows)
+            self.assertEqual(result["readback"]["json_files"], 1)
+            with self.assertRaisesRegex(FormatError, "outside"):
+                workflow.read_back(work, root / "changed", root / "changed" / "rb")
+            (root / "changed/stray.json").write_text("[]")
+            with self.assertRaisesRegex(FormatError, "unknown files"):
+                workflow.read_back(work, root / "changed", root / "rb-bad")
+            self.assertFalse((root / "rb-bad").exists())
             with self.assertRaises(FileExistsError):
                 workflow.pack(work, root / "changed")
             with self.assertRaises(FileExistsError):
@@ -224,6 +235,36 @@ class WorkflowTests(unittest.TestCase):
             with self.assertRaisesRegex(FormatError, "original JSON"):
                 workflow.pack(work, root / "bad")
             self.assertFalse((root / "bad").exists())
+
+    def test_extra_text_and_jis_finalize_publish_only_resources(self):
+        from python.common.jis_workflow import finalize, prepare
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            src = root / "md_scr.med"
+            # Resource string 1 aliases the first message; "BG_資源" and the label are not exported.
+            code = example()
+            extra_member = script(ref(0x14, 0) + ref(1, 1) + frame(0), ("BG_資源", "本文"), (0,), ("LBL_測",))
+            src.write_bytes(bundle([("scene", code), ("other", extra_member), ("empty", script(b""))]))
+            work = root / "work"
+            report = workflow.extract(src, work)
+            lines = (work / "reports/jis-extra-text.txt").read_text(encoding="utf-8").splitlines()
+            self.assertEqual(lines, ["LABEL", "BG_資源", "LBL_測"])
+            self.assertEqual(report["jis_extra_text"]["lines"], 3)
+            self.assertNotIn("最初の文。", lines)
+            rows = load_json((work / "gt_input/scene.json").read_bytes())
+            rows[0]["message"] = "这是中文测试。"
+            (work / "gt_output/scene.json").write_bytes(dump_rows(rows))
+            before = sorted(p.relative_to(work).as_posix() for p in work.rglob("*"))
+            prepare(work, root / "prep", encoding="cp932", proxy_policy="unused",
+                    extra_texts={"1-jis-extra-text.txt": "\n".join(lines)})
+            workflow.pack(root / "prep/workspace", root / "rebuilt", readback=root / "readback")
+            result = finalize(root / "prep", root / "rebuilt", root / "readback/gt_input", root / "deliver")
+            self.assertEqual(result["verified_files"], 2)
+            delivered = sorted(p.relative_to(root / "deliver").as_posix()
+                               for p in (root / "deliver").rglob("*") if p.is_file())
+            self.assertFalse(any(n.startswith("readback/") or n.startswith("gt_input/") for n in delivered))
+            self.assertIn("md_scr.med", delivered)
+            self.assertEqual(before, sorted(p.relative_to(work).as_posix() for p in work.rglob("*")))
 
 
 if __name__ == "__main__":

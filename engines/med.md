@@ -14,7 +14,7 @@
 
 ```console
 python -m python.engines.med_extract extract "GAME/md_scr.med" "GAME/GAME_extract"
-python -m python.engines.med_extract pack "GAME/GAME_extract" "NEW_REBUILD"
+python -m python.engines.med_extract pack "GAME/GAME_extract" "NEW_REBUILD" --readback "NEW_READBACK"
 ```
 
 `extract` 会经过真实脚本 writer 和归档 writer，要求原文往返逐字节一致，再发布结果：
@@ -27,8 +27,17 @@ python -m python.engines.med_extract pack "GAME/GAME_extract" "NEW_REBUILD"
 | `metadata/` | 源哈希、指令偏移、角色、姓名引用和控制符 |
 | `rebuilt/roundtrip/<原归档名>` | 实际重建且逐字节一致的原文归档 |
 | `reports/extraction.json` | 数量、角色、指令分布和排除范围 |
+| `reports/jis-extra-text.txt` | UTF-8，所有成员中未导出的主字符串和标签名（去重，每行一条），仅供 JIS `--extra-text` 预留字符，不是翻译输入 |
 
-`pack` 从原归档重新推导成员、JSON 和 manifest，核对原文及元数据后按文件名配对译文。名字不匹配的文件记录为 `unmatched_translation_files`，不会猜配。完整重封包及实际资源回读 JSON 写入新目录；不要把单个脚本或代理 JSON 当作已回注结果。换行保护项调整后，旧 metadata 无法通过 manifest 比对；应从哈希验证通过的原件重新提取到新目录，再放回同名译文。
+`pack` 从原归档重新推导成员、JSON 和 manifest，核对原文及元数据后按文件名配对译文。名字不匹配的文件记录为 `unmatched_translation_files`，不会猜配。重建目录只写同名完整归档、`reports/rebuild.json` 和 `README.txt`。打包时会在内存中从重建归档逐成员回读，与预期行比对。指定 `--readback` 时，再把实际写盘的归档重新提取到该新目录的 `gt_input/`。回读结果不放进重建目录，避免代理 JSON 随资源一起发布。不要把单个脚本或代理 JSON 当作已回注结果。
+
+已有重建目录可单独回读，不要求重新打包：
+
+```console
+python -m python.engines.med_extract readback "GAME/GAME_extract" "NEW_REBUILD" "NEW_READBACK"
+```
+
+重建目录只允许工作区原归档名、`reports/rebuild.json` 和 `README.txt`，其他文件（包括旧版本写入的 `readback/`）一律拒绝；成员名单须与工作区一致。回读目录不能位于工作区或重建目录之内。换行保护项调整后，旧 metadata 无法通过 manifest 比对；应从哈希验证通过的原件重新提取到新目录，再放回同名译文。
 
 交付依主流程用 Markdown 表格说明实际数量及验证状态，推荐具体开场文件。标题可能是文件第一条，应按 metadata 的 `kind` 找前几条正文试注；不要只按排序认定剧情入口。告诉用户：译文放回同名 `gt_output` 后通知 agent，由 agent 完成回写。
 
@@ -81,13 +90,21 @@ python -m python.engines.med_extract pack "GAME/GAME_extract" "NEW_REBUILD"
 
 脚本 writer 只做严格 CP932 编码。中文优先沿用[公共 JIS 流程](../guides/jis-substitution.md)，不要给 MED 单独实现另一套 JIS 开关：
 
-1. agent 在工作副本调用 `python.common.jis_workflow.prepare`，将**全部原池和标签的解码文本**传入 `extra_texts` 预留字符，用户译文仍保留真实中文。
-2. 对 prepare 生成的 `workspace` 调用 MED `pack`；再用 MED `extract` 读取实际生成的归档到新目录。
+1. agent 调用公共 `prepare`，用 `--extra-text` 传入提取时生成的 `reports/jis-extra-text.txt`，预留未导出字符串池和标签中的字符；用户译文仍保留真实中文。
+2. 对 prepare 生成的 `workspace` 调用 MED `pack --readback`，一次完成重封包和实际归档回读，不需要再单独运行 `extract`。
 3. 用公共 `finalize` 对全部回读 JSON 核对代理文本和还原中文，生成同名归档、配置、映射及合适位数的 hook。固定映射冲突时可明确选择 `unused`，但此时不能声称预设替换字体兼容。
+
+```console
+python -m python.common.jis_workflow prepare "GAME/GAME_extract" "JIS_PREP" --encoding cp932 --extra-text "GAME/GAME_extract/reports/jis-extra-text.txt"
+python -m python.engines.med_extract pack "JIS_PREP/workspace" "JIS_REBUILD" --readback "JIS_READBACK"
+python -m python.common.jis_workflow finalize "JIS_PREP" "JIS_REBUILD" "JIS_READBACK/gt_input" "JIS_DELIVERY"
+```
+
+`reports/jis-extra-text.txt` 在提取时生成，旧工作区没有这个文件，需要从哈希验证通过的原归档重新提取到新目录。无法按 CP932 解码的池项不会写入这个文件，而是逐成员列在 `reports/extraction.json` 的 `jis_extra_text.undecodable_cp932_strings`，需要单独核对。
 
 不假设存在通用 `patch.med` 加载机制。交付的是同名完整剧情归档；备份和部署依授权处理，不覆盖原游戏。最终告诉用户配置所在位置，以及将兼容的 `winmm.dll` 与 `uif_config.json` 放到实际游戏 EXE 目录的用法；存在其他 hook 时先核对合并。字体路线必须是映射匹配的专用替换字体，普通日文或繁体字体无效。离线往返与中文还原不等于游戏内显示已验证。
 
-[合成测试](../tests/test_med.py) 覆盖归档间隙/重封包、空脚本、帧/索引错误、姓名关联、原池复用隔离、变长引用、控制符、JIS 回读及工作区拒绝覆盖。新方言须先核实长度字段、引用基准和加载端读取方式，再添加独立 profile 或有证据的形状/语义；不按游戏名另建脚本。
+[合成测试](../tests/test_med.py) 覆盖归档间隙/重封包、空脚本、帧/索引错误、姓名关联、原池复用隔离、变长引用、控制符、JIS 回读、回读目录与重建目录分离、extra-text 导出及工作区拒绝覆盖。新方言须先核实长度字段、引用基准和加载端读取方式，再添加独立 profile 或有证据的形状/语义；不按游戏名另建脚本。
 
 ## 来源与许可
 
