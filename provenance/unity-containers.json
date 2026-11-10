@@ -1,0 +1,53 @@
+{
+  "implementation": [
+    "python/archives/unityfs.py",
+    "python/archives/unity_serialized.py",
+    "python/engines/unity_textasset.py",
+    "python/engines/unity_scan.py"
+  ],
+  "license": "GPL-3.0-only (new code of this skill, same as the existing Unity modules)",
+  "origin": "Independent Python implementation of the UnityFS archive, serialized-file (v17-v22) and TypeTree layouts. Field order, flag meanings and the built-in TypeTree string table were cross-checked against the public format descriptions listed below and against real files read locally in read-only mode. No upstream source lines were copied.",
+  "references": [
+    {
+      "project": "UnityPy",
+      "repository": "https://github.com/K0lb3/UnityPy",
+      "license": "MIT",
+      "copyright": "Copyright (c) 2019-2024 Rudolf Kolbe",
+      "symbols": ["files.BundleFile (UnityFS header, ArchiveFlags, block/directory info)",
+                  "files.SerializedFile (header, SerializedType, object table, externals, ref types)",
+                  "helpers.TypeTreeHelper (node walk, kAlignBytes)", "CommonString table"],
+      "use": "Layout facts: UnityFS flag bits (0x40 combined, 0x80 info at end, 0x200 padding at start and the engine-version gate that separates it from an older vendor encryption flag), v7 16-byte header alignment, v22 64-bit header fields, v19 32-byte TypeTree nodes, v21 type dependencies and ref-type names, aligned 64-bit PathIDs."
+    },
+    {
+      "project": "AssetStudio",
+      "repository": "https://github.com/Perfare/AssetStudio",
+      "license": "MIT",
+      "copyright": "Copyright (c) 2016 Radu, Copyright (c) 2016-2020 Perfare",
+      "symbols": ["BundleFile.ReadHeader/ReadBlocksInfoAndDirectory", "SerializedFile", "TypeTreeHelper", "CommonString"],
+      "use": "Second description of the same layouts used to confirm field order and the common string offsets."
+    },
+    {
+      "project": "LZ4 block format description",
+      "repository": "https://github.com/lz4/lz4/blob/dev/doc/lz4_Block_format.md",
+      "license": "BSD-2-Clause (LZ4 library and documentation)",
+      "copyright": "Copyright (c) Yann Collet",
+      "symbols": ["token", "literal length", "offset", "match length"],
+      "use": "Pure-Python block decoder written from the format description; LZ4HC uses the same block format."
+    },
+    {
+      "project": "GARbro-Mod",
+      "repository": "see sources.json",
+      "license": "MIT",
+      "copyright": "Copyright (c) 2014-2020 morkt",
+      "symbols": ["ArcFormats/Unity/ArcUnityFS.cs", "ArcFormats/Unity/Asset.cs"],
+      "use": "Already registered in the catalog; consulted only as another confirmation of the UnityFS node table."
+    }
+  ],
+  "deviations": [
+    "Every count, length, decompressed size and read is bounded; unknown versions, flags, block or node flags, big-endian files, LZHAM and ManagedReferencesRegistry are rejected instead of guessed.",
+    "The bundle writer emits a single stored block with the streamed flag and stored blocks info; it keeps node order, paths, flags, version strings, blocks-info placement and 0x200 alignment, and refuses to change content when the blocks-info hash is nonzero.",
+    "TextAsset replacement only rewrites m_Script; every other object and node is compared byte for byte after rereading.",
+    "Runtime loading of rebuilt bundles has not been verified in any game."
+  ],
+  "tests": "tests/test_unityfs.py, tests/unity_fixtures.py"
+}

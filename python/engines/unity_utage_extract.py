@@ -61,6 +61,10 @@ def filename(name, path_id, grid, used):
 
 def inventory(data, dependencies):
     index = archive.read_index(io.BytesIO(data))
+    if index.version != 20 or index.type_tree:
+        # The container reads v17-v22, but this book profile is only verified
+        # on stripped v20 files; other layouts need their own evidence.
+        raise FormatError("Utage book profile requires a stripped serialized v20 asset")
     if len(dependencies) > 16 or sum(map(len, dependencies.values())) + len(data) > 192 << 20:
         raise FormatError("Unity dependency budget exceeded")
     scripts = {}

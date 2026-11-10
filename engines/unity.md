@@ -1,4 +1,4 @@
-# Unity：Utage 剧情表、serialized asset 与 .bin/.idx 容器
+# Unity：UnityFS / serialized 容器、TextAsset、Utage 剧情表与 .bin/.idx 容器
 
 目录输出遵循 [公共安全写出约定](../guides/python-reference-api.md#安全写出示例)：父目录须已存在，目标须不存在或为普通空目录；非空目录、文件和链接拒绝。
 
@@ -8,6 +8,10 @@
 
 | 已确认的输入 | 随包实现 | 能力边界 |
 |---|---|---|
+| 任意 Unity 游戏目录，先找文本位置 | [只读扫描](../python/engines/unity_scan.py)，流程见[文本定位](unity/locating-text.md) | 列容器版本、对象类别、TextAsset 名称/编码/熵、MonoBehaviour 类名；不解析 global-metadata |
+| UnityFS 格式版本 6/7/8，块为 None/LZMA/LZ4/LZ4HC | [容器](../python/archives/unityfs.py) | 解包节点；替换节点后重建为**无压缩**数据块并逐节点读回 |
+| serialized file v17–v22，小端，有或无 TypeTree | [容器](../python/archives/unity_serialized.py) | 头部、类型表、TypeTree、对象表、externals/script types/reference types；对象重定位重建 |
+| TextAsset（class 49），在 serialized 文件或 UnityFS 包内 | [工作区 CLI](../python/engines/unity_textasset.py) | 整段替换 `m_Script` 并重建 serialized 与 bundle；不解析剧本方言、不生成 gt_input |
 | Unity serialized file v20，小端、TypeTree 已剥离；对象类为 `Utage.AdvImportBook` | [容器](../python/archives/unity_serialized.py)、[剧情语义](../python/engines/unity_utage.py)、[工作区 CLI](../python/engines/unity_utage_extract.py) | 指定 Utage 布局的整表提取、UTF-8 变长回填、完整 `.assets` 重建 |
 | 已有可靠字段位置的 Utage mono DAT 对齐字符串 | [局部字符串接口](../python/engines/unity.py) | 单记录解码和等占位替换；不能代替完整资产 writer |
 | 同名 `.bin` + `.idx` 资源对，索引为 AES-CBC 密文 MsgPack | [容器](../python/archives/unity_arc.py) | 索引解密、成员解密与 `.bin`/`.idx` 重写；key/IV 为方言参数 |
@@ -15,9 +19,67 @@
 
 `*_Data`、`GameAssembly.dll`、StreamingAssets 只帮助识别，不能证明剧情是 Utage。Mono/IL2CPP 是运行时差异，也不能单独确定资源的序列化布局。不要把所有可读字符串、TextAsset 或 MonoBehaviour 自动当对白。
 
-当前完整工作区路径不支持 UnityFS/AssetBundle 压缩外壳、其他 serialized 版本、带 TypeTree 的文件、任意 MonoBehaviour schema 或字体图集重建。遇到这些情况先补齐对应容器/类型布局，不套用本 profile。工具仅使用标准库，不加载或执行游戏程序集、EXE、DLL、表达式，也不依赖额外 Unity 工具。
+Utage book profile 仍只接受 TypeTree 已剥离的 v20 资产（其他版本即使容器可读也会拒绝）。任意 MonoBehaviour schema、字体图集重建、big-endian serialized、v16 及更早或 v23 以后的版本、LZHAM 块、旧 UnityWeb/UnityRaw 外壳都不支持；遇到时先补齐对应布局与测试，不套用现有 profile。工具仅使用标准库，不加载或执行游戏程序集、EXE、DLL、表达式，也不依赖额外 Unity 工具。
 
-## 定位与输入确认
+## 先扫描再选路径
+
+不知道文本在哪时，先跑只读扫描，按 [文本定位流程](unity/locating-text.md) 的顺序判断和停止：
+
+```text
+python -m python.engines.unity_scan "/game" --output "/work/unity_scan"
+```
+
+扫描遍历游戏目录下的 `*_Data`（含 StreamingAssets），对 `.assets`、`globalgamemanagers`、`level*`、UnityFS 包（任意扩展名，按 `UnityFS\0` 魔数识别）逐个报告。默认预算：文件数 20000、对象/松散文件读取 2 GiB、每个包解压 256 MiB；超出时该容器标 `partial` 并在 `budget.exhausted` 列出，不静默丢弃。`preview` 只截取少量字符供定位，扫描结果放结果目录，不收入 Skill。
+
+## UnityFS 容器
+
+- 头部：`UnityFS\0`、BE u32 格式版本（只接受 6/7/8）、播放器版本串、引擎版本串、BE i64 文件总长、blocks info 压缩/原始长度、flags。总长必须等于文件大小。
+- flags：低 6 位为 blocks info 压缩（0 无、1 LZMA、2 LZ4、3 LZ4HC；4 LZHAM 拒绝）；`0x40` 表示块表与目录合并，必须存在；`0x80` 表示 blocks info 在文件末尾；`0x200` 表示首个数据块前补齐到 16 字节。`0x200` 只在 2020.3.34、2021.3.2、2022.1.1 及以后引擎上按对齐解释；更早引擎上同一位曾被厂商加密方案使用，直接拒绝。其他未知位一律拒绝。
+- 版本 7 及以上，头部结束后补齐到 16 字节再接 blocks info（或在 `0x80` 时直接接数据）。所有 padding 必须为零；数据块必须精确铺到 blocks info（`0x80`）或文件末尾。
+- blocks info：16 字节哈希、块表（BE u32 原始长、压缩长、u16 flags；低 6 位压缩方式，`0x40` 为 streamed）、节点表（BE i64 偏移、i64 长度、u32 flags、NUL 结尾 UTF-8 路径）。节点 flags `0x4` 是 serialized 文件，`.resS`/`.resource` 节点是原始数据。路径重复、越界、未知位都拒绝。
+- LZMA 块是 5 字节属性加无长度字段的 LZMA1 流，用标准库解码并核对长度；LZ4/LZ4HC 用随包纯 Python 块解码器，偏移、长度与输出大小全部校验。`BundleReader` 只解压读取范围覆盖的块，带解压预算；无压缩块按需直接读取。
+
+### 重建
+
+`unityfs.rebuild(data, {节点路径: 新内容})` 按原偏移顺序重组数据流，保留节点间原始字节、节点表顺序、路径、flags、格式版本、两个版本串、blocks info 的位置（头后或末尾）和 `0x200` 对齐；数据写成**一个无压缩块并带 streamed 标志**，blocks info 也不压缩。写出后用同一 reader 重读，逐节点比较。
+
+- 选择无压缩而不移植 LZ4 压缩器：读写路径都能完整核对，且避免新增未经实机验证的压缩器。代价是文件变大，体积约等于全部节点之和；压缩包重建后可能大数倍。
+- 运行时证据：Unity 构建选项本身可以产出无压缩 AssetBundle，已见到正式发行的 v6 包正是“单个无压缩块 + streamed 标志”的形态，因此该变体在格式上属于 Unity 自身产出的布局。但本工具产出的包**尚未在任何游戏中验证加载**，按“未验证运行时”交付。
+- blocks info 哈希非零且内容有改动时拒绝重建（算法未确认）；全零哈希保持全零。
+- 游戏若用自带清单（例如同目录的平台清单包）或在加载时传入 CRC 校验 bundle，内容改变后可能拒绝加载；遇到加载失败先查这一点，不要猜改清单。
+
+预算：单文件 64 GiB 扫描、blocks info 16 MiB、块数 1M、节点 65536、读取默认 512 MiB、内存重建 512 MiB。
+
+## serialized v17–v22
+
+- 头部前 16 字节为 BE u32（metadata 长、文件长、版本、数据偏移），随后 1 字节端序（只接受 0 小端）和 3 字节保留零。v22 前述三个旧字段为 0，改由 BE u32 metadata 长、i64 文件长、i64 数据偏移、i64 保留零（共 48 字节头）给出。
+- metadata：Unity 版本串、平台、TypeTree 开关、类型表、对象表、script types、externals、v20+ reference types、user information，必须精确读到 metadata 结尾。
+- 类型项：classID、stripped、scriptTypeIndex；MonoBehaviour（114）或带脚本的 reference type 有 16 字节 script ID，之后 16 字节类型哈希；开 TypeTree 时接节点表：v17–v18 每节点 24 字节，v19 起 32 字节（多 u64 refTypeHash）；字符串偏移高位置 1 时查 Unity 内置公共字符串表，否则查本地表；v21 起普通类型后有依赖数组，reference type 后有类名/命名空间/程序集三个字符串。
+- 对象表：每项先按 4 字节对齐，再读 i64 PathID；偏移 v22 为 i64、更早为 u32，后接 u32 长度与类型索引。对象不得重叠或越界。
+- `walk_object` 按 TypeTree 读取整个对象：基本类型按名称定宽，数组为 `size`+元素，`0x4000` meta 标志表示读完后 4 字节对齐，必须正好读完对象。未知公共字符串、未知基本类型和 `ManagedReferencesRegistry` 都拒绝。
+- `rebuild` 只改对象表里的偏移/长度和头部文件长，非目标对象、对象间零 padding 与不透明间隙、metadata 其他字节逐字节保留，并重读核对。对象须 8 字节对齐。
+
+预算：metadata 16 MiB、单对象 32 MiB、内存重建 128 MiB、对象数 4M、TypeTree 节点 65536、单对象 walk 4M 步。
+
+## TextAsset 整段替换
+
+TextAsset（class 49）：
+
+- 有 TypeTree：根类型必须是 `TextAsset`，顶层字段只能是 `m_Name`、`m_Script`（2017 之前的引擎另有 `m_PathName`），且都是 `string`；`m_Script` 的对齐以 TypeTree meta 标志为准。
+- 无 TypeTree：按 `m_Name` 字符串 + `m_Script`（LE i32 字节长 + 原始字节 + 4 字节对齐）读取，引擎主版本小于 2017 时再读 `m_PathName`；必须正好读完对象，否则拒绝，不猜额外字段。
+- `m_Script` 是原始字节，可以是 UTF-8（可能带 BOM、CRLF）、UTF-16、CP932 或二进制；不要统一解码后再写回。
+
+```text
+python -m python.engines.unity_textasset extract "/game/Game_Data/Data/scenario_bundle" "/work/ta" --name "_01*" --target "Game_Data/Data/scenario_bundle"
+python -m python.engines.unity_textasset pack "/work/ta" "/work/ta_out" --text
+```
+
+- `extract` 可用 `--name`（m_Name 通配，可重复）、`--path-id`、`--node` 选择；写出 `original/<容器>`、`original/textassets/<m_Name>.txt|.bytes`、`metadata/manifest.json`、`reports/extraction.json` 和 `rebuilt/roundtrip/<target>`。提取时会用真实 writer 先做原样重建：serialized 必须逐字节相同，bundle 重读后所有节点与对象逐字节相同（bundle 本身因改为无压缩而不同）。
+- `pack` 从 `replace/`（或 `--source-dir`）读取与 `original/textassets` 同名的文件。默认按原始字节替换；`--text` 把文件当 UTF-8 文本读入，再按 manifest 记录的原编码写回（保留 UTF-8 BOM / UTF-16 BOM；CP932 无法编码的字会报错，走 [JIS 替换流程](../guides/jis-substitution.md) 或改用原始字节）。二进制 TextAsset 不能用 `--text`。
+- 回写会核对原容器与原文副本的哈希，重建 serialized 和 bundle，重读后要求：目标 TextAsset 的 `m_Script` 等于替换内容、`m_Name` 及 `m_Script` 以外的字节不变，其他对象与非 serialized 节点逐字节不变。结果在 `files/<target>`，另有 `readback/textassets/` 与 `reports/rebuild.json`。
+- 这是整段替换，不理解剧本命令、姓名或语音标记；剧情翻译还需要该方言自己的 parser，见 [文本定位](unity/locating-text.md#textasset-行式剧本的观察)。游戏加载与显示未验证。
+
+## Utage：定位与输入确认
 
 1. 检查具体 `.assets`、场景文件及配套资源的大小。先用 `open_checked`、`read_index` 枚举索引，再以 `read_object(..., prefix=...)` 限量查看对象头。大型 `resources.assets` 和 `.resS` 不应为寻找文本而整包载入。
 2. MonoBehaviour 头包含 GameObject PPtr、enabled、MonoScript PPtr 和 `m_Name`。通过本文件或外部 serialized asset 内的 MonoScript 解析类名、命名空间，确认 `Utage.AdvImportBook`，而非只凭 `.book` 后缀。
@@ -34,7 +96,7 @@ with asset.open_checked(source_path) as stream:
     candidates = [(obj.path_id, obj.size) for obj in index.objects if obj.class_id == 114]
 ```
 
-预算：metadata 16 MiB、单对象 32 MiB、整文件重建 128 MiB；索引扫描文件上限 16 GiB（同时受 v20 自身 32 位文件长度约束）。输入与最多 16 份显式依赖合计不超过 192 MiB。超预算时保留诊断，缩小输入或完善流式 writer；不要提高限制后无界读取媒体。
+预算：metadata 16 MiB、单对象 32 MiB、整文件重建 128 MiB；索引扫描文件上限 16 GiB（v21 及更早同时受 32 位文件长度约束）。输入与最多 16 份显式依赖合计不超过 192 MiB。超预算时保留诊断，缩小输入或完善流式 writer；不要提高限制后无界读取媒体。
 
 ## Utage book profile
 
@@ -95,7 +157,11 @@ writer 会重建 UTF-8 字符串、四字节 padding、表 textLength、对象�
 
 验证顺序：完整消费对象 → 原文重建相同 → 变长中文及非 BMP 字符 → 重新解析、核对未改字段与对象 → 游戏显示另测。增加相应合成正反例，尤其是列偏移、注释、缓存计数、非空实体表、未知命令、原文/manifest 改动。若存在本地化多语言列、命令覆盖插件、不同导入版本或实体缓存，不把当前规则扩大为“全部 Utage 支持”。
 
-回归入口：[test_unity_utage.py](../tests/test_unity_utage.py)。提交前运行相关测试与 `python tools/check_skill.py`；运行报告只放结果目录。
+回归入口：[test_unity_utage.py](../tests/test_unity_utage.py)；UnityFS、serialized v17–v22、TextAsset 与扫描见 [test_unityfs.py](../tests/test_unityfs.py)。提交前运行相关测试与 `python tools/check_skill.py`；运行报告只放结果目录。
+
+## 容器实现来源
+
+UnityFS、serialized v17–v22、TypeTree 公共字符串表和 TextAsset 布局为独立实现，对照了公开的格式描述并用合成样本及真实文件只读核对；未复制外部实现代码，LZ4 块解码按公开的 LZ4 块格式规范编写。参考项目与许可见 [unity-containers](../provenance/unity-containers.json)；使用本 Skill 不需要访问这些仓库。
 
 ## 旧 DAT 局部接口与来源
 
@@ -117,7 +183,7 @@ writer 会重建 UTF-8 字符串、四字节 padding、表 textLength、对象�
 - key 与 IV 是参考工具写死的 ASCII 常量，属于单个会社/样本的方言参数，不是 Unity 通性；
   其他构建必须提供自己的 key 对，不把这两个常量推广。
 - `build_bin` 重新加密并重算 `u32` 长度前缀与偏移，重新解析索引、解密每个成员比对后才返回。
-- 不做：AssetBundle（UnityFS）外壳、serialized file 版本差异、索引中未出现的成员、加密 key 推断。
+- 不做：索引中未出现的成员、加密 key 推断；UnityFS 与 serialized 文件走上文的独立容器。
 
 ```python
 from python.archives.unity_arc import build_bin, read_index, read_member
