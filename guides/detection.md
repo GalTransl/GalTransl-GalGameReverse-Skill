@@ -8,14 +8,32 @@
 4. 结合源文件与引擎页面核查版本和方言。某库“支持”只代表特定 parser 被注册，不代表该游戏或 writer 能工作。
 5. 若只知道归档格式，先解出候选剧本，再识别脚本语义；厂商、归档格式与脚本引擎之间并非一对一。
 
-辅助器 [detect.py](../python/detect.py) 最多扫描有限文件/深度和文件头，返回 `weak-extension`、`weak-layout`、`header-hint`、`footer-hint`。它不校验完整目录、不识别全部加密、不执行程序，也不直接选 writer。
+辅助器 [detect.py](../python/detect.py) 最多扫描有限文件/深度和文件头，返回 `weak-extension`、`weak-layout`、`header-hint`、`footer-hint`、`content-probe`、`layout-probe`、`volume-set`。它不校验完整目录、不识别全部加密、不执行程序，也不直接选 writer。所有读取都有字节上限：文件头 2 KiB、QLIE 包尾 256 字节、PE 头、BGI 索引、重复归档的头部哈希。
 
-### 证据展示上限与扫描中断
+### 证据强度、展示上限与扫描中断
 
-- `candidates[engine]` 仍是证据列表。`max_evidence` 默认 12，可用 CLI `--max-evidence N` 调整；这限制**展示**，不是命中总数。
-- `candidate_stats[engine]` 提供 `total_hits`、`shown_hits`、`matched_files`、`capped`。hit 是证据条数：同一文件可贡献多个 hit，不能把 `total_hits` 当文件数。
+- 每条证据带 `strength`：`probe`（魔数、包尾、内容或布局探测）> `filename`（特征文件名）> `extension`（扩展名）。`candidates[engine]` 按强度排序，同强度按发现顺序；`max_evidence` 默认 12（CLI `--max-evidence N`），只限制**展示**。每个候选中出现过的每种强度至少保留 1 条，因此上限小于强度种类数时展示条数可略超上限；为 0 时只给计数。
+- `candidate_stats[engine]` 提供 `total_hits`、`shown_hits`、`matched_files`、`capped` 与 `by_strength`（各强度的命中数）。hit 是证据条数：同一文件可贡献多个 hit，不能把 `total_hits` 当文件数。
 - `evidence_capped` 表示有候选证据被展示上限裁剪。只显示 12 条不等于只发现 12 个成员/文件，更不证明覆盖全部脚本。
-- `truncated` 仍表示扫描因文件数/深度等限制中断，与展示裁剪不同；统计只覆盖实际扫描范围。两者都不是解析成功率。
+- `truncated` 表示扫描中断，`truncated_reason` 列出原因：`max_files`、`max_depth`、`max_seconds`（CLI `--max-files`、`--max-depth`、`--max-seconds`）。统计只覆盖实际扫描范围，与展示裁剪不同，两者都不是解析成功率。
+- 遍历为广度优先；同一层先进入 `game`、`data`、`archive`、`pac`、`pack`、`resources`、`StreamingAssets`、`*_Data` 等常见目录，避免深层插件目录先耗尽文件配额。
+
+### 版本与运行环境字段
+
+- `format_versions` 汇总读到的头部版本（计数）：`yuris-ypf`（YPF 头版本字，只有 v482 有完整路线）、`qlie-filepack`（包尾 `FilePackVerX.Y`，随包 reader/writer 只覆盖 3.0）、`renpy-rpa`（`RPA-3.0`、改名的 `ARC-3.0`、`RPA-3.2`、`RPA-2.0`；随包 reader 只接受 3.0/ARC-3.0）、`entis`（子类型）、`unityfs`（bundle 格式版本）、`unity-serialized`（serialized 版本）。对应 hit 另带 `version`、`unity_version` 或 `subtype`。
+- Entis：偏移 `0x10` 为 `ERISA-Archive file` 的标为 NOA 归档（`subtype: noa`，随包无 reader），为 `Cotopha Image file` 的才是 CSX；其他子签名标 `other`。
+- `executables` 列出扫描根及其下两层内 `*.exe` 的 PE Machine：`x86`、`x64`、`arm64` 等，非 PE 记 `not-pe`。选择 JIS hook DLL 时按实际游戏 EXE 的位数，不按启动器。
+- `unity`：`scripting_backend` 为 `mono`（存在 `*_Data/Managed/Assembly-CSharp.dll`）、`il2cpp`（存在 `GameAssembly.dll` 或 `il2cpp_data`）、两者或 `undetermined`。这只是运行时后端，不决定资源或剧情的序列化布局；`.assets`、`globalgamemanagers` 的 serialized 版本仅在头部声明大小与实际大小一致时报告。
+
+### 已有补丁与旧实验产物
+
+`existing_patch_hints` 列出可能是已有补丁或旧实验产物的线索（每条带同样的 `note`，展示上限见 `existing_patch_hint_stats`）。它们只提示“先确认原版来源再提取”，不证明文件被修改：
+
+- `hook-dll`：EXE 同目录（或扫描根）中的常见代理 DLL 名，如 `winmm.dll`、`version.dll`、`d3d9.dll`、`dinput8.dll`、`dsound.dll`、`winhttp.dll`，附 PE 位数。
+- `patch-config`：`uif_config.json`、`CialloHook.ini`、`version.ini`、`winmm.ini`、`jis-mapping.json`、`doorstop_config.ini`。
+- `backup-file`：`*.bak`、`*.org`（含 `*.exe.org`）、`*.orig`；`copy-named-file` / `copy-named-directory`：名字带“副本”“备份”“コピー”“- Copy”“backup”等的 EXE/DLL/归档或目录。
+- `duplicate-archive`：同名或同大小的归档，大小一致且前 4 MiB 的 SHA-256 相同；只比较头部，总量有文件数/字节/时间上限，超限时给出 `duplicate-check-capped`。
+- `bgi-loose-override`：与 BGI `.arc` 成员同名的松散文件（`.arc` 同目录或扫描根），只读 `.arc` 索引。逐个试探有限字节的编码：整体可严格解码为 UTF-8 且含非 ASCII，记 `utf-8`；否则按 NUL 分段统计，记 `utf-8-strings`、`cp932-compatible-strings`（日文 CP932 与 GBK 都可能落在此类）或 `undetermined`。出现 UTF-8 时 `summary` 为“疑似 UTF-8 汉化覆盖”。提取应以 `.arc` 内原版成员为准，松散文件另作对照。
 
 ### 派生目录与目录兜底
 
