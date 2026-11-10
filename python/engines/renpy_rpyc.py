@@ -267,21 +267,61 @@ def export(script, *, filename="script.rpyc", names=None):
     return rows, manifest
 
 
-def patch(script, rows, manifest, *, filename="script.rpyc", names=None):
+class TranslationErrors(ValueError):
+    """All rejected translation rows, each as ``<file>.json #<index>: reason``."""
+
+    def __init__(self, errors):
+        self.errors = list(errors)
+        super().__init__(f"{len(self.errors)} Ren'Py translation error(s):\n" + "\n".join(self.errors))
+
+
+def row_error(before, after):
+    """Return why a changed message is rejected, or None."""
+    if not after:
+        return "empty text"
+    if "\0" in after:
+        return "NUL in text"
+    expected = controls(before)
+    try:
+        actual = controls(after)
+    except ValueError as exc:
+        return f"{exc} (expected tokens {expected})"
+    if expected != actual:
+        return f"changed controls (expected tokens {expected}, actual {actual})"
+    return None
+
+
+def patch(script, rows, manifest, *, filename="script.rpyc", names=None, label=None):
+    """Patch one script. ``label`` names the JSON in errors (default: filename).
+
+    Every rejected row is collected and raised together as TranslationErrors.
+    """
+    label = label or filename
     original, expected = export(script, filename=filename, names=names)
     if manifest != expected:
-        raise ValueError("RPYC manifest differs from freshly parsed source")
-    rows = validate_translation(manifest, {filename: script.raw}, original, rows)
+        raise ValueError(f"{label}: RPYC manifest differs from freshly parsed source")
+    try:
+        rows = validate_translation(manifest, {filename: script.raw}, original, rows)
+    except ValueError as exc:
+        # The shared validator stops at its first finding ("row N: ...").
+        detail = re.sub(r"^row (\d+): ", r"#\1: ", str(exc))
+        raise TranslationErrors([f"{label} {detail}" if detail.startswith("#") else f"{label}: {detail}"]) from exc
     edits = {slot: {} for slot in script.slots}
-    for before, after, record in zip(original, rows, manifest["records"]):
+    errors = []
+    for index, (before, after, record) in enumerate(zip(original, rows, manifest["records"])):
         if before["message"] == after["message"]:
             continue
-        if not after["message"] or "\0" in after["message"] or controls(before["message"]) != controls(after["message"]):
-            raise ValueError(f"Ren'Py row {record['position']}: empty/NUL text or changed controls")
+        reason = row_error(before["message"], after["message"])
+        if reason:
+            errors.append(f"{label} #{index}: {reason}")
+            continue
         for slot, site in record["locator"]["sites"].items():
             if site in edits[int(slot)] and edits[int(slot)][site] != after["message"]:
-                raise ValueError("conflicting edits at shared RPYC site")
+                errors.append(f"{label} #{index}: conflicting edits at shared RPYC site")
+                break
             edits[int(slot)][site] = after["message"]
+    if errors:
+        raise TranslationErrors(errors)
     raw = rebuild(script, edits)
     checked = parse(raw)
     if export(checked, filename=filename, names=names)[0] != rows:

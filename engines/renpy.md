@@ -19,7 +19,7 @@ python -m python.engines.renpy_extract extract "游戏目录/game" "游戏目录
 python -m python.engines.renpy_extract pack "游戏目录/游戏名_extract" "游戏目录/游戏名_extract/新回包目录"
 ```
 
-1. `scan` 只读头和索引，列出 `.rpy`、`.rpyc`、`.rpym`、`.rpymc` 及大小；不读取图片、音频等大成员。明确选择脚本包，避免把整个游戏无界装入内存。
+1. `scan` 只读头和索引，列出 `.rpy`、`.rpyc`、`.rpym`、`.rpymc` 及大小；不读取图片、音频等大成员。明确选择脚本包，避免把整个游戏无界装入内存。**Character 定义所在的包（常见是 rpy/script 包）要和 tl 包一起选上**，否则 `who` 只有变量名、解析不出 name。`who` 未解析时 `extract` 在 stderr 输出 `WARNING`，报告记录 `unresolved_speaker_rows` 与按变量统计的 `unresolved_speakers`（不计运行时内置的 `extend`、`narrator`、`centered`、`vcentered`、`nvl`）；出现时先补选定义包再重新提取。
 2. `extract` 为 RPYC2 工作区：对选中包内所有 `.rpyc` 完整解析并进行原文回填，要求逐字节一致；未知结构会报告归档和成员，不留成功的空模板。
 3. 保留 `original/archives`、`original/scripts`、`metadata`、`reports`。`gt_input` 是平铺 UTF-8 JSON；同名冲突才加归档名后缀，同一包内仍重名时再加序号。以报告的 `outputs.json` 映射为准。空脚本不生成 JSON。
 4. `--smoke-test` 在每个非空脚本首行追加中文，验证双槽回填、完整对象图与归档重新解析，输出 `rebuilt/growth-test/game`。这是离线验证用归档，不是正式译文。`rebuilt/roundtrip/game` 是原文往返归档。
@@ -68,6 +68,7 @@ python -m python.engines.renpy_extract pack "游戏目录/游戏名_extract" "�
 ## 回包与部署
 
 - `pack` 校验原始归档哈希、重新生成的原文与 manifest、译文文件名、数量、姓名槽及控制符。未提供译文的成员原样保留；等条数重排无法自动识别，仍要求用户保持原顺序。
+- 译文错误逐条收集，检查完所有 JSON 后一次列出再失败，不写出结果；格式为 `<文件>.json #<下标>: 原因`，控制符不符时附 `expected tokens` / `actual` 列表。下标是 JSON 数组下标（从 0 开始）。条数、字段等结构错误由公共校验给出每个文件的首个问题。CLI 只在 stderr 输出可读错误、退出码 1，不打印 traceback。
 - `changed-archives/game/` 只输出发生修改的同名完整归档；`loose/game/` 输出修改后的编译脚本，保留包内路径。
 - 优先在游戏副本备份后替换 `game/` 下同名归档。不要沿用其他引擎经验，擅自将文件扁平化或命名为 `patch.rpa`；必须有加载配置证据。
 - 松散 `.rpyc` 是否优先于包内成员，取决于当前 loader；确认后才选择该部署方式。不要同时堆叠互相覆盖的两套结果，留意旧 `.rpy`、缓存和既有补丁。

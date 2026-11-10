@@ -256,6 +256,67 @@ class RPAAndWorkspaceTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "gt_input changed"):
                 workflow.pack(work, root / "bad")
 
+    def test_all_translation_errors_listed_with_json_name_and_tokens(self):
+        s = rpyc.parse(sample())
+        original, m = rpyc.export(s, names={"e": "Alice"})
+        rows = [dict(r) for r in original]
+        rows[0]["message"] = "Hello world"
+        rows[1]["message"] = ""
+        rows[4]["message"] = "UI [unfinished"
+        with self.assertRaises(rpyc.TranslationErrors) as caught:
+            rpyc.patch(s, rows, m, names={"e": "Alice"}, label="intro.json")
+        errors = caught.exception.errors
+        self.assertEqual(len(errors), 3)
+        self.assertEqual(errors[0], "intro.json #0: changed controls (expected tokens "
+                                    "['[player]', '{b}', '{/b}'], actual [])")
+        self.assertEqual(errors[1], "intro.json #1: empty text")
+        self.assertTrue(errors[2].startswith("intro.json #4: unterminated"))
+        rows = [dict(r) for r in original]
+        del rows[0]["name"]
+        with self.assertRaisesRegex(rpyc.TranslationErrors, r"intro\.json #0: fields"):
+            rpyc.patch(s, rows, m, names={"e": "Alice"}, label="intro.json")
+
+    def test_pack_lists_errors_from_every_file_and_cli_is_readable(self):
+        import subprocess, sys
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp); game = root / "game"; game.mkdir()
+            (game / "story.arc").write_bytes(archive({"a.rpyc": sample(), "b.rpyc": sample("Plain {i}text{/i}")}))
+            work = root / "work"
+            workflow.extract(game, work, archives=["story.arc"])
+            for name in ("a.json", "b.json"):
+                rows = json.loads((work / "gt_input" / name).read_text(encoding="utf-8"))
+                rows[0]["message"] = "no controls"
+                (work / "gt_output" / name).write_text(json.dumps(rows), encoding="utf-8")
+            with self.assertRaises(rpyc.TranslationErrors) as caught:
+                workflow.pack(work, root / "packed")
+            self.assertEqual([e.split(":")[0] for e in caught.exception.errors], ["a.json #0", "b.json #0"])
+            self.assertFalse((root / "packed").exists())
+            repo = Path(__file__).resolve().parents[1]
+            done = subprocess.run([sys.executable, "-X", "utf8", "-m", "python.engines.renpy_extract", "pack",
+                                   str(work), str(root / "packed")], cwd=repo, capture_output=True, text=True,
+                                  encoding="utf-8")
+            self.assertEqual(done.returncode, 1)
+            self.assertNotIn("Traceback", done.stderr)
+            self.assertIn("a.json #0: changed controls", done.stderr)
+            self.assertIn("b.json #0: changed controls", done.stderr)
+
+    def test_unresolved_speaker_warning_counts_and_context_archive(self):
+        def define(var, source, line):
+            pycode = Raw(b"crenpy.ast\nPyCode\n)\x81" + encode((1, source, ("file", line), "eval")) + b"b")
+            return node("Define", line, varname=var, code=pycode, store="store", operator="=")
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp); game = root / "game"; game.mkdir()
+            (game / "story.arc").write_bytes(archive({"story.rpyc": sample()}))
+            (game / "defs.arc").write_bytes(archive({"defs.rpyc": envelope(program([define("e", 'Character("Alice")', 1)]))}))
+            report = workflow.extract(game, root / "alone", archives=["story.arc"])
+            self.assertEqual((report["unresolved_speaker_rows"], report["unresolved_speakers"]), (1, {"e": 1}))
+            self.assertIn("Character", report["warnings"][0])
+            report = workflow.extract(game, root / "both", archives=["story.arc", "defs.arc"])
+            self.assertEqual(report["unresolved_speaker_rows"], 0)
+            self.assertNotIn("warnings", report)
+            rows = json.loads((root / "both/gt_input/story.json").read_text(encoding="utf-8"))
+            self.assertEqual(rows[0]["name"], "Alice")
+
     def test_source_override_and_path_traversal_rejected(self):
         for members in ({"../intro.rpyc": sample()}, {"intro.rpyc": sample(), "intro.rpy": b"source"}):
             with tempfile.TemporaryDirectory() as temp:

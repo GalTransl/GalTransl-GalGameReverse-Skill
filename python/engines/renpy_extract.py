@@ -8,6 +8,7 @@ from collections import Counter, defaultdict
 import json
 from pathlib import Path
 import stat
+import sys
 
 from ..archives import rpa
 from ..common.contract import dump_rows, load_json, sha256
@@ -17,6 +18,8 @@ from .renpy_pickle import attributes, class_name, scalar
 
 MAX_ARCHIVE = 64 << 20
 MAX_TOTAL = 128 << 20
+# Speakers predefined by the Ren'Py runtime itself, never in game archives.
+BUILTIN_SPEAKERS = frozenset({"extend", "narrator", "centered", "vcentered", "nvl"})
 
 
 def json_bytes(value):
@@ -150,8 +153,10 @@ def extract(directory, output, *, archives, smoke_test=False):
               "script_encoding": "Unicode strings serialized as UTF-8 in Pickle", "json_encoding": "utf-8",
               "archives": [], "members": [], "rows": 0, "json_files": 0, "scripts": 0,
               "runtime_verified": False, "growth_tests": [], "name_policy": "context-only",
+              "unresolved_speaker_rows": 0, "unresolved_speakers": {},
               "scope": "Say/TranslateSay.what, Menu.items labels, TranslateString.new; Python/screen/ATL strings excluded"}
     growth_members = defaultdict(dict)
+    unresolved = Counter()
     for archive, raw in sources.items():
         files[f"original/archives/{archive}"] = raw
         original = rpa.rebuild(raw, {})
@@ -178,6 +183,12 @@ def extract(directory, output, *, archives, smoke_test=False):
                           roles=dict(Counter(r["locator"]["role"] for r in manifest["records"])),
                           identity_verified=True, slots=sorted(script.slots))
             report["scripts"] += 1
+            missing = Counter(r["locator"]["speaker"] for row, r in zip(rows, manifest["records"])
+                              if isinstance(r["locator"]["speaker"], str) and "name" not in row
+                              and r["locator"]["speaker"] not in BUILTIN_SPEAKERS)
+            if missing:
+                detail["unresolved_speaker_rows"] = sum(missing.values())
+                unresolved.update(missing)
             if rows:
                 filename = mapping[archive, entry.name]
                 files[f"gt_input/{filename}"] = dump_rows(rows)
@@ -199,6 +210,14 @@ def extract(directory, output, *, archives, smoke_test=False):
     for archive, replacements in growth_members.items():
         files[f"rebuilt/growth-test/game/{archive}"] = rpa.rebuild(sources[archive], replacements)
     report["identity_verified"] = report["scripts"]
+    report["unresolved_speaker_rows"] = sum(unresolved.values())
+    report["unresolved_speakers"] = dict(unresolved.most_common())
+    if unresolved:
+        sample = ", ".join(f"{k}×{v}" for k, v in unresolved.most_common(8))
+        report["warnings"] = [f"{report['unresolved_speaker_rows']} row(s) have a speaker `who` without a resolved "
+                              f"Character name ({len(unresolved)} speaker(s): {sample}). Select the archive holding the "
+                              "Character definitions (often the rpy/script archive) together with the tl archives."]
+        print(f"WARNING: {report['warnings'][0]}", file=sys.stderr, flush=True)
     report["empty_scripts"] = sum(m["status"] == "empty" for m in report["members"])
     files["reports/extraction.json"] = json_bytes(report)
     files["README.txt"] = ("Ren'Py RPYC2 提取结果\n\n"
@@ -241,7 +260,7 @@ def pack(workspace, output):
     if available - expected:
         raise ValueError(f"unmatched Ren'Py translation files: {sorted(available - expected)}")
     files, replacements, verified, changed = {}, defaultdict(dict), 0, []
-    actual_expected = set()
+    actual_expected, errors = set(), []
     for archive, entry in entries:
         if not entry.name.lower().endswith(".rpyc"):
             continue
@@ -259,7 +278,12 @@ def pack(workspace, output):
         if filename not in available:
             continue
         rows = load_json(read_bounded(workspace / "gt_output" / filename))
-        modified = rpyc.patch(script, rows, manifest, filename=entry.name, names=names)
+        try:
+            modified = rpyc.patch(script, rows, manifest, filename=entry.name, names=names, label=filename)
+        except rpyc.TranslationErrors as exc:
+            # Keep checking other files so every problem is listed at once.
+            errors.extend(exc.errors)
+            continue
         verified += 1
         if modified != entry.data:
             replacements[archive][entry.name] = modified
@@ -269,6 +293,8 @@ def pack(workspace, output):
                             "changed_rows": sum(a != b for a, b in zip(original, rows))})
     if actual_expected != expected:
         raise ValueError("Ren'Py workspace export set differs from source")
+    if errors:
+        raise rpyc.TranslationErrors(errors)
     for archive, members in replacements.items():
         files[f"changed-archives/game/{archive}"] = rpa.rebuild(sources[archive], members)
     result = {"engine": "renpy", "profile": rpyc.PROFILE, "verified_json": verified,
@@ -300,13 +326,19 @@ def main():
     pack_parser.add_argument("workspace")
     pack_parser.add_argument("output")
     args = parser.parse_args()
-    if args.command == "scan":
-        result = scan(args.directory)
-    elif args.command == "extract":
-        result = extract(args.directory, args.output, archives=args.archives, smoke_test=args.smoke_test)
-        result = {k: result[k] for k in ("scripts", "json_files", "rows", "empty_scripts", "identity_verified", "runtime_verified")}
-    else:
-        result = pack(args.workspace, args.output)
+    try:
+        if args.command == "scan":
+            result = scan(args.directory)
+        elif args.command == "extract":
+            result = extract(args.directory, args.output, archives=args.archives, smoke_test=args.smoke_test)
+            result = {k: result[k] for k in ("scripts", "json_files", "rows", "empty_scripts", "identity_verified",
+                                              "unresolved_speaker_rows", "runtime_verified")}
+        else:
+            result = pack(args.workspace, args.output)
+    except (ValueError, OSError) as exc:
+        # Readable diagnostics instead of a traceback; nothing was written.
+        print(f"error: {exc}", file=sys.stderr)
+        raise SystemExit(1)
     print(json.dumps(result, ensure_ascii=True, indent=2))
 
 
