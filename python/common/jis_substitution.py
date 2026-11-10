@@ -37,6 +37,37 @@ HOOKS = {
     "ciallohook-x64": {"path": CIALLOHOOK_X64_PATH, "sha256": CIALLOHOOK_X64_SHA256, "dll": "version.dll",
                        "config": "version.ini", "architecture": "x64", "machine": 0x8664},
 }
+CIALLOHOOK_NAMES = ("ciallohook", "ciallohook-x64")
+# Locale Emulator dependencies for CialloHook [LocaleEmulator] (restart the game
+# under ACP 932). Pinned copies from CialloHook v1.7 third/LE and third/LEP;
+# copied, never loaded here. CialloHook tries LEP first, then LE (x86 only).
+LOCALE_EMULATOR_DIR = ASSETS / "ciallohook/locale-emulator"
+LOCALE_EMULATOR_FILES = {
+    "LoaderDll_x86.dll": ("LEP", "b542c7caf63538b044a678e8859abbc29cf3444629b729aaec3faf1bcb68e2e2", 0x14C),
+    "LocaleEmulatorPlus_x86.dll": ("LEP", "ab98822b1de1c3c4b40d6acb14009771e6fba5c9c8b425a26e767d734cde2822", 0x14C),
+    "LoaderDll_x64.dll": ("LEP", "70c35241a7d72653f362c25a1381b06f8a052639b8b7dc4789a3ac8fe0d708c7", 0x8664),
+    "LocaleEmulatorPlus_x64.dll": ("LEP", "1680512fa217483998673e3b4fffe6ff4c3c273d48754d0c879f506368dd25bc", 0x8664),
+    "LoaderDll.dll": ("LE", "82fae0f44f4ca0c9c37907df74cef2415eeb5fae1cf8d4f36f34ffcaf7e3cc0c", 0x14C),
+    "LocaleEmulator.dll": ("LE", "c79c175fdad174aa46a72197d148316299a56f950aaab1b84930d09ee1084a88", 0x14C),
+}
+LOCALE_EMULATOR_DEPENDENCIES = {
+    "x86": ("LoaderDll_x86.dll", "LocaleEmulatorPlus_x86.dll", "LoaderDll.dll", "LocaleEmulator.dll"),
+    "x64": ("LoaderDll_x64.dll", "LocaleEmulatorPlus_x64.dll"),
+}
+# CialloHook [CodePage] only rewrites calls whose CodePage equals a non-zero
+# FromCodePage, so it cannot turn CP_ACP into 932; restarting under LE can.
+LOCALE_EMULATOR_INI = """
+# 强制 ACP=932：系统 ACP 不是 932 时借 LE/LEP 以日文区域重启游戏（需同目录 LE/LEP 依赖）。
+# 重启失败、启动器/DRM 异常或存档读写出错时改为 Enable = false。
+[LocaleEmulator]
+Enable = true
+AnsiCodePage = 932
+OemCodePage = 932
+LocaleID = 0x411
+DefaultCharset = 128
+HookUILanguageAPI = 0
+Timezone = Tokyo Standard Time
+"""
 # CP932 user-defined area F040..F9FC <-> U+E000..U+E757 (Python and Windows
 # code page 932 agree). 'unused' proxies are allocated from the HIGH end down:
 # engines and EUDC fonts conventionally occupy the low end (U+E000...).
@@ -69,6 +100,18 @@ Enable = true
 LogToFile = true
 LogToConsole = false
 """
+
+
+def locale_emulator_files(architecture):
+    """(name, bytes) of the pinned LE/LEP dependencies for one hook bitness."""
+    files = []
+    for name in LOCALE_EMULATOR_DEPENDENCIES[architecture]:
+        package, digest, _ = LOCALE_EMULATOR_FILES[name]
+        raw = (LOCALE_EMULATOR_DIR / package / name).read_bytes()
+        if hashlib.sha256(raw).hexdigest() != digest:
+            raise FormatError(f"bundled Locale Emulator {package}/{name} hash mismatch")
+        files.append((name, raw))
+    return files
 
 
 def is_cp932(encoding):
@@ -333,30 +376,39 @@ class JisSubstitution:
                 "preset_font_compatible": not bool(self._remapped),
                 "runtime_verified": False}
 
-    def artifacts(self, *, include_hook=True, hook="uif"):
+    def artifacts(self, *, include_hook=True, hook="ciallohook", force_cp932=False):
         """Return files to publish atomically WITH the rewritten game resources.
 
         No config is needed for a pass-through run. Bundle a pinned hook whose
-        architecture matches the game EXE: hook="uif" (x86 winmm.dll),
-        "ciallohook" (x86 version.dll + ini) or "ciallohook-x64" (x64
-        version.dll + ini); all read the same uif_config.json. There is no x64
-        UIF. Set include_hook=False for another runtime/architecture. Nothing is installed. Existing configurations must
-        be merged by the agent after inspecting the existing hook; this template
-        must not replace one.
+        architecture matches the game EXE: hook="ciallohook" (default, x86
+        version.dll + ini), "ciallohook-x64" (x64 version.dll + ini) or the
+        manual fallback "uif" (x86 winmm.dll); all read the same
+        uif_config.json. There is no x64 UIF. Set include_hook=False for
+        another runtime/architecture. force_cp932=True (CialloHook only) adds
+        [LocaleEmulator] to version.ini plus the pinned LE/LEP dependencies of
+        the hook's bitness, so the game restarts under ACP 932. Nothing is
+        installed. Existing configurations must be merged by the agent after
+        inspecting the existing hook; this template must not replace one.
         """
         if hook not in HOOKS:
             raise FormatError(f"unknown JIS hook: {hook}")
+        if force_cp932 and (not include_hook or hook not in CIALLOHOOK_NAMES):
+            raise FormatError("force_cp932 needs a bundled CialloHook (UIF cannot restart under another locale)")
         if not self._used:
             return []
         selected = HOOKS[hook]
-        hook_files = []
+        hook_files, locale_files = [], []
         if include_hook:
             raw = selected["path"].read_bytes()
             if hashlib.sha256(raw).hexdigest() != selected["sha256"]:
                 raise FormatError(f"bundled {hook} {selected['dll']} hash mismatch")
             hook_files = [(selected["dll"], raw)]
             if selected["config"]:
-                hook_files.append((selected["config"], CIALLOHOOK_INI.encode("utf-8")))
+                ini = CIALLOHOOK_INI + (LOCALE_EMULATOR_INI if force_cp932 else "")
+                hook_files.append((selected["config"], ini.encode("utf-8")))
+            if force_cp932:
+                locale_files = locale_emulator_files(selected["architecture"])
+                hook_files += locale_files
         pairs = sorted(self._used.items())
         config = {
             "injector": {"enable": True, "print_loaded_modules": False},
@@ -376,7 +428,10 @@ class JisSubstitution:
                       hook={"included": include_hook, "name": hook if include_hook else None,
                             "architecture": selected["architecture"] if include_hook else None,
                             "files": [name for name, _ in hook_files],
-                            "sha256": selected["sha256"] if include_hook else None},
+                            "sha256": selected["sha256"] if include_hook else None,
+                            "force_cp932": bool(force_cp932),
+                            "locale_emulator_files": {name: LOCALE_EMULATOR_FILES[name][1]
+                                                      for name, _ in locale_files}},
                       preset_font_conflicts=font_conflicts,
                       collision_scope="only display text supplied to this session; other UI needs runtime testing")
         readme = """JIS 替换回注：部署与测试
@@ -394,18 +449,18 @@ CialloHook.ini/version.ini 或其他汉化 hook，先交给 agent 检查合并�
 不要覆盖现有 DLL/配置，不要叠加两次字符替换或同时开启 JIS tunneling。
 Hook 恢复中文后，游戏还需实际选用包含这些中文字形的普通字体。
 
-方案一：UniversalInjectorFramework（winmm.dll 代理，仅 32 位）。
-https://github.com/satan53x/UniversalInjectorFramework
-将 winmm.dll 与 uif_config.json 放到实际游戏 EXE 目录。默认只 hook
-TextOutA/W、GetGlyphOutlineA/W。
-
-方案二：CialloHook（version.dll 代理，32 位与 64 位各有一个构建）。
+方案一（默认）：CialloHook（version.dll 代理，32 位与 64 位各有一个构建）。
 https://github.com/Lite0812/CialloHook
 将 version.dll、version.ini 与 uif_config.json 放到实际游戏 EXE 目录。
 覆盖 TextOut/ExtTextOut/DrawText/GetGlyphOutline/文本宽度等 A/W 接口及部分引擎兼容层，
-A 接口无法用 CP932 写回中文时改走 W 接口；还可替换字体，适合方案一不生效或缺字的情况。
+A 接口无法用 CP932 写回中文时改走 W 接口；还可替换字体。
 version.ini 默认不替换字体并在游戏目录写日志；version.dll 不被加载时可改名为
 winmm.dll，并把 version.ini 同时改名为 winmm.ini。
+
+方案二（兜底）：UniversalInjectorFramework（winmm.dll 代理，仅 32 位）。
+https://github.com/satan53x/UniversalInjectorFramework
+仅在 CialloHook 无法加载时由 agent 改配。将 winmm.dll 与 uif_config.json
+放到实际游戏 EXE 目录。默认只 hook TextOutA/W、GetGlyphOutlineA/W。
 
 方案三：使用与 jis-mapping.json 中 mapping_sha256 对应的专用日繁/JIS 替换字体。
 SExtractor 的 WenQuanYi_cnjp.ttf / MSGothic_WenQuanYi_cnjp.ttf 是候选，
@@ -423,9 +478,18 @@ SExtractor 的 WenQuanYi_cnjp.ttf / MSGothic_WenQuanYi_cnjp.ttf 是候选，
             readme = ("本批包含自定义 CP932 私用代理字。必须使用本批 uif_config.json 配套的兼容 hook，\n"
                       "或按本批映射定制字体；SExtractor 固定日繁/JIS 替换字体不适用于本批。\n"
                       "以下方案三的固定预设字体路线不可使用。尚未验证游戏的 hook 加载及私用字符显示。\n\n" + readme)
+        if force_cp932:
+            readme = ("强制 932（转区重启）已开启：version.ini 含 [LocaleEmulator] Enable = true。\n"
+                      "把 " + "、".join(name for name, _ in locale_files) + "\n"
+                      "与 version.dll 放在同一游戏 EXE 目录。系统 ACP 不是 932 时，游戏启动后会被\n"
+                      "以日文区域（ACP 932）重新启动一次；已是 932 时不重启。\n"
+                      "可能的问题：Steam/DRM/启动器/反作弊因重启失效；安全软件拦截 LE 注入；\n"
+                      "游戏或存档路径含 CP932 不能表示的字符（如中文用户名、中文目录）时存档读写失败。\n"
+                      "出现这些问题时把 version.ini 的 [LocaleEmulator] Enable 改为 false 并告诉 agent，\n"
+                      "改用 GBK 回写或手动转区。尚未在真实游戏验证转区效果。\n\n" + readme)
         if include_hook:
             bits = "64" if selected["architecture"] == "x64" else "32"
-            readme = (f"本结果附带的 hook：{'方案一 UIF' if hook == 'uif' else '方案二 CialloHook'}"
+            readme = (f"本结果附带的 hook：{'方案二 UIF' if hook == 'uif' else '方案一 CialloHook'}"
                       f"（{selected['architecture']}，只用于 {bits} 位游戏 EXE）。\n\n" + readme)
         return [*hook_files, ("uif_config.json", _json(config)), ("jis-mapping.json", _json(report)),
                 ("JIS-部署说明.txt", readme.encode("utf-8"))]

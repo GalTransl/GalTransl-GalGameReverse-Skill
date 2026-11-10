@@ -34,12 +34,15 @@ class JisTests(unittest.TestCase):
         raw = codec.encode(text)
         self.assertEqual(raw.decode("cp932"), "凜好，説這句話。ABC\n$S")
         self.assertEqual(codec.display(raw.decode("cp932")), text)
-        artifacts = dict(codec.artifacts())
+        artifacts = dict(codec.artifacts(hook="uif"))
         hook = artifacts["winmm.dll"]
         self.assertEqual(hashlib.sha256(hook).hexdigest(), HOOK_SHA256)
         pe = struct.unpack_from("<I", hook, 60)[0]
         self.assertEqual(hook[pe:pe+4], b"PE\0\0")
         self.assertEqual(struct.unpack_from("<H", hook, pe+4)[0], 0x14c)
+        self.assertIn("方案二 UIF", artifacts["JIS-部署说明.txt"].decode("utf-8"))
+        self.assertNotIn("version.dll", artifacts)
+        self.assertEqual(dict(codec.artifacts())["version.dll"], dict(codec.artifacts(hook="ciallohook"))["version.dll"])
         without_hook = dict(codec.artifacts(include_hook=False))
         self.assertNotIn("winmm.dll", without_hook)
         self.assertEqual(without_hook["uif_config.json"], artifacts["uif_config.json"])
@@ -73,7 +76,9 @@ class JisTests(unittest.TestCase):
         self.assertEqual("".join(reverse.get(c, c) for c in raw.decode("cp932")), text)
         report = json.loads(artifacts["jis-mapping.json"])["hook"]
         self.assertEqual((report["name"], report["files"]), ("ciallohook", ["version.dll", "version.ini"]))
-        self.assertIn("方案二 CialloHook", artifacts["JIS-部署说明.txt"].decode("utf-8"))
+        self.assertIn("方案一 CialloHook", artifacts["JIS-部署说明.txt"].decode("utf-8"))
+        self.assertNotIn("[LocaleEmulator]", ini)
+        self.assertFalse(report["force_cp932"])
         bare = dict(codec.artifacts(include_hook=False, hook="ciallohook"))
         self.assertFalse({"version.dll", "version.ini", "winmm.dll"} & set(bare))
         with self.assertRaises(FormatError):

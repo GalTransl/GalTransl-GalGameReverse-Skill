@@ -1,6 +1,6 @@
 # CP932 中文回注：公共 JSON JIS 流程
 
-确认**脚本正文**使用 CP932、且引擎**固定按 CP932 解码**后，中文回注优先走本页的公共流程。不要为了 JIS 给每个引擎增加 codec 参数、专用开关、冲突检查和 hook 配置生成逻辑。引擎只负责原有的文本语义、长度/偏移、加密和归档读写；公共层负责 JSON 中真实中文与 CP932 代理字符的转换及显示核对。
+确认**脚本正文**使用 CP932 后，中文回注优先走本页的公共流程；引擎未确认**固定按 CP932 解码**时，须同时强制运行时 ACP 为 932（见下节）。不要为了 JIS 给每个引擎增加 codec 参数、专用开关、冲突检查和 hook 配置生成逻辑。引擎只负责原有的文本语义、长度/偏移、加密和归档读写；公共层负责 JSON 中真实中文与 CP932 代理字符的转换及显示核对。
 
 ## 先判定运行时码页
 
@@ -9,9 +9,9 @@
 | 运行时行为 | 典型证据 | 简中系统（ACP 936）上的表现 | 回注路线 |
 |---|---|---|---|
 | 固定 CP932 | `MultiByteToWideChar(932, …)`；自带 SJIS 表；A 接口配合固定 `SHIFTJIS_CHARSET` 字体 | 原版不转区也能正常显示日文 | 本页 JIS 流程 + hook |
-| 跟随系统 ACP | `MultiByteToWideChar(CP_ACP=0, …)`；`GetACP()` 结果按 932/936/950/949 分支选字体 charset | 原版不转区时日文乱码，需 LE/日文区域才正常 | 整体转码为 GBK 回写，不用 JIS |
+| 跟随系统 ACP | `MultiByteToWideChar(CP_ACP=0, …)`；`GetACP()` 结果按 932/936/950/949 分支选字体 charset | 原版不转区时日文乱码，需 LE/日文区域才正常 | JIS + 强制 932（默认），或整体转码为 GBK 回写 |
 
-ACP 跟随的引擎上 JIS 代理必然失败：代理文件中未被代理的常用字仍是 CP932 字节，按 936 解码即乱码；代理字在进入映射表前已被错误解码，hook 只能偶然命中字节恰好也是合法 GBK 的少数字；代理字度量也与中文不同。叠加字体替换、charset 伪装、码页 hook 也无法可靠补救。
+ACP 跟随的引擎在 ACP 不是 932 的系统上运行时，JIS 代理必然失败：代理文件中未被代理的常用字仍是 CP932 字节，按 936 解码即乱码；代理字在进入映射表前已被错误解码，hook 只能偶然命中字节恰好也是合法 GBK 的少数字；代理字度量也与中文不同。叠加字体替换、charset 伪装、码页 hook（CialloHook `[CodePage]` 只替换非零的指定码页，改不了 `CP_ACP`）也无法可靠补救；只有让进程实际以 ACP 932 运行才行。
 
 判定步骤：
 
@@ -24,13 +24,18 @@ ACP 跟随的引擎上 JIS 代理必然失败：代理文件中未被代理的�
    输出 `verdict`：`acp-following`、`fixed-cp932`、`mixed` 或 `undetermined`，以及 `confidence`、调用点（`conversion_calls`，CodePage 解不出记 `unknown`）、`getacp_calls`、`embedded_sjis_table`、`packing` 与 `reasons`。这是字节模式启发式，不是反汇编，只作选路线的证据；只对多字节 ANSI 剧本有意义，UTF-8/UTF-16 剧本不必看。多个 EXE 可一次传入。
    - `acp-following` + `strong`：`GetACP()` 之后紧跟按 932/936/950/949 分支或载入字体 charset（0x80/0x86/0x88/0x81），是最直接的证据。`weak` 只有若干 `CP_ACP` 转换调用，可能只用于路径或系统文本，需旁证。
    - `fixed-cp932`：转换调用的 CodePage 为 932，或程序内嵌 SJIS→Unicode 表。
-   - `mixed`：两类证据都有，常见于少量 `CP_ACP` 处理路径、剧本另走 932 或自带表的引擎。不能据此直接选 GBK；默认仍走 JIS，并按第 3 步做小样本对照确认。
+   - `mixed`：两类证据都有，常见于少量 `CP_ACP` 处理路径、剧本另走 932 或自带表的引擎。不能据此直接选 GBK；默认走 JIS + 强制 932。
    - `undetermined`：疑似加壳、导入表不可读、只有 A 接口绘制或解不出常量；A 接口按 DC 字体 charset 对应码页解释字节，仅 `DEFAULT_CHARSET` 时才用 ACP。
    - 不在 `GetACP` 附近的码页常量比较（C 运行库的码页→区域表到处都有）只列出，不计入结论。
 2. 结合用户的运行环境：原版在简中系统不转区就乱码、需要 Locale Emulator 才正常，是 ACP 跟随的旁证；已有 GBK 汉化在简中系统直接可用也是旁证。
-3. `undetermined` 或 `mixed` 时先小样本对照：同一开场句分别做 JIS 版本与 GBK 版本，在用户的目标系统码页下各试一次，以实际显示决定路线。
+3. `prepare` 默认 `--force-cp932 auto` 会对 `--exe` 自动做同样的探测：只有 `fixed-cp932` 不强制 932，`acp-following`、`mixed`、`undetermined` 都走 JIS + 强制 932，不必先做小样本对照。强制 932 不可用（启动器/DRM 冲突、LE 被拦截等）或显示仍异常时，再用小样本对照排障：同一开场句分别做 JIS 版本与 GBK 版本，在用户的目标系统码页下各试一次。
 
-确认 ACP 跟随后：
+ACP 跟随的引擎有两条路：
+
+- **JIS + 强制 932**（默认）：照常走本页 JIS 流程，CialloHook 的 `[LocaleEmulator]` 让游戏以 ACP 932 重启（随包 LE/LEP，见 [CialloHook 说明](../assets/ciallohook/README.md#强制-932转区重启)）。任何系统码页都能运行，但依赖转区重启，可能与启动器/DRM/安全软件冲突，中文路径下存档读写可能失败。
+- **GBK 整体转码**：不需要 hook 或转区，但只能在 ACP 936 系统上运行。适用于强制 932 不可用，或用户明确只在简中系统运行的情况。
+
+选择 GBK 整体转码时：
 
 - **整体转码**：所有运行时按 ACP 读取的文本成员（剧本、姓名表、选项、未翻译行）都从 CP932 严格转码为 GBK，不能只改译文行而留下 CP932 字节，否则同一文件两种语义。GBK 无法表示的字符须逐个报告并由译者/agent 明确给出替换，不静默替换。需要引擎 writer 支持指定输出编码（例如 [SystemC](../engines/systemc.md) 的 `--output-encoding gbk`）；writer 不支持时先补齐实现，不手工拼接字节。
 - **运行条件**：补丁只能在 ACP 为 936 的系统上正确显示，**不能再开 Locale Emulator 或日文区域**（ACP 变回 932 后整篇乱码）。交付时把这一点明确告诉用户。
@@ -51,7 +56,7 @@ ACP 跟随的引擎上 JIS 代理必然失败：代理文件中未被代理的�
 
 日文原作的未翻译日文本身就会用到大量常用汉字（時、間、為、変、説、経、応等）和全角符号，而它们恰好是固定表的代理字。只翻译几句就与仍会显示的原文冲突，是**正常情况**，不是异常。按以下顺序处理：
 
-1. **试注 / 部分翻译**：直接用 `--proxy-policy unused`，并按游戏 EXE 位数配 hook（32 位 `--hook uif-x86` 或 `ciallohook-x86`，64 位 `--hook ciallohook-x64`）。冲突字改用私用区代理，必须随本批 `uif_config.json` 使用 hook 或按本批映射定制字体。
+1. **试注 / 部分翻译**：直接用 `--proxy-policy unused`，并提供 `--exe 实际游戏EXE`，由默认 `--hook auto` 按位数配 CialloHook。冲突字改用私用区代理，必须随本批 `uif_config.json` 使用 hook 或按本批映射定制字体。
 2. **全量翻译后**：仍会显示的日文只剩 UI、姓名等少量文本，可再用 `--jis-preflight` 按固定表预检；通过时可回到默认 `fixed`，兼容 SExtractor 预设字体，hook 也照常可用。
 3. 预检或正式准备失败时，按报告的 `next_steps` 选择下一步；固定表缺字（`missing_characters`）两种策略都不能解决，须改写译文。
 
@@ -94,7 +99,7 @@ python -m python.common.jis_workflow prepare "原工作区" --encoding cp932 --j
 
 ```text
 python -m python.common.jis_workflow arch "游戏目录/实际启动的.exe"
-python -m python.common.jis_workflow prepare "原工作区" "新的JIS准备目录" --encoding cp932 --proxy-policy unused --hook ciallohook-x86 --exe "游戏目录/实际启动的.exe"
+python -m python.common.jis_workflow prepare "原工作区" "新的JIS准备目录" --encoding cp932 --proxy-policy unused --exe "游戏目录/实际启动的.exe"
 ```
 
 然后调用对应引擎原有的打包和提取命令：输入 `新的JIS准备目录/workspace`，输出新的重建目录，再把实际资源提取到新的回读目录。最后：
@@ -103,7 +108,7 @@ python -m python.common.jis_workflow prepare "原工作区" "新的JIS准备目�
 python -m python.common.jis_workflow finalize "新的JIS准备目录" "重建资源目录" "回读目录/gt_input" "新的交付目录"
 ```
 
-`--hook` 选择与游戏 EXE 位数一致的 DLL：`x86`（同 `uif-x86`）附带 UIF `winmm.dll`；`ciallohook-x86` 附带 CialloHook x86 `version.dll` 与 `version.ini`；`x64`（同 `ciallohook-x64`）附带 CialloHook x64 `version.dll` 与 `version.ini`；默认 `none` 不选 DLL。没有 x64 UIF。位数判断见下文[显示部署](#用户下一步与显示部署)；提供 `--exe` 时位数不符直接拒绝。`--extra-text` 可重复指定额外已解码的 UTF-8 文本。准备器复制标准工作区四个来源目录，跳过旧 `rebuilt/`；当前文件/总字节预算为 128/512 MiB，超限明确报错，不使用硬链接、符号链接或覆盖用户目录来规避复制。CLI 的其他错误也以 `{"ok": false, "error": ...}` 输出并以退出码 1 结束。
+`--hook` 默认 `auto`：按 `--exe` 的 PE Machine 附带对应位数的 CialloHook `version.dll` 与 `version.ini`；没有 `--exe` 时不附带 hook 并在输出 `warnings` 中提示。显式值：`ciallohook-x86`；`x64`（同 `ciallohook-x64`）；`uif-x86`（兼容别名 `x86`）附带 UIF `winmm.dll`，只作 CialloHook 无法加载时的手动兜底；`none` 不选 DLL。没有 x64 UIF。位数判断见下文[显示部署](#用户下一步与显示部署)；提供 `--exe` 时位数不符直接拒绝。`--force-cp932 auto|on|off`（默认 `auto`）决定是否在 `version.ini` 写入 `[LocaleEmulator]` 并附带 LE/LEP 依赖：`auto` 对 `--exe` 探测码页，`fixed-cp932` 关闭，其余（含探测报错）开启，无 `--exe` 时关闭并警告；`on` 只能配 CialloHook。探测结果、决定与理由记入 `runtime_codepage`。`--extra-text` 可重复指定额外已解码的 UTF-8 文本。准备器复制标准工作区四个来源目录，跳过旧 `rebuilt/`；当前文件/总字节预算为 128/512 MiB，超限明确报错，不使用硬链接、符号链接或覆盖用户目录来规避复制。CLI 的其他错误也以 `{"ok": false, "error": ...}` 输出并以退出码 1 结束。
 
 SystemC、ExHibit 已有的内联 JIS 接口保留兼容；走公共准备流程时关闭其自动处理（例如 `--jis-mode off`）。不要照这些旧接口再为其他引擎复制一套。特殊工作区可调用下面的公共 API 组织已有 parser/writer，仍不需要改引擎的编码函数。
 
@@ -155,7 +160,8 @@ except JisDiagnosticsError as error:
 # 原 writer 校验、重建、再从真实产物提取后：
 verification = plan.verify(actual_reextracted_rows_by_filename)
 # 与重建资源一起通过 write_new_tree 发布到新目录。
-artifacts = plan.codec.artifacts(include_hook=True, hook="ciallohook-x64")  # 或 "uif" / "ciallohook"（x86）
+artifacts = plan.codec.artifacts(include_hook=True, hook="ciallohook-x64",  # 默认 "ciallohook"（x86）；"uif" 为兜底
+                                  force_cp932=True)  # 未确认固定 CP932 时；仅 CialloHook
 ```
 
 `plan.original`、`plan.translated` 保留真实文本，`plan.stored` 仅含提供译文的文件；verify 要求所有原文文件的实际回读。转换不会修改原输入对象或原 manifest。纯 API 不自动识别已有游戏映射，由调用方先完成检查。低层 `JisSubstitution` 与公共契约的 `text_codec` 接口仍可供既有集成使用，但不再作为每个新引擎的必改步骤。
@@ -168,7 +174,7 @@ artifacts = plan.codec.artifacts(include_hook=True, hook="ciallohook-x64")  # �
 | `workspace/gt_output` | 只供 writer 使用的代理译文 |
 | `chinese/` | 此次真实中文译文副本 |
 | `support/` | 待核对的配置/hook，准备阶段不视为可部署产物 |
-| `jis-plan.json` | 文件集合、准备快照哈希、映射策略、预留范围、保留码位来源、hook 位数与状态 |
+| `jis-plan.json` | 文件集合、准备快照哈希、映射策略、预留范围、保留码位来源、hook 位数、`runtime_codepage` 与 `force_cp932`、警告与状态 |
 
 报告中的哈希：`mapping_sha256` 是随包固定表本身的哈希，用于核对预设字体版本；`batch_mapping_sha256` 是本批实际 `chinese_to_proxy` 映射（按键排序的紧凑 UTF-8 JSON）的 SHA-256，每批随用字和私用分配而变，用于核对 `uif_config.json` 与本批产物配套。
 
@@ -180,15 +186,16 @@ artifacts = plan.codec.artifacts(include_hook=True, hook="ciallohook-x64")  # �
 
 - `uif_config.json`：source 是 CP932 代理日文/私用字符，target 是真实中文；tunneling 关闭。方向不可颠倒。
 - `jis-mapping.json`：固定表版本、本批映射哈希、实际映射、私用字符分配、保留码位、hook 位数、固定字体兼容性与冲突清单。
-- `winmm.dll`：选择 `x86`/`uif-x86` 时附带仓库固定哈希的 [UIF 工具](../assets/uif/README.md)（仅 32 位），与配置在一起；不自动安装或执行。
-- `version.dll` + `version.ini`：选择 `ciallohook-x86` 或 `ciallohook-x64` 时附带对应位数、固定哈希的 [CialloHook](../assets/ciallohook/README.md) 及只开启字形映射的配置，`CnJpMapJson` 指向同目录 `uif_config.json`；不自动安装或执行。
+- `version.dll` + `version.ini`：默认 `auto` 或选择 `ciallohook-x86`/`ciallohook-x64` 时附带对应位数、固定哈希的 [CialloHook](../assets/ciallohook/README.md) 及开启字形映射的配置，`CnJpMapJson` 指向同目录 `uif_config.json`；不自动安装或执行。
+- LE/LEP 依赖（x86：`LoaderDll_x86.dll`、`LocaleEmulatorPlus_x86.dll`、`LoaderDll.dll`、`LocaleEmulator.dll`；x64：`LoaderDll_x64.dll`、`LocaleEmulatorPlus_x64.dll`）：强制 932 时随 `version.ini` 的 `[LocaleEmulator]` 一起附带，固定哈希。
+- `winmm.dll`：兜底选择 `uif-x86`（`x86`）时附带仓库固定哈希的 [UIF 工具](../assets/uif/README.md)（仅 32 位），与配置在一起；不自动安装或执行。
 - `JIS-部署说明.txt`：本批 hook/字体条件、位数要求与显示测试步骤；不生成字体。
 
 **判断位数**：读取实际游戏 EXE 的 PE 头 Machine 字段（偏移 `0x3C` 的值指向 `PE\0\0`，其后 2 字节）：`0x014C` 为 32 位，`0x8664` 为 64 位；`arch` 子命令只读输出该值和可用的 `--hook`。启动器与主程序可能位数不同，以实际绘制文本的进程为准。**位数不匹配的 DLL 不会被加载**，表现为游戏正常运行但仍显示代理日文/私用字符。
 
-agent 最终必须给出实际目录和操作说明。将匹配游戏位数的 hook DLL、其配置与本批 `uif_config.json` 放到实际游戏 EXE 目录，再按引擎既有规则部署资源；已有同名文件先检查、备份或合并，同一游戏只用一种 hook，不叠加两次替换。恢复中文后，游戏还须选用包含中文字形的普通字体。
+agent 最终必须给出实际目录和操作说明。将匹配游戏位数的 hook DLL、其配置、本批 `uif_config.json` 及强制 932 时的 LE/LEP 依赖放到实际游戏 EXE 目录，再按引擎既有规则部署资源；已有同名文件先检查、备份或合并，同一游戏只用一种 hook，不叠加两次替换。恢复中文后，游戏还须选用包含中文字形的普通字体。
 
-两种 hook 互补：UIF 只有 32 位，只 hook 默认的 TextOut/GetGlyphOutline 路径，配置简单；CialloHook 有 32/64 位，覆盖更多 GDI 文本与测宽接口及部分引擎兼容层，A 接口无法写回中文时改走 W 接口，并可替换字体。32 位游戏一般先用 UIF；UIF 未生效、显示方框需换字体，或 `winmm.dll` 已被其他补丁占用时改用 CialloHook；64 位游戏只能用 CialloHook x64。CialloHook 的字体、字符集与文件名调整见[其说明](../assets/ciallohook/README.md)，不要使用其上游示例 `subs_cn_jp.json`，它与本项目固定表不同。
+默认用 CialloHook：有 32/64 位，覆盖 GDI 文本与测宽接口及部分引擎兼容层，A 接口无法写回中文时改走 W 接口，可替换字体，并能按需强制 932。UIF 只有 32 位，只 hook 默认的 TextOut/GetGlyphOutline 路径，也不能转区，只在 CialloHook 无法加载时手动改用；此时若引擎未确认固定 CP932，需用户自行以日文区域运行。强制 932 时把转区重启的风险（启动器/DRM、安全软件拦截、中文路径存档）和关闭方法（`[LocaleEmulator] Enable = false`）告诉用户。CialloHook 的字体、字符集与文件名调整见[其说明](../assets/ciallohook/README.md)，不要使用其上游示例 `subs_cn_jp.json`，它与本项目固定表不同。
 
 只有 `preset_font_compatible=true` 且预设字体冲突清单为空时，才考虑映射版本匹配的 SExtractor `WenQuanYi_cnjp.ttf` / `MSGothic_WenQuanYi_cnjp.ttf`，并让游戏实际选用。普通日文/繁体字体不能还原代理字。使用 unused 私用字符映射时，上述固定预设字体不可用；选择本批 hook 配置或定制字体。不要同时开启 hook 字符还原和替换字体。
 
@@ -196,4 +203,4 @@ agent 最终必须给出实际目录和操作说明。将匹配游戏位数的 h
 
 ## 来源与验证
 
-固定表和低层语义的来源见 [jis-substitution.json](../provenance/jis-substitution.json)，私用字符规划、保留码位和 JSON 公共流程为本项目新增实现。测试位于 [test_jis_substitution.py](../tests/test_jis_substitution.py)、[test_jis_workflow.py](../tests/test_jis_workflow.py) 与 [test_jis_preflight.py](../tests/test_jis_preflight.py)：覆盖公共只读预检与定位、预留范围、结构化拒绝、冲突、自高位的稳定分配、保留码位、x64 hook 产物、快照篡改、姓名/多人名、引擎控制码拒绝，以及不同引擎的原 writer、重提取和公共交付。游戏运行记录只放各游戏结果目录。
+固定表和低层语义的来源见 [jis-substitution.json](../provenance/jis-substitution.json)，私用字符规划、保留码位和 JSON 公共流程为本项目新增实现。测试位于 [test_jis_substitution.py](../tests/test_jis_substitution.py)、[test_jis_workflow.py](../tests/test_jis_workflow.py)、[test_jis_force_cp932.py](../tests/test_jis_force_cp932.py) 与 [test_jis_preflight.py](../tests/test_jis_preflight.py)：覆盖公共只读预检与定位、预留范围、结构化拒绝、冲突、自高位的稳定分配、保留码位、x64 hook 产物、默认 hook 选择与强制 932 决策、快照篡改、姓名/多人名、引擎控制码拒绝，以及不同引擎的原 writer、重提取和公共交付。游戏运行记录只放各游戏结果目录。

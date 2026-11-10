@@ -315,7 +315,7 @@ def pack(workspace, destination=None, *, translations=None, jis_mode=None, jis_p
     result.update(output_sha256=sha256(repacked), size=len(repacked), reparsed_exactly=True,
                   byte_identical=repacked == raw)
     result["text_encoding"] = text_codec.summary() if text_codec is not None else {"mode": "strict-cp932"}
-    extras = text_codec.artifacts() if text_codec is not None else []
+    extras = text_codec.artifacts(hook="uif") if text_codec is not None else []
     result["jis_artifacts"] = [name for name, _ in extras]
     write_new_tree(destination, [("data.fpk", repacked), ("verification.json", _json(result)), *extras])
     return result

@@ -49,6 +49,10 @@ class PortabilityTests(unittest.TestCase):
                    "45a690c147467bf34168ecdeedb1d682848e99617dde41402faf83c291dc54ad",
                    "assets/ciallohook/x64/version.dll":
                    "37257c9e71aaef006d21391998e89603ff4d8a09409a87496a5f8d1afc88c958"}
+        # Locale Emulator / LE Plus dependencies of CialloHook [LocaleEmulator].
+        from python.common.jis_substitution import LOCALE_EMULATOR_FILES
+        allowed.update({f"assets/ciallohook/locale-emulator/{package}/{name}": digest
+                        for name, (package, digest, _) in LOCALE_EMULATOR_FILES.items()})
         for relative, expected_hash in allowed.items():
             self.assertEqual(hashlib.sha256((ROOT / relative).read_bytes()).hexdigest(),
                              expected_hash, relative)

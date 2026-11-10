@@ -117,7 +117,8 @@ class WorkspaceTests(unittest.TestCase):
                 prepare(work, root / "fixed", encoding="cp932")
             self.assertFalse((root / "fixed").exists())
             (root / "prepared").mkdir()
-            info = prepare(work, root / "prepared", encoding="cp932", proxy_policy="unused", include_hook=True)
+            info = prepare(work, root / "prepared", encoding="cp932", proxy_policy="unused",
+                           include_hook=True, hook="uif")
             self.assertEqual(info["remapped_count"], 3)
             eagls_extract.rebuild(root / "prepared/workspace", root / "engine-output")
             eagls_extract.extract(root / "engine-output/script", root / "readback", profile=profile, key=b"key")

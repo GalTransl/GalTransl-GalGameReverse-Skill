@@ -19,16 +19,22 @@ import sys
 from .binary import FormatError
 from .codepage_probe import MAX_SITES, probe_codepage
 from .contract import dump_rows, load_json, sha256, validate_rows
-from .jis_substitution import (HOOKS, JisSubstitution, batch_mapping_sha256, format_reserved_codepoints,
-                               is_cp932, parse_reserved_codepoints)
+from .jis_substitution import (CIALLOHOOK_NAMES, HOOKS, JisSubstitution, batch_mapping_sha256,
+                               format_reserved_codepoints, is_cp932, parse_reserved_codepoints)
 from .safety import Limits, _check_existing_ancestors, validate_names, write_new_tree, validate_new_tree_destination
 
 SCHEMA = "jis-json-workflow/1"
 ROOTS = ("original", "metadata", "reports", "gt_input")
-# CLI --hook value -> bundled hook. Plain "x86" stays the UIF alias; there is
-# no x64 UIF, so "x64" means CialloHook x64.
+# CLI --hook value -> bundled hook. "auto" (default) picks CialloHook by the
+# --exe PE machine. Plain "x86" stays the legacy UIF alias (UIF is the manual
+# fallback); there is no x64 UIF, so "x64" means CialloHook x64.
 HOOK_CHOICES = {"none": None, "x86": "uif", "uif-x86": "uif", "ciallohook-x86": "ciallohook",
                 "x64": "ciallohook-x64", "ciallohook-x64": "ciallohook-x64"}
+AUTO_HOOKS = {0x14C: "ciallohook", 0x8664: "ciallohook-x64"}
+FORCE_CP932_MODES = ("auto", "on", "off")
+# Probe verdicts for which ACP=932 is forced in auto mode: only a confirmed
+# fixed-CP932 decoder is left alone.
+NEEDS_CP932 = ("acp-following", "mixed", "undetermined")
 CIALLOHOOK_INI_NAMES = {"ciallohook.ini", "version.ini", "winmm.ini"}
 RESERVE_SCOPES = ("untranslated", "all")
 # Engine manifests (metadata/*.json, top-level "settings") may declare
@@ -167,8 +173,8 @@ def _next_steps(report, reserve_scope, proxy_policy):
     if report["conflicts"]:
         if proxy_policy != "unused":
             steps.append("固定表代理字与仍会显示的日文/UI 字冲突：试注阶段改用 `--proxy-policy unused`，"
-                         "并按游戏 EXE 位数配 hook（32 位 `--hook uif-x86` 或 `ciallohook-x86`，"
-                         "64 位 `--hook ciallohook-x64`）；全量翻译后可按固定表重新预检。")
+                         "并用 `--exe 实际游戏EXE` 配 hook（默认 `--hook auto` 按位数选 CialloHook，"
+                         "UIF `uif-x86` 只作 CialloHook 无法加载时的兜底）；全量翻译后可按固定表重新预检。")
         if reserve_scope == "all":
             steps.append("当前 `--reserve-scope all` 连已被译文替换的原文也预留；"
                          "没有证据表明这些原文仍会显示时，改用默认 `--reserve-scope untranslated`。")
@@ -428,28 +434,109 @@ def _check_hook_machine(exe, hook):
     return machine
 
 
+def resolve_hook(hook, exe, warnings):
+    """'auto' -> CialloHook of the EXE's bitness; None without an EXE (warned)."""
+    if hook != "auto":
+        if hook not in HOOKS:
+            raise FormatError(f"unknown JIS hook: {hook}")
+        return hook
+    if exe is None:
+        warnings.append("--hook auto 未提供 --exe，无法判断位数，未附带 hook；"
+                        "请用 --exe 指定实际绘制文本的游戏 EXE 重新准备")
+        return None
+    machine = pe_machine(exe)
+    if machine not in AUTO_HOOKS:
+        raise FormatError(f"no bundled hook for EXE machine 0x{machine:04X} "
+                          f"({PE_MACHINES.get(machine, 'unknown')})")
+    return AUTO_HOOKS[machine]
+
+
+def _force_mode(value):
+    if value is True or value is False:
+        return "on" if value else "off"
+    if value not in FORCE_CP932_MODES:
+        raise FormatError(f"force_cp932 must be one of {FORCE_CP932_MODES}")
+    return value
+
+
+def runtime_codepage(exe, mode, hook, warnings):
+    """Probe the EXE (if given) and decide whether to force ACP 932.
+
+    hook is the bundled hook name or None. Only CialloHook can force 932
+    (LE/LEP restart); 'on' without it is an error. Probe FormatErrors
+    (unsupported PE, damaged headers) count as 'undetermined'.
+    """
+    mode = _force_mode(mode)
+    record = {"exe": str(exe) if exe is not None else None, "verdict": None, "confidence": None,
+              "probe_error": None, "force_cp932_mode": mode}
+    if exe is not None:
+        try:
+            probe = probe_codepage(exe)
+            record.update(verdict=probe["verdict"], confidence=probe["confidence"],
+                          reasons=probe["reasons"])
+        except FormatError as error:
+            record.update(verdict="undetermined", probe_error=f"{type(error).__name__}: {error}")
+    ciallo = hook in CIALLOHOOK_NAMES
+    verdict = record["verdict"]
+    if mode == "on":
+        if not ciallo:
+            raise FormatError("--force-cp932 on needs a CialloHook (ciallohook-x86/ciallohook-x64); "
+                              "UIF cannot restart the game under another locale")
+        enabled, reason = True, "manual --force-cp932 on"
+    elif mode == "off":
+        enabled, reason = False, "manual --force-cp932 off"
+        if verdict in NEEDS_CP932:
+            warnings.append(f"运行时码页探测为 {verdict}，但已手动关闭强制 932：用户须自行以日文区域"
+                            "（ACP 932）运行，否则 JIS 代理在非 932 系统上会乱码")
+    elif exe is None:
+        enabled, reason = False, "no --exe: runtime code page not probed"
+        warnings.append("未提供 --exe，未探测运行时码页，未开启强制 932；引擎若跟随系统 ACP，"
+                        "JIS 代理在非 932 系统上会乱码。请提供 --exe 重新准备")
+    elif verdict == "fixed-cp932":
+        enabled, reason = False, "probe verdict fixed-cp932: engine decodes CP932 regardless of ACP"
+    elif ciallo:
+        enabled, reason = True, f"probe verdict {verdict}: fixed CP932 not confirmed, force ACP 932"
+    else:
+        enabled, reason = False, f"probe verdict {verdict} needs ACP 932, but no CialloHook is bundled"
+        warnings.append(f"运行时码页探测为 {verdict}，需要强制 932，但当前 hook 不是 CialloHook："
+                        "改用 --hook auto/ciallohook-*，或由用户手动以日文区域运行")
+    record.update(force_cp932=enabled, decision_reason=reason)
+    return record
+
+
 def prepare(workspace, output=None, *, encoding, extra_texts=(), include_hook=False,
-            hook="uif", proxy_policy="fixed", jis_preflight=False, translations=None,
-            reserve_scope="untranslated", reserved_codepoints=(), max_locations=MAX_LOCATIONS, exe=None):
+            hook="auto", proxy_policy="fixed", jis_preflight=False, translations=None,
+            reserve_scope="untranslated", reserved_codepoints=(), max_locations=MAX_LOCATIONS, exe=None,
+            force_cp932="auto"):
     """Create a bounded private workspace; original gt_output stays real Chinese.
 
     Copy original/metadata/reports/gt_input byte-for-byte, not earlier rebuilt
     outputs. Artifacts stay private under support/ until finalize verifies an
     actual engine readback. No changes to engine files, profiles or manifests.
     reserved_codepoints adds to those declared by metadata manifests under
-    settings.reserved_codepoints.
+    settings.reserved_codepoints. hook="auto" picks CialloHook by the exe's PE
+    machine (no exe: no hook, warned). force_cp932 "auto" probes exe and
+    forces ACP 932 unless the verdict is fixed-cp932; "on"/"off" override.
     """
     workspace = Path(workspace)
-    if hook not in HOOKS:
+    if hook != "auto" and hook not in HOOKS:
         raise FormatError(f"unknown JIS hook: {hook}")
+    force_mode = _force_mode(force_cp932)
     if jis_preflight and proxy_policy != "fixed":
         raise FormatError("JIS preflight reports the fixed mapping; use --proxy-policy fixed")
+    warnings = []
     if not jis_preflight:
         if output is None:
             raise FormatError("JIS prepare requires an output destination")
         output = Path(output)
         validate_new_tree_destination(output)
+        hook = resolve_hook(hook, exe, warnings) if include_hook else None
+    else:
+        hook = None  # preflight writes no hook/config
+    include_hook = hook is not None
     machine = _check_hook_machine(exe, hook) if exe is not None and include_hook else None
+    codepage = None if jis_preflight else runtime_codepage(exe, force_mode, hook, warnings)
+    force = bool(codepage and codepage["force_cp932"])
     translated_dir = Path(translations) if translations is not None else workspace / "gt_output"
     payloads, declared = _workspace_payloads(workspace)
     original = _json_rows({n[len("workspace/gt_input/"):]: raw for n, raw in payloads.items()
@@ -469,14 +556,16 @@ def prepare(workspace, output=None, *, encoding, extra_texts=(), include_hook=Fa
         payloads["workspace/gt_output/" + name] = dump_rows(rows)
         payloads["chinese/" + name] = dump_rows(translated[name])
     payloads["workspace/gt_output/.keep"] = b""
-    for name, raw in plan.codec.artifacts(include_hook=include_hook, hook=hook):
+    for name, raw in plan.codec.artifacts(include_hook=include_hook, hook=hook or "ciallohook",
+                                          force_cp932=force):
         payloads["support/" + name] = raw
     # Retain the exact source rows in the immutable snapshot; verification never
     # trusts a generic transformation as proof the game writer worked.
     config = dict(plan.codec.summary(), schema=SCHEMA, files=sorted(original), translated_files=sorted(translated),
-                  include_hook=include_hook, hook=hook if include_hook else None,
+                  include_hook=include_hook, hook=hook,
                   hook_architecture=HOOKS[hook]["architecture"] if include_hook else None,
                   exe_machine=f"0x{machine:04X}" if machine is not None else None,
+                  force_cp932=force, runtime_codepage=codepage, warnings=warnings,
                   proxy_policy=proxy_policy, reserve_scope=reserve_scope,
                   reserved_codepoint_sources={k: format_reserved_codepoints(parse_reserved_codepoints(v))
                                               for k, v in reserved.items()},
@@ -493,7 +582,9 @@ def prepare(workspace, output=None, *, encoding, extra_texts=(), include_hook=Fa
     write_new_tree(output, list(payloads.items()))
     return {"prepared_workspace": str(output / "workspace"), "json_files": len(original),
             "translated_files": len(translated), "proxy_policy": proxy_policy,
-            "reserve_scope": reserve_scope, **plan.codec.summary()}
+            "reserve_scope": reserve_scope, "hook": hook, "force_cp932": force,
+            "runtime_codepage": {k: v for k, v in codepage.items() if k != "reasons"},
+            "warnings": warnings, **plan.codec.summary()}
 
 
 def _workspace_payloads(workspace):
@@ -589,6 +680,8 @@ def finalize(prepared, rebuilt, readback, output):
               "mapping_sha256": settings.get("mapping_sha256"), "batch_mapping_sha256": batch_hash,
               "proxy_policy": settings.get("proxy_policy"), "reserve_scope": settings.get("reserve_scope"),
               "hook": settings.get("hook"), "hook_architecture": settings.get("hook_architecture"),
+              "force_cp932": settings.get("force_cp932", False),
+              "runtime_codepage": settings.get("runtime_codepage"), "warnings": settings.get("warnings", []),
               "preset_font_compatible": settings["preset_font_compatible"],
               "display_rows_verified": True, "runtime_verified": False,
               "artifacts": [n[8:] for n in settings["support"]],
@@ -615,11 +708,16 @@ def main():
     command.add_argument("--extra-text", action="append", default=[], help="UTF-8 file of additional decoded UI/source text")
     command.add_argument("--translations", help="translation JSON directory; default: workspace/gt_output")
     command.add_argument("--jis-preflight", action="store_true", help="report fixed JIS proxy conflicts without writing a workspace")
-    command.add_argument("--hook", choices=tuple(HOOK_CHOICES), default="none",
-                         help="x86/uif-x86: UIF winmm.dll; ciallohook-x86: CialloHook x86 version.dll+ini; "
-                              "x64/ciallohook-x64: CialloHook x64 version.dll+ini (no x64 UIF); "
-                              "match the game EXE PE machine (see the 'arch' command)")
-    command.add_argument("--exe", help="game EXE; refuse a hook whose bitness differs from its PE machine")
+    command.add_argument("--hook", choices=("auto", *HOOK_CHOICES), default="auto",
+                         help="auto (default): CialloHook matching the --exe PE machine, none without --exe; "
+                              "ciallohook-x86 / x64 / ciallohook-x64: CialloHook version.dll+ini; "
+                              "uif-x86 / x86: UIF winmm.dll, manual fallback when CialloHook does not load; "
+                              "none: no DLL")
+    command.add_argument("--exe", help="game EXE: selects the auto hook, refuses a hook of another bitness, "
+                                       "and is probed for --force-cp932 auto")
+    command.add_argument("--force-cp932", choices=FORCE_CP932_MODES, default="auto",
+                         help="CialloHook [LocaleEmulator] restart under ACP 932 plus LE/LEP DLLs. "
+                              "auto: on unless the --exe probe verdict is fixed-cp932 (off without --exe)")
     command.add_argument("--proxy-policy", choices=("fixed", "unused"), default="fixed",
                          help="unused: resolve preset collisions with private CP932 proxies; requires matching hook/custom font")
     command.add_argument("--reserve-scope", choices=RESERVE_SCOPES, default="untranslated",
@@ -659,7 +757,8 @@ def main():
             machine = pe_machine(args["exe"])
             arch = PE_MACHINES.get(machine, "unknown")
             choices = [k for k, v in HOOK_CHOICES.items() if v and HOOKS[v]["machine"] == machine]
-            _emit({"machine": f"0x{machine:04X}", "architecture": arch, "hook_choices": choices})
+            _emit({"machine": f"0x{machine:04X}", "architecture": arch, "hook_choices": choices,
+                   "auto_hook": AUTO_HOOKS.get(machine)})
             return
         if action == "prepare":
             if not args["jis_preflight"] and args["output"] is None:
@@ -669,9 +768,10 @@ def main():
             args["extra_texts"] = {f"{i}-{Path(p).name}": _read(p).decode("utf-8-sig", "strict")
                                    for i, p in enumerate(args.pop("extra_text"), 1)}
             args["reserved_codepoints"] = args.pop("reserve_codepoints")
-            args["hook"] = HOOK_CHOICES[args["hook"]]
+            if args["hook"] != "auto":
+                args["hook"] = HOOK_CHOICES[args["hook"]]
             args["include_hook"] = args["hook"] is not None
-            args["hook"] = args["hook"] or "uif"
+            args["hook"] = args["hook"] or "auto"
             result = prepare(**args)
         else:
             result = finalize(**args)

@@ -78,5 +78,53 @@
     "purpose": "Complete configuration reference for the bundled CialloHook DLLs",
     "license_status": "No LICENSE file in the upstream repository; GitHub license metadata null; not relicensed under GPL",
     "modified": false
+  },
+  "bundled_locale_emulator": {
+    "files": {
+      "assets/ciallohook/locale-emulator/LEP/LoaderDll_x86.dll": {
+        "size": 16896,
+        "pe_machine": "0x014C",
+        "architecture": "x86",
+        "sha256": "b542c7caf63538b044a678e8859abbc29cf3444629b729aaec3faf1bcb68e2e2"
+      },
+      "assets/ciallohook/locale-emulator/LEP/LocaleEmulatorPlus_x86.dll": {
+        "size": 78848,
+        "pe_machine": "0x014C",
+        "architecture": "x86",
+        "sha256": "ab98822b1de1c3c4b40d6acb14009771e6fba5c9c8b425a26e767d734cde2822"
+      },
+      "assets/ciallohook/locale-emulator/LEP/LoaderDll_x64.dll": {
+        "size": 26624,
+        "pe_machine": "0x8664",
+        "architecture": "x64",
+        "sha256": "70c35241a7d72653f362c25a1381b06f8a052639b8b7dc4789a3ac8fe0d708c7"
+      },
+      "assets/ciallohook/locale-emulator/LEP/LocaleEmulatorPlus_x64.dll": {
+        "size": 123392,
+        "pe_machine": "0x8664",
+        "architecture": "x64",
+        "sha256": "1680512fa217483998673e3b4fffe6ff4c3c273d48754d0c879f506368dd25bc"
+      },
+      "assets/ciallohook/locale-emulator/LE/LoaderDll.dll": {
+        "size": 6144,
+        "pe_machine": "0x014C",
+        "architecture": "x86",
+        "sha256": "82fae0f44f4ca0c9c37907df74cef2415eeb5fae1cf8d4f36f34ffcaf7e3cc0c"
+      },
+      "assets/ciallohook/locale-emulator/LE/LocaleEmulator.dll": {
+        "size": 63488,
+        "pe_machine": "0x014C",
+        "architecture": "x86",
+        "sha256": "c79c175fdad174aa46a72197d148316299a56f950aaab1b84930d09ee1084a88"
+      }
+    },
+    "source": "CialloHook v1.7 source tree third/LE and third/LEP (user-supplied copy), copied unmodified; no version resources in the binaries",
+    "purpose": "Dependencies of CialloHook [LocaleEmulator] (restart the game under ACP 932); emitted by python/common/jis_substitution.py only when force_cp932 is enabled: x86 hooks get LEP x86 + LE, x64 hooks get LEP x64",
+    "license_status": {
+      "LE": "Locale-Emulator by xupefei (https://github.com/xupefei/Locale-Emulator), upstream usually LGPL-3.0; provenance only traceable to CialloHook v1.7 third/LE, exact upstream version and license not independently verified",
+      "LEP": "Locale Emulator Plus: origin and license not confirmed"
+    },
+    "relicensed": false,
+    "modified": false
   }
 }

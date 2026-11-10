@@ -421,7 +421,7 @@ def rebuild(workspace, output, *, jis_mode="auto"):
         result["jis_substitution"] = codec.summary()
         # An explicit seed without an EXE is enough to write scripts, but not
         # enough evidence to choose a DLL architecture.
-        files.update(codec.artifacts(include_hook=report["keys"].get("machine") == 0x14C))
+        files.update(codec.artifacts(include_hook=report["keys"].get("machine") == 0x14C, hook="uif"))
     files["reports/rebuild.json"] = json_bytes(result)
     files["README.txt"] = ("ExHibit 回注结果：只包含有变化的 rld/ 文件。\n"
         "先备份游戏原文件，再按原相对路径部署；不得把 original/rld 的明文当回注文件。\n"
