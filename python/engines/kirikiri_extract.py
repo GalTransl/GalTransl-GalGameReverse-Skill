@@ -137,6 +137,16 @@ def flat_patch_members(changed,known):
     return result
 
 
+# Character/voice tables that may map speaker names to sprites or voices.
+NAME_TABLE=re.compile(r'(?i)(?:char|chara|voice|name|speaker|face|stand)[^/]*\.(?:csv|tsv|txt|tjs|ini)$')
+MAX_NAME_TABLES=50
+SPEAKER_KEY_NOTE=('Speaker (who) values also appear as archive directory/file names, so they may be lookup keys '
+                  'for sprites, faces or voices. Translated who names are written; tell the user to check sprites, '
+                  'voices and the backlog in game. If lookups break, add rows for the translated names to the '
+                  'character tables (name_tables, e.g. charlist.csv / charvoice.csv) in the same patch, mapping them '
+                  'to the original entries, or re-extract with --no-speaker-name.')
+
+
 def extract(game,output,*,archives=('data.xp3',),overlay='path',archive_profile='auto',
             output_format='same',verify_edits=False,language_index=0,filter_spec=None,
             speaker_name='auto'):
@@ -146,10 +156,11 @@ def extract(game,output,*,archives=('data.xp3',),overlay='path',archive_profile=
     games whose patch moves base subdirectory members to root. Duplicate JSON
     basenames under path mode receive deterministic suffixes; never guess merge.
 
-    speaker_name='auto' writes string speakers (who) only while no who value
-    also names an archive directory or filename token; on such evidence who
-    stays read-only and the report carries speaker_key_warning. True/False
-    force the policy (the warning is still reported).
+    speaker_name='auto' (default) writes string speakers (who). When a who
+    value also names an archive directory or filename token, who stays
+    writable but the report carries speaker_key_warning with candidate name
+    tables, so the agent tells the user to check sprites/voices in game.
+    False keeps who read-only; True is the explicit form of the default.
     """
     if type(language_index) is not int or language_index < 0: raise ValueError('invalid language index')
     if speaker_name!='auto' and type(speaker_name) is not bool: raise ValueError('invalid speaker_name flag')
@@ -202,22 +213,20 @@ def extract(game,output,*,archives=('data.xp3',),overlay='path',archive_profile=
             scanned.append(archive)
         except (ValueError,OSError) as exc:unscanned.append(dict(archive=archive,reason=str(exc)[:200]))
     unscanned.extend(dict(archive=a,reason='name scan archive budget') for a in over_budget)
-    name_keys=member_name_keys(member_names);del member_names
+    name_keys=member_name_keys(member_names)
+    tables=sorted({n for n in member_names if NAME_TABLE.search(n.replace('\\','/').rsplit('/',1)[-1])})[:MAX_NAME_TABLES]
+    del member_names
     flag=True if speaker_name=='auto' else speaker_name
     scan=_scan_scn(game,selected,flag,language_index,filter_spec,verify_edits)
     conflicts=speaker_key_conflicts(scan['who'],name_keys)
-    if speaker_name=='auto' and conflicts:
-        # Evidence that who doubles as an asset key: re-run with who read-only
-        # so manifests mark these names as context and pack rejects edits.
-        flag=False;scan=_scan_scn(game,selected,flag,language_index,filter_spec,verify_edits)
     payloads,files,smokes,exports,non_target,totals,versions=(
         scan[k] for k in ('payloads','files','smokes','exports','non_target','totals','versions'))
     warning=None
     if conflicts:
         warning=dict(names=sorted(conflicts),evidence=conflicts,
-                     action=('who read-only (auto)' if speaker_name=='auto' else
-                             'who kept writable by explicit speaker_name=True' if flag else 'who already read-only'),
-                     note='Speaker (who) values also appear as archive directory/file names; they are likely internal keys for sprites or voices. Display slots stay writable.')
+                     action=('who writable; check in game' if flag else 'who read-only (--no-speaker-name)'),
+                     name_tables=tables,
+                     note=SPEAKER_KEY_NOTE)
     rebuilt_info=None
     roundtrip=xp3.build(files,output_format,filter_spec);verify_archive(roundtrip,files,output_format,filter_spec)
     payloads.append(('rebuilt/roundtrip/scenario.xp3',roundtrip))
@@ -358,7 +367,7 @@ def pack(workspace,output,*,incremental=True,patch_filter='same'):
         raw=read_file(path);total+=len(raw)
         if total>64<<20:raise ValueError('translation budget')
         translations[path.name]=load_json(raw)
-    files=[];changed=[]
+    files=[];changed=[];renamed={}
     for e in exports:
         data=read_file(workspace/'original'/e['name'])
         if digest(data)!=e['sha256']:raise ValueError('source SCN changed')
@@ -375,6 +384,9 @@ def pack(workspace,output,*,incremental=True,patch_filter='same'):
         if load_json(read_file(workspace/'gt_input'/e['json']))!=rows:raise ValueError('original JSON changed')
         translated=translations.get(e['json'],rows)
         validate_translation(manifest,{'original/'+e['name']:data},rows,translated)
+        for r,old,new in zip(recs,rows,translated):
+            if r.get('name_source')=='who' and old.get('name')!=new.get('name'):
+                renamed.setdefault(old['name'],set()).add(new.get('name'))
         rebuilt,paths=patch(psb,recs,translated)
         if rebuilt!=data:
             check=Psb(rebuilt)
@@ -409,6 +421,14 @@ def pack(workspace,output,*,incremental=True,patch_filter='same'):
                     all_members_readback_equal=True,runtime_verified=False,
                     note='Full script-only archive for roundtrip verification; deliver patch mode instead.')
         name='scenario.xp3'
+    warning=report.get('speaker_key_warning')
+    if renamed:
+        result['who_renamed']={k:sorted(v) for k,v in sorted(renamed.items())}
+        if warning:
+            keys=set(warning.get('names',()))
+            result['who_renamed_asset_keys']=sorted(k for k in renamed if k in keys)
+            result['name_tables']=warning.get('name_tables',[])
+            result['runtime_check_required']=SPEAKER_KEY_NOTE
     write_new_tree(output,[(name,packed),('verification.json',js(result))],Limits(max_file_bytes=256<<20,max_total_bytes=300<<20))
     return result
 
@@ -424,7 +444,7 @@ def main():
     extract_parser.add_argument('--language-index',type=int,default=0,help='zero-based existing SCN language slot; never inserts a language')
     extract_parser.add_argument('--verify-edits',action='store_true')
     extract_parser.add_argument('--speaker-name',action=argparse.BooleanOptionalAction,default='auto',
-                                help='write string speakers when the display slot is null (default auto: enabled unless a speaker value also names an archive directory/file; --speaker-name forces, --no-speaker-name keeps them read-only)')
+                                help='write string speakers when the display slot is null (default: writable; if a speaker value also names an archive directory/file the report warns to check sprites/voices in game; --no-speaker-name keeps them read-only)')
     pack_parser=subs.add_parser('pack');pack_parser.add_argument('source',type=Path);pack_parser.add_argument('output',type=Path)
     pack_parser.add_argument('--patch',action=argparse.BooleanOptionalAction,default=True,
                              help='default: flat patch.xp3 with changed members only; --no-patch writes the full verification scenario.xp3')

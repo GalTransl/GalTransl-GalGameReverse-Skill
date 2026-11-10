@@ -83,7 +83,7 @@ python -m python.engines.kirikiri_extract pack "提取目录" "新的验证目�
 | `--output-format same` | 默认沿用输入适配器；混合输入需要明确输出格式。输出可重读不等于游戏会加载 |
 | `--language-index` | 从 0 开始选择已有语言槽，默认 0；语言含义须核对内容，不由编号推断 |
 | `--verify-edits` | 额外进行中文前缀的变长回写验证；生成的 smoke-test 包不是正式译文 |
-| `--speaker-name` / `--no-speaker-name` | 不写时为自动判定，见下文[姓名策略](#说话者字段作为显示名) |
+| `--speaker-name` / `--no-speaker-name` | 默认回写 `who` 姓名并在有资源键证据时告警；`--no-speaker-name` 设为只读，见下文[姓名策略](#说话者字段作为显示名) |
 | `pack --patch-filter` | `same`（默认）沿用提取时的输出格式与 `--filter-spec`；`none` 写不加过滤的标准 XP3。判断方法见[通用工作流](kirikiri/workflow.md#译文回注必须使用-patchxp3-增量补丁) |
 
 输出目录须不存在或为普通空目录，且父目录已存在。正文按成员预算读取，原包哈希按流核对；不要为提取剧情把整个媒体包载入内存。平铺 JSON 的重名映射、来源、覆盖关系与选择的语言槽保存在报告中，`pack` 沿用原提取配置。
@@ -116,16 +116,18 @@ python -m python.engines.kirikiri_extract pack "提取目录" "新的验证目�
 
 单语言元组是 `[who, display, message, ...]`；多语言元组的语言槽内是 `[display, message, ...]`。`display` 是显式显示名槽，`who` 是外层说话者字段。
 
-**提取前先判定**：`who` 是显示用姓名还是内部 ID，`display` 槽是否可用。
+**提取后核对**：`who` 是否兼作立绘、表情或语音的查找键，`display` 槽是否可用。
 
 1. 看报告 `totals`：`display_names` 与 `who_names` 分别统计来自两个槽的姓名，`writable_who_names` 为其中可写的条数。绝大多数姓名来自 `who`、`display` 很少时，`who` 承担了主要姓名来源，需重点核对。
-2. 看 `speaker_key_warning`：提取时扫描所选归档及游戏根目录其他 `*.xp3` 的成员路径（只读索引，脚本/数据成员除外），`who` 值作为目录名或文件名片段出现（如 `fgimage/<名字>/…`、`<名字>_01.png`、`<名字>_0001.ogg`）即列出冲突名字与示例路径。`name_scan.unscanned` 列出无法读取索引的归档，这些归档未参与判定。
+2. 看 `speaker_key_warning`：提取时扫描所选归档及游戏根目录其他 `*.xp3` 的成员路径（只读索引，脚本/数据成员除外），`who` 值作为目录名或文件名片段出现（如 `fgimage/<名字>/…`、`<名字>_01.png`、`<名字>_0001.ogg`）即列出冲突名字与示例路径；`name_tables` 列出名称像角色/语音表的成员（如 `charlist.csv`、`charvoice.csv`），供出问题时增补。`name_scan.unscanned` 列出无法读取索引的归档，这些归档未参与判定。
 3. 静态核对 `Storages.tjs`、立绘/语音宏等是否以 `who` 拼接资源路径或查表；Hxv4 等名称被哈希的归档无法自动扫描，必须人工核对。
 
 - `who` 为 null 时沿用旁白规则，不导出姓名；`who` 和 `display` 都是字符串时回写 `display`，`display` 始终可写。空字符串仍是显式显示名，不等同于 null。
-- `display` 为 null 而 `who` 是字符串时导出 `who`。**默认自动判定**：没有路径证据时按可写显示名导出，回写改 `who` 自身（对话元组第 0 项）；出现 `speaker_key_warning` 时所有 `who` 姓名改为只读上下文（`name_policy=context`），`speaker_name` 记为 `false`，`pack` 遇到改动的 `who` 姓名直接报错。按全局而非逐名处理，是因为同一槽一旦被用作资源键，其余取值同样可能参与查找；只读策略复用 manifest 的姓名策略校验，不需要另加字段，也不会在 `pack` 时才发现冲突。
-- 确认 `who` 只用于显示时，可用 `--speaker-name`（API：`speaker_name=True`）强制可写，告警仍保留在报告中；确认是内部 ID 时用 `--no-speaker-name`。需要翻译姓名而 `who` 为内部键时，应另找显示名映射（如姓名表或 `display` 槽），不要改 `who`。先只改一个易触发的脚本试注，核对显示、立绘与语音。
-- `kirikiri_extract` 默认自动判定；`kirikiri_hxv4_text` 与共享 SCN 语义 API 默认开启，不做路径扫描。最终取值随 `reports/extraction.json` 保存，`pack` 沿用同一规则。
+- `display` 为 null 而 `who` 是字符串时导出 `who`，**默认可写**，回写改 `who` 自身（对话元组第 0 项），使译名能显示。
+- 出现 `speaker_key_warning` 时仍然回写，但 `who` 可能同时是立绘、表情或语音的查找键，改名后可能找不到对应资源。`pack` 的 `verification.json` 列出 `who_renamed`（原名 → 译名）、其中命中资源路径的 `who_renamed_asset_keys`、候选 `name_tables` 与 `runtime_check_required`。
+- **交付时 agent 必须提醒用户**：在游戏中检查改名角色的立绘、表情、语音及回想/鉴赏等页面。出现立绘消失、语音不播放或脚本报错时，优先在同一补丁中增补角色表：在 `charlist.csv`、`charvoice.csv` 等含人名的表（见 `name_tables`，先静态确认其列含义与查找方式）中为每个译名复制原名所在行、仅把名字列改为译名，使中文 `who` 指向原有资源；平铺加入 `patch.xp3`，不改原包。按名字拼接资源路径（如 `fgimage/<名字>/`）而无表可查时，增补表无效，改用 `--no-speaker-name` 重新提取，姓名保持原文。
+- 确认 `who` 是纯内部 ID、不应显示译名时，用 `--no-speaker-name`（API：`speaker_name=False`）设为只读上下文，`pack` 遇到改动的 `who` 姓名直接报错。`--speaker-name` 与默认相同，仅用于显式记录。先只改一个易触发的脚本试注，核对显示、立绘与语音。
+- `kirikiri_extract` 默认可写并做路径扫描告警；`kirikiri_hxv4_text` 与共享 SCN 语义 API 默认开启，不做路径扫描。最终取值随 `reports/extraction.json` 保存，`pack` 沿用同一规则。
 - 旧提取目录缺少 `speaker_name` 时，回填仍按原来的只读策略处理；要启用姓名回注，应从原始归档重新提取到新目录，再配对同名译文。不得改报告或 manifest 绕过校验。
 - 多语言结构的 `who` 由各语言共享；改写会影响其他依赖该字段的语言，其他语言自己的显示名与正文槽仍保持原样。仅需改某一语言的姓名时，使用 `--no-speaker-name`，不把共享 `who` 当局部显示名。
 - `who` 是整数或其他类型时不猜，直接拒绝解析。

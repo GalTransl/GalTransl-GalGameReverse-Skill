@@ -116,21 +116,39 @@ class SpeakerKeyTests(unittest.TestCase):
         work = root/'work'
         return work, extract(game, work, archives=('scn.xp3',), **options)
 
-    def test_auto_keeps_who_read_only_on_path_evidence(self):
+    def test_auto_writes_who_but_warns_on_path_evidence(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            work, report = self.run_case(root, [(f'fgimage/{SPEAKER}/{SPEAKER}_01.png', b'png')])
-            self.assertIs(report['speaker_name'], False)
-            self.assertEqual(report['speaker_key_warning']['names'], [SPEAKER])
+            media = [(f'fgimage/{SPEAKER}/{SPEAKER}_01.png', b'png'), ('data/charlist.csv', b'csv'),
+                     ('data/charvoice.csv', b'csv'), ('bg/room.png', b'png')]
+            work, report = self.run_case(root, media)
+            self.assertIs(report['speaker_name'], True)
+            warning = report['speaker_key_warning']
+            self.assertEqual(warning['names'], [SPEAKER])
+            self.assertEqual(warning['name_tables'], ['data/charlist.csv', 'data/charvoice.csv'])
+            self.assertIn('in game', warning['note'])
             self.assertIn('fgimage.xp3', report['name_scan']['archives'])
             totals = report['totals']
-            self.assertEqual((totals['who_names'], totals['writable_who_names'], totals['display_names']), (1, 0, 1))
+            self.assertEqual((totals['who_names'], totals['writable_who_names'], totals['display_names']), (1, 1, 1))
+            translate(work, 'a.json', lambda r: r[0].update(name='中文名'))
+            translate(work, 'b.json', lambda r: r[0].update(name='显示名'))
+            result = pack(work, root/'patch')
+            self.assertEqual(len(result['changed_members']), 2)
+            self.assertEqual(result['who_renamed'], {SPEAKER: ['中文名']})
+            self.assertEqual(result['who_renamed_asset_keys'], [SPEAKER])
+            self.assertEqual(result['name_tables'], warning['name_tables'])
+            self.assertIn('runtime_check_required', result)
+
+    def test_no_speaker_name_keeps_who_read_only(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            work, report = self.run_case(root, [(f'fgimage/{SPEAKER}/{SPEAKER}_01.png', b'png')],
+                                         speaker_name=False)
+            self.assertIs(report['speaker_name'], False)
+            self.assertEqual(report['totals']['writable_who_names'], 0)
             translate(work, 'a.json', lambda r: r[0].update(name='中文名'))
             with self.assertRaises(ValueError): pack(work, root/'rejected')
             self.assertFalse((root/'rejected').exists())
-            translate(work, 'a.json', lambda r: r[0].update(message='中文正文'))
-            translate(work, 'b.json', lambda r: r[0].update(name='显示名'))
-            self.assertEqual(len(pack(work, root/'patch')['changed_members']), 2)
 
     def test_auto_without_evidence_and_explicit_override(self):
         with tempfile.TemporaryDirectory() as tmp:
