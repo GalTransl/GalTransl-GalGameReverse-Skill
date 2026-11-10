@@ -113,21 +113,21 @@ class SpeakerNameTests(unittest.TestCase):
                 result = extract(root, work, archives=('script.xp3',), verify_edits=True, **options)
                 enabled = flag is not False
                 self.assertIs(result['speaker_name'], enabled)
-                self.assertEqual(pack(work, root/(str(flag)+'-noop'))['changed_files'], 0)
+                self.assertEqual(pack(work, root/(str(flag)+'-noop'), incremental=False)['changed_files'], 0)
                 if not enabled:
                     # A pre-flag workspace must retain its original name policy.
                     result.pop('speaker_name')
                     (work/'reports/extraction.json').write_text(json.dumps(result), encoding='utf-8')
-                    self.assertEqual(pack(work, root/'legacy-noop')['changed_files'], 0)
+                    self.assertEqual(pack(work, root/'legacy-noop', incremental=False)['changed_files'], 0)
                 rows = json.loads((work/'gt_input/main.json').read_bytes())
                 rows[0]['name'] = RENAMED
                 (work/'gt_output/main.json').write_text(json.dumps(rows), encoding='utf-8')
                 output = root/(str(flag)+'-translated')
                 if not enabled:
-                    with self.assertRaises(ValueError): pack(work, output)
+                    with self.assertRaises(ValueError): pack(work, output, incremental=False)
                     self.assertFalse(output.exists())
                     continue
-                self.assertEqual(pack(work, output)['changed_files'], 1)
+                self.assertEqual(pack(work, output, incremental=False)['changed_files'], 1)
                 stream = io.BytesIO((output/'scenario.xp3').read_bytes())
                 profile, entries = xp3.read_index(stream)
                 rebuilt = xp3.read_member(stream, entries[0], profile)
@@ -136,12 +136,13 @@ class SpeakerNameTests(unittest.TestCase):
                 for value in (False, 'true', 1):
                     bad = dict(result, speaker_name=value)
                     report.write_text(json.dumps(bad), encoding='utf-8')
-                    with self.assertRaises(ValueError): pack(work, root/'rejected')
+                    with self.assertRaises(ValueError): pack(work, root/'rejected', incremental=False)
                     self.assertFalse((root/'rejected').exists())
 
     def test_cli_default_and_explicit_name_policies(self):
         for module in (kirikiri_extract, kirikiri_hxv4_text):
-            for flags, expected in (([], True), (['--speaker-name'], True), (['--no-speaker-name'], False)):
+            default = 'auto' if module is kirikiri_extract else True
+            for flags, expected in (([], default), (['--speaker-name'], True), (['--no-speaker-name'], False)):
                 args = ['extract', 'source', 'output', *flags]
                 if module is kirikiri_hxv4_text:
                     args += ['--exe', 'not-executed.exe']

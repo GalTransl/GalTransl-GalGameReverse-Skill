@@ -51,7 +51,7 @@ class MultilingualTests(unittest.TestCase):
             meta = json.loads((work/'metadata/main.json').read_bytes())
             self.assertIn('$f.actor;', str(meta))
             (work/'gt_output/main.json').write_text(json.dumps(rows), encoding='utf-8')
-            self.assertEqual(pack(work, root/'packed')['changed_files'], 1)
+            self.assertEqual(pack(work, root/'packed', incremental=False)['changed_files'], 1)
         for bad in (text.replace('#;', ''), text.replace('$f.actor;', '$f.other;'),
                     text + '$f.actor;', text.replace('$f.actor;', '${f.actor}')):
             with self.subTest(bad=bad), self.assertRaises(ValueError):
@@ -120,10 +120,10 @@ class MultilingualTests(unittest.TestCase):
             root=Path(tmp);(root/'script.xp3').write_bytes(xp3.build([('main.scn',fixture())],filter_name='none'))
             work=root/'work';report=extract(root,work,archives=('script.xp3',),language_index=1,verify_edits=True)
             self.assertEqual(report['language_index'],1)
-            self.assertEqual(pack(work,root/'noop')['changed_files'],0)
+            self.assertEqual(pack(work,root/'noop', incremental=False)['changed_files'],0)
             rows=json.loads((work/'gt_input/main.json').read_bytes());rows[0]['message']='译文'
             (work/'gt_output/main.json').write_text(json.dumps(rows),encoding='utf-8')
-            self.assertEqual(pack(work,root/'translated')['changed_files'],1)
+            self.assertEqual(pack(work,root/'translated', incremental=False)['changed_files'],1)
 
     def test_ruby_padding_normalization_stays_inside_reading(self):
         text='本文　[　よみ　,1]漢字　後文'
@@ -144,7 +144,7 @@ class MultilingualTests(unittest.TestCase):
             meta=json.loads((work/'metadata/ruby.json').read_bytes())
             self.assertTrue(meta['records'][0]['locator']['trim_ruby_space'])
             (work/'gt_output/ruby.json').write_text(json.dumps(rows),encoding='utf-8')
-            self.assertEqual(pack(work,root/'packed')['changed_files'],1)
+            self.assertEqual(pack(work,root/'packed', incremental=False)['changed_files'],1)
         local[2]='本文よみ後文'  # Body spacing cannot be normalized away.
         with self.assertRaisesRegex(ValueError,'scene=0, text=0, cache=0'):
             records(Psb(fixture_tree({'scenes':[{'texts':[['actor',None,[local],None,1,{}]]}]})))
@@ -166,7 +166,7 @@ class MultilingualTests(unittest.TestCase):
             work=root/'work';report=extract(root,work,archives=('script.xp3',),verify_edits=True)
             self.assertEqual(report['totals']['structural_choices'],1)
             self.assertEqual(report['exports'][0]['skipped_structural_choices'],skipped)
-            self.assertEqual(pack(work,root/'noop')['changed_files'],0)
+            self.assertEqual(pack(work,root/'noop', incremental=False)['changed_files'],0)
         for bad in ({'selidx':0,'caption':'表示'},{'button':'はい','selidx':0,'storage':'main.txt','target':'*go'},
                     {'selidx':0,'storage':'other.txt','target':'*go'},{'button':'yes','selidx':0,'target':'go'}):
             with self.assertRaisesRegex(ValueError,'choice missing text'):
@@ -213,7 +213,7 @@ class MultilingualTests(unittest.TestCase):
             self.assertEqual(len(report['non_target'][0]['skipped_structural_choices']),2)
             self.assertEqual(report['non_target'][0]['archive'],'script.xp3')
             self.assertFalse((work/'gt_input/links.json').exists())
-            self.assertEqual(pack(work,root/'packed')['changed_files'],0)
+            self.assertEqual(pack(work,root/'packed', incremental=False)['changed_files'],0)
 
     def test_localized_tail_flag_voice_list_and_image_alt(self):
         for voice in (None,[{'voice':'v001'}]):

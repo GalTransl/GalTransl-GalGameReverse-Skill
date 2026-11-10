@@ -1,4 +1,4 @@
-"""Selected XP3 KAG scripts -> GalTransl workspace -> verified script-only XP3.
+"""Selected XP3 KAG scripts -> GalTransl workspace -> verified incremental patch.xp3.
 
 Explicit archive/member selection and filter parameters; no game-name dispatch.
 Uses the Alter nm/np/exlink dialect, not the PSB/SCN writer.
@@ -11,7 +11,7 @@ from pathlib import Path
 from python.archives import kirikiri_xp3 as xp3
 from python.common.contract import dump_rows, load_json, sha256
 from python.common.safety import Limits, validate_names, write_new_tree, validate_new_tree_destination
-from .kirikiri_extract import read_file, js, verify_archive
+from .kirikiri_extract import read_file, js, verify_archive, build_patch, PATCH_FILTERS
 from .kirikiri_kag_text import PROFILE, export_script, rebuild_script
 
 
@@ -63,9 +63,12 @@ def extract(game,output,*,archives,patterns=('scenario/*.ks',),filter_spec=None)
     return report
 
 
-def pack(workspace,output,*,flat=False):
+def pack(workspace,output,*,incremental=True,patch_filter='same'):
+    """incremental=True (default): flat patch.xp3 holding only changed scripts.
+    incremental=False: full scenario.xp3 with original paths, verification only."""
     workspace,output=Path(workspace),Path(output)
     validate_new_tree_destination(output)
+    if type(incremental) is not bool or patch_filter not in PATCH_FILTERS:raise ValueError('invalid patch options')
     report=load_json(read_file(workspace/'reports/extraction.json'))
     if report['profile']!=PROFILE:raise ValueError('unsupported KAG workspace')
     exports=report['exports'];expected={e['json'] for e in exports if e['json']}
@@ -86,13 +89,23 @@ def pack(workspace,output,*,flat=False):
             after=load_json(read_file(path)) if path.exists() else rows
             rewritten=rebuild_script(raw,after,meta)
         elif e['json'] is not None:raise ValueError('empty KAG source mapping changed')
-        if rewritten!=raw:changed.append(e['member'])
-        files.append((Path(e['member']).name if flat else e['member'],rewritten))
+        if rewritten!=raw:changed.append((e['member'],rewritten))
+        files.append((e['member'],rewritten))
     validate_names([n for n,_ in files])
-    packed=xp3.build(files,'plain',report['filter_spec']);verify_archive(packed,files,'plain',report['filter_spec'])
-    result={'profile':PROFILE,'members':len(files),'changed_members':changed,'flat':flat,
-            'sha256':sha256(packed),'runtime_verified':False,'all_members_readback_equal':True}
-    write_new_tree(output,[('patch.xp3' if flat else 'scenario.xp3',packed),('verification.json',js(result))],
+    filter_spec=report['filter_spec']
+    if filter_spec is not None:filter_spec=xp3.validate(filter_spec)
+    if incremental:
+        packed,info=build_patch(changed,[n for n,_ in files],'plain',filter_spec,patch_filter)
+        result={'profile':PROFILE,'mode':'patch','members':len(changed),**info}
+        name='patch.xp3'
+    else:
+        packed=xp3.build(files,'plain',filter_spec);verify_archive(packed,files,'plain',filter_spec)
+        result={'profile':PROFILE,'mode':'full','members':len(files),'filter_spec':filter_spec,
+                'changed_members':[{'member':m,'packed_as':m} for m,_ in changed],
+                'note':'Full script-only archive for roundtrip verification; deliver patch mode instead.'}
+        name='scenario.xp3'
+    result.update(sha256=sha256(packed),bytes=len(packed),runtime_verified=False,all_members_readback_equal=True)
+    write_new_tree(output,[(name,packed),('verification.json',js(result))],
                    Limits(max_file_bytes=128<<20,max_total_bytes=256<<20))
     return result
 
@@ -102,13 +115,20 @@ def main():
     ex=sub.add_parser('extract');ex.add_argument('game');ex.add_argument('output')
     ex.add_argument('--archives',nargs='+',required=True);ex.add_argument('--members',nargs='+',default=['scenario/*.ks'])
     ex.add_argument('--filter-spec',type=Path)
-    pk=sub.add_parser('pack');pk.add_argument('workspace');pk.add_argument('output');pk.add_argument('--flat',action='store_true')
+    pk=sub.add_parser('pack');pk.add_argument('workspace');pk.add_argument('output')
+    pk.add_argument('--patch',action=argparse.BooleanOptionalAction,default=True,
+                    help='default: flat patch.xp3 with changed scripts only; --no-patch writes the full verification scenario.xp3')
+    pk.add_argument('--flat',action='store_true',help='compatibility alias of the default --patch')
+    pk.add_argument('--patch-filter',choices=PATCH_FILTERS,default='same',
+                    help='same: reuse the extraction filter spec (default); none: unfiltered standard XP3')
     a=parser.parse_args()
     if a.command=='extract':
         result=extract(a.game,a.output,archives=a.archives,patterns=a.members,
                        filter_spec=load_json(read_file(a.filter_spec)) if a.filter_spec else None)
         print(js(result['counts']).decode('utf-8'))
-    else:print(js(pack(a.workspace,a.output,flat=a.flat)).decode('utf-8'))
+    else:
+        if a.flat and not a.patch:parser.error('--flat conflicts with --no-patch')
+        print(js(pack(a.workspace,a.output,incremental=a.patch,patch_filter=a.patch_filter)).decode('utf-8'))
 
 
 if __name__=='__main__':main()

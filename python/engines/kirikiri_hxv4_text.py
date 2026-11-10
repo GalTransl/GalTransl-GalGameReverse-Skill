@@ -162,8 +162,9 @@ def pack(workspace, output):
             if read_member(stream,e,cipher) != raw:
                 raise ValueError('workspace original differs from Hx source')
     with tempfile.TemporaryDirectory(prefix='kirikiri-hx-pack-') as tmp:
-        plain = Path(tmp)/'plain'; result = shared.pack(workspace, plain)
+        plain = Path(tmp)/'plain'; result = shared.pack(workspace, plain, incremental=False)
         data = encrypted_archive(plain_members((plain/'scenario.xp3').read_bytes()), evidence)
+    result.pop('note', None)
     result.update(output_format='hxv4', sha256=shared.digest(data), bytes=len(data),
                   identities_preserved=True, game_loading_verified=False,
                   source_scan_complete=evidence.get('scan_complete',not evidence.get('diagnostics',[])))

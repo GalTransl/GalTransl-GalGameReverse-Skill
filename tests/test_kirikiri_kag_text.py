@@ -81,8 +81,8 @@ class KagTextTests(unittest.TestCase):
             rows,_=export_script(source);rows[1]['message']='中文旁白。'
             (work/'gt_output/main.json').write_bytes(dump_rows(rows))
             (root/'out').mkdir()
-            packed=pack(work,root/'out',flat=True)
-            self.assertEqual(packed['changed_members'],['scenario/main.ks'])
+            packed=pack(work,root/'out')
+            self.assertEqual(packed['changed_members'],[{'member':'scenario/main.ks','packed_as':'main.ks'}])
             with (root/'out/patch.xp3').open('rb') as f:
                 profile,es=xp3.read_index(f);self.assertEqual([e.name for e in es],['main.ks'])
                 self.assertEqual(export_script(xp3.read_member(f,es[0],profile,spec))[0],rows)

@@ -52,14 +52,14 @@ class LoverecTests(unittest.TestCase):
             (game/'patch_append.xp3').write_bytes(b'must not be read')
             work=root/'work';report=extract(game,work,verify_edits=True)
             self.assertEqual(report['totals']['rows'],2)
-            self.assertEqual(pack(work,root/'roundtrip')['changed_files'],0)
+            self.assertEqual(pack(work,root/'roundtrip', incremental=False)['changed_files'],0)
             rows=json.loads((work/'gt_input/start.ks.json').read_bytes());rows[0]['message']='中文回填'
             (work/'gt_output/start.ks.json').write_text(json.dumps(rows),encoding='utf-8')
-            self.assertEqual(pack(work,root/'translated')['changed_files'],1)
-            with self.assertRaises(FileExistsError):pack(work,root/'translated')
+            self.assertEqual(pack(work,root/'translated', incremental=False)['changed_files'],1)
+            with self.assertRaises(FileExistsError):pack(work,root/'translated', incremental=False)
             path=work/'metadata/start.ks.json';m=json.loads(path.read_bytes());m['records'][0]['locator']['message']=[99]
             path.write_text(json.dumps(m),encoding='utf-8')
-            with self.assertRaises(ValueError):pack(work,root/'bad')
+            with self.assertRaises(ValueError):pack(work,root/'bad', incremental=False)
             self.assertFalse((root/'bad').exists())
 
 

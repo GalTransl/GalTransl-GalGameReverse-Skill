@@ -29,7 +29,7 @@ class SharedKirikiriTests(unittest.TestCase):
             self.assertEqual(report['non_target'][0]['role'],'empty-story')
             output=root/'pack'
             output.mkdir()
-            self.assertEqual(pack(work,output)['members'],3)
+            self.assertEqual(pack(work,output, incremental=False)['members'],3)
             self.assertEqual((output/'scenario.xp3').read_bytes(),(work/'rebuilt/roundtrip/scenario.xp3').read_bytes())
             overlay=root/'overlay'
             report=extract(game,overlay,archives=('base.assets','update.assets'),overlay='basename')

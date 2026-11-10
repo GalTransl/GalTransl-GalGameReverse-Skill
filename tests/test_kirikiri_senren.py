@@ -131,14 +131,14 @@ class SenrenTests(unittest.TestCase):
             self.assertEqual(result['totals']['rows'],3)
             self.assertEqual(result['exports'][0]['archive'],'patch.xp3')
             with self.assertRaises(FileExistsError):extract(game,work)
-            result=pack(work,root/'unchanged');self.assertEqual(result['changed_files'],0)
+            result=pack(work,root/'unchanged', incremental=False);self.assertEqual(result['changed_files'],0)
             rows=json.loads((work/'gt_input/test.ks.json').read_bytes());rows[0]['message']='中文变长测试'
             (work/'gt_output/test.ks.json').write_text(json.dumps(rows),encoding='utf-8')
-            result=pack(work,root/'translated');self.assertEqual(result['changed_files'],1)
+            result=pack(work,root/'translated', incremental=False);self.assertEqual(result['changed_files'],1)
             path=work/'metadata/test.ks.json';manifest=json.loads(path.read_bytes())
             manifest['records'][0]['locator']['message']=[99]
             path.write_text(json.dumps(manifest),encoding='utf-8')
-            with self.assertRaises(ValueError):pack(work,root/'invalid')
+            with self.assertRaises(ValueError):pack(work,root/'invalid', incremental=False)
             self.assertFalse((root/'invalid').exists())
 
 

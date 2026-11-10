@@ -123,7 +123,7 @@ class TypedLocationTests(unittest.TestCase):
             rows = json.loads((work/'gt_input/opaque.json').read_bytes())
             rows[0]['message'] = '中文变长回填'; rows[1]['message'] = '另一条译文'
             (work/'gt_output/opaque.json').write_text(json.dumps(rows), encoding='utf-8')
-            packed = shared.pack(work, root/'packed')
+            packed = shared.pack(work, root/'packed', incremental=False)
             self.assertEqual(packed['changed_files'], 1)
             stream = io.BytesIO((root/'packed/scenario.xp3').read_bytes())
             profile, entries = kirikiri_xp3.read_index(stream)
@@ -140,11 +140,11 @@ class TypedLocationTests(unittest.TestCase):
             self.assertEqual(result['exports'][0]['non_writable'][0]['index'], 0)
             rows = json.loads((work/'gt_input/main.json').read_bytes()); rows[0]['message'] = '改动'
             (work/'gt_output/main.json').write_text(json.dumps(rows), encoding='utf-8')
-            with self.assertRaisesRegex(ValueError, 'not recognized'): shared.pack(work, root/'bad')
+            with self.assertRaisesRegex(ValueError, 'not recognized'): shared.pack(work, root/'bad', incremental=False)
             self.assertFalse((root/'bad').exists())
             # Keeping the row unchanged packs it back byte-identical.
             (work/'gt_output/main.json').unlink()
-            self.assertEqual(shared.pack(work, root/'kept')['changed_files'], 0)
+            self.assertEqual(shared.pack(work, root/'kept', incremental=False)['changed_files'], 0)
 
     def test_hx_entrypoint_writes_back_an_opaque_dialect(self):
         package = dict(bootStrap='test', warning='test', archiveUniqueKey='{test}',

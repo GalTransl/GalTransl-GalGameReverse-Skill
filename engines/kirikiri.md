@@ -68,8 +68,11 @@ XP3 写入字段、补丁编号与编码选择见[通用工作流](kirikiri/work
 
 ```text
 python -m python.engines.kirikiri_extract extract "游戏目录" "新的提取目录" --archives data.xp3 --verify-edits
-python -m python.engines.kirikiri_extract pack "提取目录" "新的打包目录"
+python -m python.engines.kirikiri_extract pack "提取目录" "新的补丁目录"
+python -m python.engines.kirikiri_extract pack "提取目录" "新的验证目录" --no-patch
 ```
+
+`pack` 默认生成增量 `patch.xp3`：只收录重建后字节与原成员不同的 SCN，成员一律平铺为 basename；`verification.json` 的 `changed_members` 列出“原路径 → 补丁内名称”（`member` / `packed_as`），并用真实 reader 逐成员读回比对。没有任何变化时报错且不创建输出目录；basename 与其他已选成员重名（含仅大小写不同）时拒绝。`--no-patch` 输出保留原路径的完整 `scenario.xp3`，只用于往返验证，不作交付。
 
 | 参数 | 用法 |
 |---|---|
@@ -80,6 +83,8 @@ python -m python.engines.kirikiri_extract pack "提取目录" "新的打包目�
 | `--output-format same` | 默认沿用输入适配器；混合输入需要明确输出格式。输出可重读不等于游戏会加载 |
 | `--language-index` | 从 0 开始选择已有语言槽，默认 0；语言含义须核对内容，不由编号推断 |
 | `--verify-edits` | 额外进行中文前缀的变长回写验证；生成的 smoke-test 包不是正式译文 |
+| `--speaker-name` / `--no-speaker-name` | 不写时为自动判定，见下文[姓名策略](#说话者字段作为显示名) |
+| `pack --patch-filter` | `same`（默认）沿用提取时的输出格式与 `--filter-spec`；`none` 写不加过滤的标准 XP3。判断方法见[通用工作流](kirikiri/workflow.md#译文回注必须使用-patchxp3-增量补丁) |
 
 输出目录须不存在或为普通空目录，且父目录已存在。正文按成员预算读取，原包哈希按流核对；不要为提取剧情把整个媒体包载入内存。平铺 JSON 的重名映射、来源、覆盖关系与选择的语言槽保存在报告中，`pack` 沿用原提取配置。
 
@@ -101,19 +106,26 @@ python -m python.engines.kirikiri_extract pack "提取目录" "新的打包目�
 - [PSB parser/writer](../python/engines/kirikiri_psb.py) 支持未加密、无二进制 resource 区段的 PSB v2/v3。检查名称 trie、字符串索引、节点边界和区段顺序；未知版本、节点、重叠或循环引用拒绝。v2 不含 v3 的头校验字段，回写必须按原版本布局处理。
 - [SCN 语义层](../python/engines/kirikiri_scn.py) 从 `scenes[].texts` 和 `scenes[].selects` 识别正文、显示名与选项。严格方言覆盖单语言 6/9 槽与已知多语言 5/6 槽；其他形状按类型化前缀定位，只对可验证的派生字段回写。
 - 显式显示名槽可写；显示名为 null 时默认回写字符串说话者字段，见下文姓名策略。具有显式显示名的记录仍保留内部角色 ID；voice、场景状态、源行号与跳转目标保留。
+- manifest 的 `variant` 按解析出的结构填写：含语言数组的文件记为 `psb-scn-multi-language:<language_index>`，否则为 `psb-scn-single-language`；旧工作区沿用固定标签的 manifest 仍可回填。
 - 多语言只修改所选槽，其他语言不混入 JSON。选项优先读取 `language[index].text`；仅槽 0 为 null 时允许使用选项自身的 `text`，其他缺失槽拒绝，不自动新增或回退。
 - 正文的可见长度、读音及搜索缓存按已知规则同步重建。长度不等于带控制码字符串的长度；ruby、百分号/颜色控制与转义需保留。已识别的去中点/空格变体保存到 manifest 后沿用；与已知规则不一致的派生字段不按位置猜测，保留原字节并记入 `opaque`。
 - 已知图片消息的替代文本单独导出为 `image-alt`，不能误当语音缓存。无显示字段的选项仅在符合严格结构规则时保留并记入 `skipped_structural_choices`；具体字段规则见通用工作流。图像文字及 `phonechat` 历史快照不因此自动获得翻译支持。
 - 字符串池和树节点可能共享；按完整树路径定位每次引用，不能全局替换字符串 ID 或只按物理节点地址写入。writer 重建相关偏移、索引宽度、区段地址与校验，并比较非文本语义。
 
-### 说话者字段作为显示名（默认开启）
+### 说话者字段作为显示名
 
 单语言元组是 `[who, display, message, ...]`；多语言元组的语言槽内是 `[display, message, ...]`。`display` 是显式显示名槽，`who` 是外层说话者字段。
 
-- `who` 为 null 时沿用旁白规则，不导出姓名；`who` 和 `display` 都是字符串时回写 `display`，这是默认路径。
-- `display` 为 null 而 `who` 是字符串时，新提取默认将 `who` 按可写显示名槽导出，回写改 `who` 自身（对话元组第 0 项）。空字符串仍是显式显示名，不等同于 null。
-- `who` 的含义因方言而异：可能直接显示姓名，也可能是内部标识符。确认其用于内部标识时，提取使用 `--no-speaker-name`（API：`speaker_name=False`），将这类姓名保持为只读上下文（`name_policy=context`）。先只改一个易触发的脚本试注，核对显示及角色相关行为。
-- `kirikiri_extract`、`kirikiri_hxv4_text` 的 `extract` 及共享 SCN 语义 API 默认开启；`--speaker-name` 保留为显式开启参数。取值随 `reports/extraction.json` 保存，`pack` 沿用同一规则。
+**提取前先判定**：`who` 是显示用姓名还是内部 ID，`display` 槽是否可用。
+
+1. 看报告 `totals`：`display_names` 与 `who_names` 分别统计来自两个槽的姓名，`writable_who_names` 为其中可写的条数。绝大多数姓名来自 `who`、`display` 很少时，`who` 承担了主要姓名来源，需重点核对。
+2. 看 `speaker_key_warning`：提取时扫描所选归档及游戏根目录其他 `*.xp3` 的成员路径（只读索引，脚本/数据成员除外），`who` 值作为目录名或文件名片段出现（如 `fgimage/<名字>/…`、`<名字>_01.png`、`<名字>_0001.ogg`）即列出冲突名字与示例路径。`name_scan.unscanned` 列出无法读取索引的归档，这些归档未参与判定。
+3. 静态核对 `Storages.tjs`、立绘/语音宏等是否以 `who` 拼接资源路径或查表；Hxv4 等名称被哈希的归档无法自动扫描，必须人工核对。
+
+- `who` 为 null 时沿用旁白规则，不导出姓名；`who` 和 `display` 都是字符串时回写 `display`，`display` 始终可写。空字符串仍是显式显示名，不等同于 null。
+- `display` 为 null 而 `who` 是字符串时导出 `who`。**默认自动判定**：没有路径证据时按可写显示名导出，回写改 `who` 自身（对话元组第 0 项）；出现 `speaker_key_warning` 时所有 `who` 姓名改为只读上下文（`name_policy=context`），`speaker_name` 记为 `false`，`pack` 遇到改动的 `who` 姓名直接报错。按全局而非逐名处理，是因为同一槽一旦被用作资源键，其余取值同样可能参与查找；只读策略复用 manifest 的姓名策略校验，不需要另加字段，也不会在 `pack` 时才发现冲突。
+- 确认 `who` 只用于显示时，可用 `--speaker-name`（API：`speaker_name=True`）强制可写，告警仍保留在报告中；确认是内部 ID 时用 `--no-speaker-name`。需要翻译姓名而 `who` 为内部键时，应另找显示名映射（如姓名表或 `display` 槽），不要改 `who`。先只改一个易触发的脚本试注，核对显示、立绘与语音。
+- `kirikiri_extract` 默认自动判定；`kirikiri_hxv4_text` 与共享 SCN 语义 API 默认开启，不做路径扫描。最终取值随 `reports/extraction.json` 保存，`pack` 沿用同一规则。
 - 旧提取目录缺少 `speaker_name` 时，回填仍按原来的只读策略处理；要启用姓名回注，应从原始归档重新提取到新目录，再配对同名译文。不得改报告或 manifest 绕过校验。
 - 多语言结构的 `who` 由各语言共享；改写会影响其他依赖该字段的语言，其他语言自己的显示名与正文槽仍保持原样。仅需改某一语言的姓名时，使用 `--no-speaker-name`，不把共享 `who` 当局部显示名。
 - `who` 是整数或其他类型时不猜，直接拒绝解析。
@@ -165,7 +177,7 @@ assert patched == '#Alice\r\n你好[r]world[l]\r\n'
 
 `gt_input` 保存非空剧本的原文 JSON，姓名在正文上方；译文按同名放入 `gt_output`。`original` 和 `metadata` 保存基准与定位，`reports` 记录输入、覆盖关系、统计及验证。回填重新解析原脚本，核对源哈希、原文 JSON、manifest、条数、姓名槽和控制码；缺失译文保留原文，未知文件名不猜配。纯数组仍需保持顺序，不能保证检测无 ID 的等长重排。
 
-普通 SCN 流程的 `rebuilt/roundtrip/scenario.xp3` 是经真实 parser/writer 生成的剧情包；可选 `smoke-test` 是变长验证产物。它们不包含完整媒体资源，不能覆盖整个原资源包。原文脚本逐字节往返与新归档逐成员解包一致是两个验证层次，需分别报告。
+普通 SCN 与 KAG 的 `pack` 默认直接输出增量 `patch.xp3`。提取目录中的 `rebuilt/roundtrip/scenario.xp3` 是经真实 parser/writer 生成的剧情包；可选 `smoke-test` 是变长验证产物。它们不包含完整媒体资源，不能覆盖整个原资源包。原文脚本逐字节往返与新归档逐成员解包一致是两个验证层次，需分别报告。
 
 **回注必须打包为增量补丁 XP3（如 `patch.xp3`），不得重封整个 `data.xp3` 或其他原包替换原文件。**按 [patch.xp3 增量补丁流程](kirikiri/workflow.md#译文回注必须使用-patchxp3-增量补丁)确认挂载位置、编号、优先级及成员路径，只选实际变化的资源。**增量补丁内所有成员一律平铺在根目录、只用 basename 加完整扩展名；脚本与字体、配置、图片等非脚本资源都一样，都不保留原包的目录结构。**不能把任意 `scenario.xp3` 改名就当作正确补丁；Hxv4 还需核对根目录哈希和 Poly1305 认证。外部 `.sig` 是否参与加载另行确认，不把归档认证和外部签名混为一谈。
 
@@ -177,6 +189,6 @@ assert patched == '#Alice\r\n你好[r]world[l]\r\n'
 
 ## 验证与维护
 
-- 批处理回归：[test_kirikiri_extract.py](../tests/test_kirikiri_extract.py)、[多语言 SCN](../tests/test_kirikiri_multilang.py)、[类型化定位回写](../tests/test_kirikiri_structural.py)、[Hxv4 文本](../tests/test_kirikiri_hxv4_text.py)、[Hx 候选表](../tests/test_kirikiri_hxv4_candidates.py)、[TJS 反编译](../tests/test_kirikiri_tjs_decompile.py)、[TLG5 解码](../tests/test_kirikiri_tlg.py)。有限 KS 回归位于 `tests/test_engines_primary.py`。
+- 批处理回归：[test_kirikiri_extract.py](../tests/test_kirikiri_extract.py)、[多语言 SCN](../tests/test_kirikiri_multilang.py)、[类型化定位回写](../tests/test_kirikiri_structural.py)、[增量补丁与姓名键告警](../tests/test_kirikiri_patch.py)、[Hxv4 文本](../tests/test_kirikiri_hxv4_text.py)、[Hx 候选表](../tests/test_kirikiri_hxv4_candidates.py)、[TJS 反编译](../tests/test_kirikiri_tjs_decompile.py)、[TLG5 解码](../tests/test_kirikiri_tlg.py)。有限 KS 回归位于 `tests/test_engines_primary.py`。
 - 新索引变体放归档适配器，密码放过滤器，KAG 标签放语义方言，SCN tuple 放共享 parser/writer；复用 manifest、导出和回填流程，不按游戏名新建脚本。
 - 出处与许可见 [Kirikiri 算法来源](../provenance/kirikiri-sources.json)与 [TJS 来源记录](../provenance/kirikiri-tjs.json)；有限 KS 接口改编自 VNTextPatch-net8 的 MIT 实现，SCN 语义参考 msg-tool 的 GPL-3.0-or-later 实现，TJS 指令语义参考 krkrz 的日文 BSD 三条款式许可。使用本 Skill 不需要访问这些外部仓库。

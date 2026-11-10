@@ -196,20 +196,25 @@ def _text_record(psb, text, path, scene_id, text_id, language_index, locate_only
     if display.tag != 1 and not 21 <= display.tag <= 24: raise ValueError('unknown display name')
     # An explicit display slot wins. A null display falls back to the speaker
     # string unless the caller marks it as a context-only internal ID.
+    # name_source records which slot supplied the exported name, so callers can
+    # audit speakers that double as internal keys and keep them read-only.
+    source = None
     if who.tag == 1:
         name, writable_name = None, None
     elif display.tag != 1:
-        name, writable_name = psb.text(display), name_path
+        name, writable_name, source = psb.text(display), name_path, 'display'
     elif who.tag != 1 and speaker_name:
-        name, writable_name = psb.text(who), path + (0,)
+        name, writable_name, source = psb.text(who), path + (0,), 'who'
     elif who.tag != 1:
-        name, writable_name = psb.text(who), None
+        name, writable_name, source = psb.text(who), None, 'who'
     else:
         name, writable_name = None, None
     row = {'name': name} if name is not None else {}
     row['message'] = psb.text(message).replace('\\n', '\n')
     rec = dict(row=row, message=message_path, caches=cache_paths,
                name=writable_name, kind=kind, scene=scene_id, index=text_id, **variants)
+    if source is not None: rec['name_source'] = source
+    if slot is not None: rec['localized'] = True
     if length_path is not None: rec['length'] = length_path
     if opaque: rec['opaque'] = sorted(set(opaque))
     return rec
@@ -249,8 +254,10 @@ def _records(psb, language_index, *, skipped, locate_only, speaker_name=True):
                 elif language_index != 0: raise ValueError('SCN choice language unavailable')
                 if 'text' not in selected: raise ValueError('choice missing text')
                 node, loc = selected['text']
-                result.append(dict(row={'message': psb.text(node).replace('\\n', '\n')},
-                                   message=loc, caches=[], name=None, kind='choice', scene=scene_id, index=choice_id))
+                rec = dict(row={'message': psb.text(node).replace('\\n', '\n')},
+                           message=loc, caches=[], name=None, kind='choice', scene=scene_id, index=choice_id)
+                if 'language' in choice: rec['localized'] = True
+                result.append(rec)
     if locate_only:
         for rec in result:
             try: controls(rec['row']['message'])

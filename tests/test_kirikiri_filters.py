@@ -63,7 +63,7 @@ class FilterTests(unittest.TestCase):
             (root/'data.xp3').write_bytes(xp3.build([('main.scn',raw)],'plain',spec))
             report=extract(root,root/'work',filter_spec=spec,verify_edits=True)
             self.assertEqual(report['filter_spec'],spec)
-            pack(root/'work',root/'packed')
+            pack(root/'work',root/'packed', incremental=False)
             self.assertEqual((root/'packed/scenario.xp3').read_bytes(),(root/'work/rebuilt/roundtrip/scenario.xp3').read_bytes())
 
     def test_kag_lexical_preservation_and_dynamic_attributes(self):

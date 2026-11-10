@@ -36,7 +36,7 @@ python -m python.engines.kirikiri_probe "游戏/data.xp3" --members "scenario/*.
 
 ```text
 python -m python.engines.kirikiri_extract extract "游戏目录" "新的提取目录" --archives data.xp3 --filter-spec filter.json --verify-edits
-python -m python.engines.kirikiri_extract pack "提取目录" "新的打包目录"
+python -m python.engines.kirikiri_extract pack "提取目录" "新的补丁目录"
 ```
 
 一次调用使用同一配置，回填沿用报告中的配置。独立过滤器 writer 输出标准 File 索引；eliF 输入使用它时需明确 `--output-format plain`。`senren-cx` 适配器不能再叠加独立过滤器；Hxv4 走 [专用流程](hxv4.md)。
@@ -112,7 +112,15 @@ KAG 词法需区分 ruby 中的单引号与属性引号，`[[` 表示字面左�
 5. **验证成品。** 在新结果目录生成补丁，重读索引、认证和全部成员，核对名称、变化集合、译文及非文本结构。
 6. **测试加载。** 在授权范围内部署到已确认的位置，保留已有补丁；完全退出后重启并进入修改段落，必要时从新游戏开始以避开存档缓存。不生效时按位置/编号、挂载条件、优先级、名称、格式、认证的顺序排查。
 
-[Hxv4 扁平补丁](hxv4.md#hxv4-扁平-patchxp3) 使用 `build_flat_patch` 保留成员身份、调整根目录哈希并生成 Poly1305 标签。普通 SCN/Hxv4 文本 `pack` 输出可能包含完整脚本集合和原目录，仍需变化筛选与路径适配；不要虚构 `--patch` 或 `--flatten` 参数。KAG 的 `--flat` 用法见 [KAG 页面](kag-text.md)。
+普通 SCN（`kirikiri_extract pack`）与 KAG（`kirikiri_kag_extract pack`）默认即按第 2、3、5 步生成 `patch.xp3`：只收录重建后字节不同的成员，平铺为 basename，拒绝与其他已选成员 basename 重名（含仅大小写不同），用真实 reader 逐成员读回，并在 `verification.json` 的 `changed_members` 列出 `member` → `packed_as`；没有变化时报错，不输出空补丁。`--no-patch` 输出完整验证包，不作交付。重名检查只覆盖本次提取选中的成员，原包中其他同 basename 资源仍需按挂载规则核对。
+
+[Hxv4 扁平补丁](hxv4.md#hxv4-扁平-patchxp3) 使用 `build_flat_patch` 保留成员身份、调整根目录哈希并生成 Poly1305 标签；`kirikiri_hxv4_text pack` 仍输出保留身份的完整脚本包，变化筛选需调用 `build_flat_patch` 完成。
+
+**独立过滤器与补丁。**`pack --patch-filter same`（默认）用提取时的输出格式和 `--filter-spec` 写补丁，`none` 写不加过滤的标准 XP3。若过滤器由引擎扩展注册为全局解包回调，它作用于全部挂载包，补丁也必须使用相同 spec，否则读取时会被错误“解密”。判断方法：
+
+- 游戏已有官方补丁包时，分别用该 spec 与不用 spec 读取其成员，以 Adler-32 和内层格式（PSB/KAG）验证哪一种成立。
+- 静态检查启动脚本与扩展插件，确认过滤器是全局注册还是按归档名/路径分支，以及 seed 是否随归档变化。
+- 证据不足时保留默认 `same`，并在交付中说明需要游戏内验证；按归档区分 spec 的方言需先补齐配置规则，不能沿用单个 seed 猜测。
 
 **交付时最后提醒用户**：显示缺字、方框或部分字符空白时，考虑替换 `data.xp3` 中实际使用的字体。先确认字体资源和加载方式，再把替换字体平铺加入补丁，不重封或覆盖原包。
 

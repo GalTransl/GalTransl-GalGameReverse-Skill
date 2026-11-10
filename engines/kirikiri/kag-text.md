@@ -52,17 +52,20 @@ KAG 的同名标签可能被宏重定义。沿启动脚本及 include 链查找�
 
 ```text
 python -m python.engines.kirikiri_kag_extract extract "游戏目录" "新的提取目录" --archives data.bin arc/extra.xp3 --members "scenario/*.ks" "01*.ks" --filter-spec "过滤器.json"
-python -m python.engines.kirikiri_kag_extract pack "提取目录" "新的打包目录"
-python -m python.engines.kirikiri_kag_extract pack "提取目录" "新的扁平补丁目录" --flat
+python -m python.engines.kirikiri_kag_extract pack "提取目录" "新的补丁目录"
+python -m python.engines.kirikiri_kag_extract pack "提取目录" "新的验证目录" --no-patch
 ```
 
 提取生成 `gt_input/gt_output/original/metadata/reports`、原文 roundtrip 和中文前缀 smoke-test；后者不是正式译文。回填校验源哈希、原文与 manifest、条数、姓名、控制码和 ruby；换行只允许删除（不新增、不跨控制码移动），物理行随译文减少。重读脚本并比较非文本结构，再按原过滤器封包、逐成员读回。缺少译文的成员保持原样。
 
 | 打包方式 | 输出 |
 |---|---|
-| 默认 | 保留原成员目录的脚本专用 `scenario.xp3`，仅用于验证往返，不作为交付物 |
-| `--flat` | **所有脚本成员平铺在根目录**、只用 basename 的 `patch.xp3`；普通 XP3 不含 Hx 目录哈希 |
+| 默认（`--patch`） | 增量 `patch.xp3`：只含重建后字节与原成员不同的脚本，**全部平铺在根目录**、只用 basename；`verification.json` 的 `changed_members` 列出 `member` → `packed_as` |
+| `--no-patch` | 保留原成员目录的完整脚本 `scenario.xp3`，仅用于验证往返，不作为交付物 |
+| `--patch-filter none` | 补丁不加独立过滤器；默认 `same` 沿用提取时的 `--filter-spec`，判断方法见通用工作流 |
 
-**交付必须用 `--flat` 生成增量补丁，不得重封整个 `data.xp3` 或补齐其他成员后替换原包：补丁内所有成员一律平铺，脚本与字体、配置等非脚本资源没有区别。**当前 KAG 入口只收集脚本；非脚本资源需通过相应资源 writer 加入补丁。`--flat` 只改变路径，不表示只包含变化成员；补丁挂载、已有补丁优先级与增量筛选按 [通用工作流](workflow.md#译文回注必须使用-patchxp3-增量补丁) 处理。
+`--flat` 保留为默认模式的兼容别名。补丁逐成员用真实 reader 读回比对；没有变化时报错且不创建输出目录；basename 与其他已选成员重名（含仅大小写不同）时拒绝。
+
+**交付使用默认的增量补丁，不得重封整个 `data.xp3` 或补齐其他成员后替换原包：补丁内所有成员一律平铺，脚本与字体、配置等非脚本资源没有区别。**当前 KAG 入口只收集脚本；非脚本资源需通过相应资源 writer 加入补丁。补丁挂载与已有补丁优先级按 [通用工作流](workflow.md#译文回注必须使用-patchxp3-增量补丁) 处理。
 
 译文按同名放回 `gt_output` 后由 agent 回写。缺字时检查实际字体和归档资源；普通 TTF 不能仅改名当作 TFT。
