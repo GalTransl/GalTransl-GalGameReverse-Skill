@@ -229,6 +229,23 @@ python -m python.engines.escude_pack "提取工作区" "新的打包输出目录
 python -m python.engines.escude_pack "提取工作区" "新的测试包目录" --verify-edits
 ```
 
+### 回读打包结果
+
+打包输出只有 `script.bin`，不必手工补 `data.bin` 拼游戏目录。用工作区加打包目录直接回读：
+
+```text
+python -m python.engines.escude_extract "提取工作区" "新的回读目录" --readback "打包输出目录"
+```
+
+打包目录中有的归档（`script.bin`，可选 `data.bin`）从该目录读取，缺少的从工作区 `original/archives/` 读取并按提取报告核对大小和哈希。打包目录只允许 `script.bin`、`data.bin` 和 `verification.json`，其他文件、子目录或链接一律拒绝；成员名单和顺序须与工作区一致，然后执行与提取入口相同的完整解析和往返检查。回读目录不能位于工作区或打包目录之内，这两个目录都不会被写入。`新的回读目录/gt_input` 可直接交给公共 JIS `finalize`：
+
+```text
+python -m python.common.jis_workflow prepare "提取工作区" "JIS准备目录" --encoding cp932
+python -m python.engines.escude_pack "JIS准备目录/workspace" "重建目录"
+python -m python.engines.escude_extract "提取工作区" "回读目录" --readback "重建目录"
+python -m python.common.jis_workflow finalize "JIS准备目录" "重建目录" "回读目录/gt_input" "交付目录"
+```
+
 ### 验证与来源
 
 回填后核对消息池、代码引用、姓名上下文及全部未改成员；格式往返与游戏加载、字体显示分开验证。

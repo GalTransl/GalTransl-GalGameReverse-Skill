@@ -54,6 +54,51 @@ class EscudePackTests(unittest.TestCase):
                 pack(work, root / 'translated')
             self.assertEqual(pack(work, root / 'smoke', verify_edits=True)['mode'], 'smoke-test')
 
+    def test_readback_merges_rebuilt_script_with_workspace_data(self):
+        from python.common.jis_workflow import finalize, prepare
+        from python.engines.escude_extract import readback
+
+        def snapshot(path):
+            return {p.relative_to(path).as_posix(): p.read_bytes() for p in path.rglob('*') if p.is_file()}
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            game = fixture.EscudeExtractTests().setup_game(root)
+            work = root / 'work'
+            extract(game, work)
+            rows = json.loads((work / 'gt_input/scene.json').read_bytes())
+            rows[0]['message'] = '中文测试<r>第二行'
+            (work / 'gt_output/scene.json').write_text(json.dumps(rows, ensure_ascii=False), encoding='utf-8')
+            prepare(work, root / 'prep', encoding='cp932', proxy_policy='unused')
+            pack(root / 'prep/workspace', root / 'rebuilt')
+            self.assertEqual(sorted(p.name for p in (root / 'rebuilt').iterdir()), ['script.bin', 'verification.json'])
+            before = snapshot(work), snapshot(root / 'rebuilt')
+            report = readback(work, root / 'rebuilt', root / 'readback')
+            self.assertEqual(report['readback']['from_rebuilt'], ['script.bin'])
+            self.assertEqual(report['readback']['from_workspace'], ['data.bin'])
+            self.assertEqual(before, (snapshot(work), snapshot(root / 'rebuilt')))
+            proxy = json.loads((root / 'prep/workspace/gt_output/scene.json').read_bytes())
+            self.assertEqual(json.loads((root / 'readback/gt_input/scene.json').read_bytes()), proxy)
+            result = finalize(root / 'prep', root / 'rebuilt', root / 'readback/gt_input', root / 'deliver')
+            self.assertEqual(result['verified_files'], 1)
+            # Output inside an input, unknown and missing resources are refused without publishing.
+            for target in (root / 'rebuilt/rb', work / 'rb'):
+                with self.assertRaisesRegex(ValueError, 'outside'):
+                    readback(work, root / 'rebuilt', target)
+                self.assertFalse(target.exists())
+            (root / 'rebuilt/extra.dat').write_bytes(b'x')
+            with self.assertRaisesRegex(ValueError, 'unknown files'):
+                readback(work, root / 'rebuilt', root / 'bad')
+            (root / 'only-report').mkdir()
+            (root / 'only-report/verification.json').write_text('{}')
+            with self.assertRaisesRegex(ValueError, 'no script.bin'):
+                readback(work, root / 'only-report', root / 'bad')
+            self.assertFalse((root / 'bad').exists())
+            (work / 'original/archives/data.bin').write_bytes(b'tampered')
+            (root / 'rebuilt/extra.dat').unlink()
+            with self.assertRaisesRegex(ValueError, 'workspace original changed'):
+                readback(work, root / 'rebuilt', root / 'bad')
+
     def test_tampered_inputs_and_invalid_translations_never_publish(self):
         for case in ('manifest', 'source', 'unknown', 'name', 'encoding', 'controls'):
             with self.subTest(case=case), tempfile.TemporaryDirectory() as tmp:
