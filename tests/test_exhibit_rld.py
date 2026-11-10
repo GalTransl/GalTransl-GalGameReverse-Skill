@@ -284,6 +284,97 @@ class WorkspaceTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 rebuild(work, root / "bad")
 
+    def test_readback_merges_changed_members_over_workspace(self):
+        from python.common.jis_workflow import finalize, prepare
+        from python.engines.exhibit_extract import readback
+
+        def snapshot(path):
+            return {p.relative_to(path).as_posix(): p.read_bytes() for p in path.rglob("*") if p.is_file()}
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "game/rld").mkdir(parents=True)
+            (root / "game/rld/start.rld").write_bytes(crypt(script(op(28, ("N", "最初"))), 23))
+            (root / "game/rld/next.rld").write_bytes(crypt(script(op(28, ("N", "次"))), 23))
+            (root / "game/rld/system.rld").write_bytes(crypt(script(op(0x1234), tag=b""), 23))
+            work = root / "work"
+            extract(root / "game", work, seed=23)
+            (work / "gt_output/start.json").write_bytes(dump_rows([{"name": "N", "message": "测试"}]))
+            prepare(work, root / "prep", encoding="cp932", proxy_policy="unused")
+            rebuild(root / "prep/workspace", root / "packed", jis_mode="off")
+            self.assertEqual(sorted(p.name for p in (root / "packed/rld").iterdir()), ["start.rld"])
+            before = snapshot(work), snapshot(root / "packed")
+            result = readback(work, root / "packed", root / "readback")
+            self.assertEqual(result["readback"]["from_rebuilt"], ["start.rld"])
+            self.assertEqual(result["readback"]["from_workspace"], 2)
+            self.assertEqual(sorted(p.name for p in (root / "readback/gt_input").iterdir()), ["next.json", "start.json"])
+            self.assertEqual(before, (snapshot(work), snapshot(root / "packed")))
+            delivered = finalize(root / "prep", root / "packed", root / "readback/gt_input", root / "deliver")
+            self.assertEqual(delivered["verified_files"], 2)
+            for target in (root / "packed/rb", work / "rb"):
+                with self.assertRaisesRegex(ValueError, "outside"):
+                    readback(work, root / "packed", target)
+            (root / "packed/rld/unknown.rld").write_bytes(b"x")
+            with self.assertRaisesRegex(ValueError, "unknown files"):
+                readback(work, root / "packed", root / "bad")
+            (root / "packed/rld/unknown.rld").unlink()
+            (root / "packed/stray.txt").write_bytes(b"x")
+            with self.assertRaisesRegex(ValueError, "unknown files"):
+                readback(work, root / "packed", root / "bad")
+            (root / "packed/stray.txt").unlink()
+            (work / "original/encrypted/next.rld").write_bytes(b"tampered")
+            with self.assertRaisesRegex(ValueError, "hash/size"):
+                readback(work, root / "packed", root / "bad")
+            self.assertFalse((root / "bad").exists())
+
+    def test_eudc_reserved_codepoints(self):
+        def tte(mapped):
+            # Minimal sfnt with a (3,1) format-4 cmap mapping ``mapped`` to glyphs 1..n.
+            start, end = mapped[0], mapped[-1]
+            segs = [(start, end, (1 - start) & 0xFFFF), (0xFFFF, 0xFFFF, 1)]
+            n = len(segs)
+            sub = struct.pack(">HHHHHHH", 4, 16 + 8 * n, 0, 2 * n, 0, 0, 0)
+            sub += b"".join(struct.pack(">H", e) for _, e, _ in segs) + b"\0\0"
+            sub += b"".join(struct.pack(">H", s) for s, _, _ in segs)
+            sub += b"".join(struct.pack(">H", d) for _, _, d in segs) + b"\0\0" * n
+            cmap = struct.pack(">HHHHI", 0, 1, 3, 1, 12) + sub
+            return struct.pack(">IHHHH", 0x00010000, 1, 16, 0, 0) + struct.pack(">4sIII", b"cmap", 0, 28, len(cmap)) + cmap
+
+        heart = "\ue00a"
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "game/rld").mkdir(parents=True)
+            (root / "game/rld/start.rld").write_bytes(script(op(28, ("N", "心" + heart)), op(191, ("\ue700",))))
+            (root / "game/ExHIBIT.ini").write_bytes(b"[setting]\r\nCLASS=x\r\nEUDC=gaiji.tte\r\n")
+            (root / "game/gaiji.tte").write_bytes(tte([0xE000, 0xE001, 0xE002]))
+            info = extract(root / "game", root / "work")
+            reserved = ["U+E000-U+E002", 0xE00A, 0xE700]
+            self.assertEqual(info["reserved_codepoints"], reserved)
+            self.assertEqual(info["eudc"]["method"], "text-private-use+tte-cmap")
+            manifest = json.loads((root / "work/metadata/start.json").read_bytes())
+            self.assertEqual(manifest["settings"]["reserved_codepoints"], reserved)
+            # The declaration survives rebuild's manifest check and readback.
+            self.assertEqual(rebuild(root / "work", root / "packed")["changed_members"], [])
+            (root / "work/gt_output/start.json").write_bytes(dump_rows([{"name": "N", "message": "心心" + heart}]))
+            rebuild(root / "work", root / "packed2", jis_mode="off")
+            from python.engines.exhibit_extract import readback
+            readback(root / "work", root / "packed2", root / "readback")
+            again = json.loads((root / "readback/metadata/start.json").read_bytes())
+            self.assertEqual(again["settings"]["reserved_codepoints"], reserved)
+            # Missing or unparsable font: conservative full private-use block.
+            (root / "game/gaiji.tte").write_bytes(b"not a font")
+            info = extract(root / "game", root / "work-fallback")
+            self.assertEqual(info["eudc"]["method"], "text-private-use+full-private-use-area")
+            self.assertEqual(info["reserved_codepoints"], ["U+E000-U+F8FF"])
+            self.assertEqual(info["eudc"]["reserved_count"], 0x1900)
+            self.assertIn("error", info["eudc"]["fonts"][0])
+            # No EUDC line: no declaration at all.
+            (root / "game/ExHIBIT.ini").write_bytes(b"[setting]\r\nCLASS=x\r\n")
+            info = extract(root / "game", root / "work-none")
+            self.assertNotIn("reserved_codepoints", info)
+            manifest = json.loads((root / "work-none/metadata/start.json").read_bytes())
+            self.assertNotIn("reserved_codepoints", manifest["settings"])
+
     def test_jis_collision_does_not_publish(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

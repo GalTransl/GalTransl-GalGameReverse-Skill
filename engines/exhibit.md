@@ -39,6 +39,14 @@ python -m python.engines.exhibit_extract rebuild "游戏目录/游戏名_extract
 
 `rebuild`（别名 `pack`）只输出实际变化的 `rld/*.rld`，保留原文件名。未提供译文的成员不需要部署；未知译文文件名报错，避免静默漏回填。原文 JSON、manifest、配套定义或源文件改变则拒绝回写。输出目录须不存在或为普通空目录，拒绝覆盖非空目录。换行保护项调整后，旧 metadata 无法通过 manifest 比对；应从哈希验证通过的原件重新提取到新目录，再放回同名译文。
 
+回读 `rebuild` 结果不需要复制 `original/encrypted`、INI 或 `resident.dll` 拼验证副本：
+
+```text
+python -m python.engines.exhibit_extract readback "游戏目录/游戏名_extract" "回注结果目录" "新的回读目录"
+```
+
+`readback` 用回注目录的 `rld/<成员名>` 替换对应成员，其余成员取自工作区 `original/encrypted` 并核对报告中的大小和哈希；seed 取自工作区报告。回注目录只允许原清单中的 `rld/*.rld`，以及 `rebuild` 自身写出的 `reports/rebuild.json`、`README.txt` 和旧 `auto` 模式的 JIS 配置/hook 文件，其他文件或链接拒绝。全部成员重新解密、完整解析并做无改动往返，输出 `gt_input/`、`metadata/` 与 `reports/readback.json`。回读目录不能位于工作区或回注目录之内，这两个目录都不会被写入。
+
 ## v3/tag256 完整格式
 
 | 偏移 | 内容 |
@@ -93,12 +101,22 @@ writer 用解析得到的原始字节跨度替换允许的文本，不重编码�
 - 其他 op21 布局明确报错以促成适配，不默默漏掉选项；op191 不能笼统当作选择指令。
 - 目前是普通显示文本 profile：编辑必须保留换行以外的 C0 控制字符及其顺序；换行可以比原文少，但不能新增或跨其他控制符移动。禁止 NUL 和选项内 TAB。遇到 `\\ [] {} <> $ %` 这类未分类语法，原样回写可行，编辑时须先补充控制码规则，不假设它们都是装饰文字。
 - 正文里的**全角变量**写作全角 `＄` 加全角或半角字母，例如 `＄Ｎ`，运行时替换为玩家输入的名字等值。`＄` 后连续的字母整体作为一个受保护 token，与 C0 控制符放在同一序列比较：译文须保留相同 token、相同数量与相对顺序，不能删除、改字母或调换。紧跟变量的译文不要直接接拉丁字母，否则会被并入 token 而被拒绝。半角 ASCII `$` 仍属未分类语法，含它的行只能原样保留。
-- **私用区外字**：INI 中 `EUDC=*.tte` 表示游戏加载外字字体，正文中的私用区字符 U+E000–U+F8FF 是外字字形（CP932 中 U+E000–U+E757 对应用户区 `F040`–`F9FC`），例如心形符号。原文行已有的私用区字符同样作为受保护 token，数量与顺序须一致。原文行未出现的私用区字符按普通文字处理，这是为了兼容 JIS 代理字。但游戏使用外字时这些码位已被外字字体占用，JIS 代理不能选用私用区码位，否则会显示成外字图形；用公共 JIS 流程的私用区代理（`unused` 策略）前先检查 INI，存在 `EUDC=` 时不要采用该策略。
+- **私用区外字**：INI 中 `EUDC=*.tte` 表示游戏加载外字字体，正文中的私用区字符 U+E000–U+F8FF 是外字字形（CP932 中 U+E000–U+E757 对应用户区 `F040`–`F9FC`），例如心形符号。原文行已有的私用区字符同样作为受保护 token，数量与顺序须一致。原文行未出现的私用区字符按普通文字处理，这是为了兼容 JIS 代理字。但游戏使用外字时这些码位已被外字字体占用，JIS 代理不能选用私用区码位，否则会显示成外字图形；用公共 JIS 流程的私用区代理（`unused` 策略）前先检查 INI。
+- **外字保留码位**：`extract` 读取 INI（`--ini` 或游戏根目录 `ExHIBIT.ini`），有 `EUDC=` 时在每个 manifest 的 `settings.reserved_codepoints` 写入保留码位，单个码位写整数，连续段写 `"U+XXXX-U+YYYY"`。范围包括全部脚本字符串中出现的私用区字符，再加上外字字体 cmap 中实际有字形的私用区码位；字体文件不在游戏目录内、缺失或 cmap 无法安全解析时，保守地保留整段 U+E000–U+F8FF。`reports/extraction.json` 的 `eudc` 记录字体路径、哈希、所用方法和失败原因。公共 JIS 流程会读取该键，避免把这些码位用作代理。
 - 受保护 token 已写入 manifest；规则调整后旧 metadata 无法通过 manifest 比对，须从哈希验证通过的原件重新提取到新目录。
 
 ## 中文回注与部署
 
-新任务优先走 [公共 JSON JIS 流程](../guides/jis-substitution.md)，原有 `rebuild` 使用 `--jis-mode off` 读取公共层生成的工作副本，再重新提取实际产物交给公共层核对。不再为此扩展引擎 JIS 分支；以下 `auto` 接口保留兼容既有调用。
+新任务优先走 [公共 JSON JIS 流程](../guides/jis-substitution.md)，原有 `rebuild` 使用 `--jis-mode off` 读取公共层生成的工作副本，再用 `readback` 重新提取实际产物交给公共层核对：
+
+```text
+python -m python.common.jis_workflow prepare "提取工作区" "JIS准备目录" --encoding cp932
+python -m python.engines.exhibit_extract rebuild "JIS准备目录/workspace" "重建目录" --jis-mode off
+python -m python.engines.exhibit_extract readback "提取工作区" "重建目录" "回读目录"
+python -m python.common.jis_workflow finalize "JIS准备目录" "重建目录" "回读目录/gt_input" "交付目录"
+```
+
+不再为此扩展引擎 JIS 分支；以下 `auto` 接口保留兼容既有调用。
 
 `rebuild` 默认 `--jis-mode auto`：调用公共 JIS 替换模块，在整个脚本集合保留原字符，检查代理字符冲突，真实中文只在可写文本编码边界转换。原始 JSON 保留中文；重建后既核对 CP932 存储文本，也反向核对实际中文。冲突或缺映射时报错，不有损替换。需要纯 CP932 时可显式 `--jis-mode off`。
 
@@ -110,7 +128,7 @@ writer 用解析得到的原始字节跨度替换允许的文本，不重编码�
 
 ## 验证与新方言适配
 
-- 合成测试：[tests/test_exhibit_rld.py](../tests/test_exhibit_rld.py)；旧片段测试保留在 [tests/test_engines_primary.py](../tests/test_engines_primary.py)。覆盖旧 MT 向量、加密端点/增长、完整头与末条指令、未知 opcode 保留、CP932 原字节、姓名/选项、静态 seed、JIS 和工作区校验。
+- 合成测试：[tests/test_exhibit_rld.py](../tests/test_exhibit_rld.py)；旧片段测试保留在 [tests/test_engines_primary.py](../tests/test_engines_primary.py)。覆盖旧 MT 向量、加密端点/增长、完整头与末条指令、未知 opcode 保留、CP932 原字节、姓名/选项、静态 seed、JIS、工作区校验、回读合并与 EUDC 保留码位。
 - 新方言按“明文头 → 密钥来源 → 加密区间 → 指令起点/count/EOF → 显示语义 → 增长回写”分层定位。缺某个 opcode 名称不妨碍可验证的结构读取；能读结构也不代表所有 UI 文本均可翻译。
 - 无法完整解析时保留有限头部、失败偏移、参数数量及版本证据。对齐问题不以吞掉尾部或减小 count 掩盖；密钥问题不靠有损 CP932 解码隐藏。
 - 实际运行记录、游戏名和台词仅保存在各游戏结果目录，不写入本页或 provenance。

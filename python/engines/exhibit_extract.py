@@ -1,9 +1,12 @@
-"""Extract/rebuild loose ExHibit v3 RLDs into a new, self-contained workspace."""
+"""Extract/rebuild/readback loose ExHibit v3 RLDs; every result goes to a new directory."""
 import argparse
 from collections import Counter
 import json
-from pathlib import Path
+import os
+from pathlib import Path, PureWindowsPath
+import re
 import stat
+import struct
 
 from ..common.contract import dump_rows, load_json, sha256
 from ..common.jis_substitution import JisSubstitution
@@ -34,6 +37,235 @@ def flat_names(names):
         raise ValueError("RLD workspace requires unique flat filenames")
 
 
+PUA_FIRST, PUA_LAST = 0xE000, 0xF8FF
+MAX_FONT = 32 << 20
+# Files that ``rebuild`` writes besides rld/*.rld (JIS ones only in legacy auto mode).
+REBUILD_SIDECARS = frozenset({"reports/rebuild.json", "README.txt", "uif_config.json", "jis-mapping.json",
+                              "JIS-部署说明.txt", "winmm.dll", "version.dll", "version.ini"})
+
+
+def eudc_fonts(ini_raw):
+    """Return EUDC= values from ExHIBIT.ini bytes (any section, comments ignored)."""
+    values = []
+    for match in re.finditer(rb"^[ \t]*EUDC[ \t]*=[ \t]*([^\r\n;]*)", ini_raw, re.I | re.M):
+        value = match.group(1).strip().strip(b'"').decode("cp932", "strict").strip()
+        if value and value not in values:
+            values.append(value)
+    return values
+
+
+def tte_codepoints(data):
+    """Private-use code points with a non-zero glyph in a TrueType (.tte) cmap.
+
+    Bounded sfnt reader for Unicode format 4/12 subtables only; anything else
+    raises ValueError so the caller falls back to the whole private-use area.
+    """
+    if len(data) < 12 or len(data) > MAX_FONT:
+        raise ValueError("EUDC font size outside budget")
+    version, count = struct.unpack_from(">IH", data, 0)
+    if version not in (0x00010000, 0x74727565) or not 1 <= count <= 512 or 12 + 16 * count > len(data):
+        raise ValueError("not a TrueType sfnt table directory")
+    cmap = None
+    for i in range(count):
+        tag, _, offset, length = struct.unpack_from(">4sIII", data, 12 + 16 * i)
+        if tag == b"cmap":
+            if offset + length > len(data) or length < 4:
+                raise ValueError("cmap table outside font")
+            cmap = data[offset:offset + length]
+    if cmap is None:
+        raise ValueError("font has no cmap table")
+    _, tables = struct.unpack_from(">HH", cmap, 0)
+    if tables > 64 or 4 + 8 * tables > len(cmap):
+        raise ValueError("cmap subtable directory outside table")
+    points, parsed = set(), False
+    for i in range(tables):
+        platform, encoding, offset = struct.unpack_from(">HHI", cmap, 4 + 8 * i)
+        if not (platform == 0 or (platform == 3 and encoding in (1, 10))) or offset + 4 > len(cmap):
+            continue
+        fmt = struct.unpack_from(">H", cmap, offset)[0]
+        if fmt == 4:
+            length = struct.unpack_from(">H", cmap, offset + 2)[0]
+            sub = cmap[offset:offset + length]
+            if len(sub) != length or length < 16:
+                raise ValueError("cmap format 4 outside table")
+            segments = struct.unpack_from(">H", sub, 6)[0] // 2
+            if 16 + 8 * segments > length:
+                raise ValueError("cmap format 4 segments outside table")
+            ends = struct.unpack_from(f">{segments}H", sub, 14)
+            starts = struct.unpack_from(f">{segments}H", sub, 16 + 2 * segments)
+            deltas = struct.unpack_from(f">{segments}h", sub, 16 + 4 * segments)
+            range_at = 16 + 6 * segments
+            for k, (start, end, delta) in enumerate(zip(starts, ends, deltas)):
+                range_offset = struct.unpack_from(">H", sub, range_at + 2 * k)[0]
+                for code in range(max(start, PUA_FIRST), min(end, PUA_LAST) + 1):
+                    if range_offset:
+                        at = range_at + 2 * k + range_offset + 2 * (code - start)
+                        if at + 2 > length:
+                            raise ValueError("cmap format 4 glyph index outside table")
+                        glyph = struct.unpack_from(">H", sub, at)[0]
+                        glyph = (glyph + delta) & 0xFFFF if glyph else 0
+                    else:
+                        glyph = (code + delta) & 0xFFFF
+                    if glyph:
+                        points.add(code)
+            parsed = True
+        elif fmt == 12:
+            if offset + 16 > len(cmap):
+                raise ValueError("cmap format 12 header outside table")
+            length, _, groups = struct.unpack_from(">III", cmap, offset + 4)
+            if offset + length > len(cmap) or 16 + 12 * groups > length:
+                raise ValueError("cmap format 12 groups outside table")
+            for k in range(groups):
+                start, end, glyph = struct.unpack_from(">III", cmap, offset + 16 + 12 * k)
+                if end < start:
+                    raise ValueError("cmap format 12 group reversed")
+                for code in range(max(start, PUA_FIRST), min(end, PUA_LAST) + 1):
+                    if glyph + code - start:
+                        points.add(code)
+            parsed = True
+    if not parsed:
+        raise ValueError("no Unicode format 4/12 cmap subtable")
+    return points
+
+
+def eudc_reservation(ini_raw, base, sources, seeds):
+    """Return (report, reserved_codepoints) when the INI declares EUDC, else (None, None).
+
+    Reserve every private-use character in the parsed scripts plus the EUDC
+    font's mapped private-use code points; without a safely parsed cmap,
+    reserve the whole U+E000..U+F8FF block.
+    """
+    values = eudc_fonts(ini_raw) if ini_raw is not None else []
+    if not values:
+        return None, None
+    text = set()
+    for name, raw in sources.items():
+        for op in parse(crypt(raw, seeds[name])).ops:
+            text.update(ord(c) for s in op.strings for c in s if PUA_FIRST <= ord(c) <= PUA_LAST)
+    fonts, font_points = [], set()
+    for value in values:
+        relative = PureWindowsPath(value)
+        info = {"ini_value": value}
+        if relative.is_absolute() or relative.drive or ".." in relative.parts:
+            info["error"] = "font path is not inside the game directory"
+        else:
+            path = Path(base, *relative.parts)
+            try:
+                raw = read_bounded(path, MAX_FONT)
+                info.update(path=str(path), sha256=sha256(raw))
+                found = tte_codepoints(raw)
+                if not found:
+                    raise ValueError("cmap maps no private-use code points")
+                info["cmap_private_use"] = len(found)
+                font_points |= found
+            except (OSError, ValueError) as exc:
+                info["error"] = str(exc)
+        fonts.append(info)
+    if all("cmap_private_use" in f for f in fonts):
+        method = "text-private-use+tte-cmap"
+    else:
+        method = "text-private-use+full-private-use-area"
+        font_points = set(range(PUA_FIRST, PUA_LAST + 1))
+    points = sorted(text | font_points)
+    reserved = compact_codepoints(points)
+    report = {"ini_values": values, "fonts": fonts, "method": method,
+              "text_private_use": sorted(text), "reserved_count": len(points),
+              "note": "JIS proxies must avoid reserved_codepoints; EUDC glyphs occupy them"}
+    return report, reserved
+
+
+def compact_codepoints(points):
+    """Sorted code points as JSON items: int for a single point, "U+XXXX-U+YYYY" for a run."""
+    items, run = [], []
+    for code in sorted(set(points)) + [None]:
+        if run and code == run[-1] + 1:
+            run.append(code)
+            continue
+        if run:
+            items.append(run[0] if len(run) == 1 else f"U+{run[0]:04X}-U+{run[-1]:04X}")
+        run = [code] if code is not None else []
+    return items
+
+
+RESERVED_ITEM = re.compile(r"U\+[0-9A-F]{4,6}-U\+[0-9A-F]{4,6}")
+
+
+def with_reserved(manifest, reserved):
+    """Manifest as written to metadata/: settings.reserved_codepoints when EUDC is declared."""
+    if reserved is None:
+        return manifest
+    if (not isinstance(reserved, list)
+            or any(not ((type(c) is int and 0 <= c <= 0x10FFFF)
+                        or (isinstance(c, str) and RESERVED_ITEM.fullmatch(c))) for c in reserved)):
+        raise ValueError("invalid reserved_codepoints in workspace report")
+    return dict(manifest, settings=dict(manifest["settings"], reserved_codepoints=reserved))
+
+
+def _inside(path, root):
+    path, root = os.path.normcase(os.path.abspath(path)), os.path.normcase(os.path.abspath(root))
+    return os.path.commonpath([path, root]) == root
+
+
+def _tree(directory, limit=8192):
+    """Relative posix names of ordinary files below directory; links refused."""
+    directory = Path(directory)
+    _check_existing_ancestors(directory)
+    found, pending = {}, [directory]
+    while pending:
+        for path in pending.pop().iterdir():
+            info = path.lstat()
+            if stat.S_ISLNK(info.st_mode) or getattr(info, "st_file_attributes", 0) & 0x400:
+                raise ValueError(f"linked entry in rebuilt directory: {path}")
+            if stat.S_ISDIR(info.st_mode):
+                pending.append(path)
+                continue
+            if len(found) >= limit:
+                raise ValueError("rebuilt directory has too many files")
+            found[path.relative_to(directory).as_posix()] = path
+    return found
+
+
+def _export_members(sources, seeds, *, smoke_test=False, reserved=None):
+    files, entries, row_count, json_count, growth = {}, [], 0, 0, []
+    unknown_names = Counter()
+    for name, raw in sources.items():
+        try:
+            kw = _kwargs(name, sources, seeds)
+            rows, manifest = export_rld(raw, seeds[name], **kw)
+            rebuilt = rebuild_rld(raw, seeds[name], rows, manifest, **kw)
+            if rebuilt != raw:
+                raise ValueError("no-edit encrypted bytes differ")
+            plain = crypt(raw, seeds[name])
+            script = parse(plain)
+            filename = Path(name).stem + ".json"
+            choices = sum(r["locator"]["kind"] == "choice" for r in manifest["records"])
+            entry = {"name": name, "seed": seeds[name], "sha256": sha256(raw), "size": len(raw),
+                     "commands": len(script.ops), "opcodes": dict(Counter(str(op.opcode) for op in script.ops)),
+                     "count": len(rows), "choices": choices, "status": "exported" if rows else "empty",
+                     "outputs": {"json": filename} if rows else {}}
+            entries.append(entry)
+            files[f"original/encrypted/{name}"] = raw
+            files[f"original/rld/{name}"] = plain
+            files[f"rebuilt/roundtrip/rld/{name}"] = rebuilt
+            for row, record in zip(rows, manifest["records"]):
+                if record["locator"].get("name_id") is not None and "name" not in row:
+                    unknown_names[str(record["locator"]["name_id"])] += 1
+            if rows:
+                files[f"gt_input/{filename}"] = dump_rows(rows)
+                files[f"metadata/{filename}"] = json_bytes(with_reserved(manifest, reserved))
+                row_count += len(rows)
+                json_count += 1
+                if smoke_test:
+                    changed = [dict(r) for r in rows]
+                    changed[0]["message"] += " ABC"
+                    modified = rebuild_rld(raw, seeds[name], changed, manifest, **kw)
+                    files[f"rebuilt/growth-test/rld/{name}"] = modified
+                    growth.append({"name": name, "row": 0, "suffix": " ABC", "size_delta": len(modified) - len(raw)})
+        except (ValueError, UnicodeError) as exc:
+            raise ValueError(f"RLD {name}: {exc}") from exc
+    return files, entries, row_count, json_count, growth, unknown_names
+
+
 def _kwargs(name, sources, seeds):
     definitions = next((key for key in sources if key.casefold() == "defchara.rld"), None)
     kw = {"filename": name}
@@ -61,6 +293,12 @@ def extract(source, output, *, exe=None, ini=None, resident=None, scripts_dir=No
         sources[path.name] = raw
     recovery = {"scenario": {"method": "explicit-seed"}, "machine": None}
     evidence = {}
+    # The INI is read whenever present: seed recovery needs it, and EUDC= marks
+    # private-use code points that JIS proxies must not reuse.
+    ini_path = Path(ini) if ini else source / "ExHIBIT.ini"
+    ini_raw = read_bounded(ini_path, 1 << 20) if ini or ini_path.is_file() else None
+    if ini_raw is not None:
+        evidence["ini"] = {"path": str(ini_path), "sha256": sha256(ini_raw)}
     if exe is not None:
         exe_raw = read_bounded(exe, 128 << 20)
         recovery["machine"] = PE(exe_raw).machine
@@ -75,11 +313,10 @@ def extract(source, output, *, exe=None, ini=None, resident=None, scripts_dir=No
         except ValueError:
             if exe is None:
                 raise ValueError("encrypted RLD: provide --exe for bitmap/INI recovery or --seed") from None
-            ini_path = Path(ini) if ini else source / "ExHIBIT.ini"
-            ini_raw = read_bounded(ini_path, 1 << 20)
+            if ini_raw is None:
+                ini_raw = read_bounded(ini_path, 1 << 20)  # reports the missing file
             seed, detail = scenario_seed(exe_raw, ini_raw)
             recovery["scenario"] = detail
-            evidence["ini"] = {"path": str(ini_path), "sha256": sha256(ini_raw)}
     definition = next((name for name in sources if name.casefold() == "def.rld"), None)
     if definition and def_seed is None:
         try:
@@ -97,51 +334,21 @@ def extract(source, output, *, exe=None, ini=None, resident=None, scripts_dir=No
     seeds = {name: def_seed if name == definition else seed for name in sources}
     flat_names([Path(name).stem + ".json" for name in sources])
     files = {"gt_output/.keep": b""}
-    if "ini_raw" in locals():
+    if ini_raw is not None:
         files["original/ExHIBIT.ini"] = ini_raw
-    entries, row_count, json_count, growth = [], 0, 0, []
-    unknown_names = Counter()
-    for name, raw in sources.items():
-        try:
-            kw = _kwargs(name, sources, seeds)
-            rows, manifest = export_rld(raw, seeds[name], **kw)
-            rebuilt = rebuild_rld(raw, seeds[name], rows, manifest, **kw)
-            if rebuilt != raw:
-                raise ValueError("no-edit encrypted bytes differ")
-            plain = crypt(raw, seeds[name])
-            script = parse(plain)
-            filename = Path(name).stem + ".json"
-            choices = sum(r["locator"]["kind"] == "choice" for r in manifest["records"])
-            entry = {"name": name, "seed": seeds[name], "sha256": sha256(raw), "size": len(raw),
-                     "commands": len(script.ops), "opcodes": dict(Counter(str(op.opcode) for op in script.ops)),
-                     "count": len(rows), "choices": choices, "status": "exported" if rows else "empty",
-                     "outputs": {"json": filename} if rows else {}}
-            entries.append(entry)
-            files[f"original/encrypted/{name}"] = raw
-            files[f"original/rld/{name}"] = plain
-            files[f"rebuilt/roundtrip/rld/{name}"] = rebuilt
-            for row, record in zip(rows, manifest["records"]):
-                if record["locator"].get("name_id") is not None and "name" not in row:
-                    unknown_names[str(record["locator"]["name_id"])] += 1
-            if rows:
-                files[f"gt_input/{filename}"] = dump_rows(rows)
-                files[f"metadata/{filename}"] = json_bytes(manifest)
-                row_count += len(rows)
-                json_count += 1
-                if smoke_test:
-                    changed = [dict(r) for r in rows]
-                    changed[0]["message"] += " ABC"
-                    modified = rebuild_rld(raw, seeds[name], changed, manifest, **kw)
-                    files[f"rebuilt/growth-test/rld/{name}"] = modified
-                    growth.append({"name": name, "row": 0, "suffix": " ABC", "size_delta": len(modified) - len(raw)})
-        except (ValueError, UnicodeError) as exc:
-            raise ValueError(f"RLD {name}: {exc}") from exc
+    eudc, reserved = eudc_reservation(ini_raw, ini_path.parent, sources, seeds)
+    member_files, entries, row_count, json_count, growth, unknown_names = _export_members(
+        sources, seeds, smoke_test=smoke_test, reserved=reserved)
+    files.update(member_files)
     report = {"engine": "exhibit", "profile": PROFILE, "source_directory": str(directory),
               "script_encoding": "cp932", "json_encoding": "utf-8", "members": entries,
               "rows": row_count, "json_files": json_count, "choices": sum(e["choices"] for e in entries),
               "unresolved_name_ids": dict(unknown_names), "identity_verified": len(entries),
               "growth_tests": growth, "keys": recovery, "key_evidence": evidence,
               "runtime_verified": False, "text_scope": "op28 dialogue; op21 TAB/1010 choices; other strings preserved"}
+    if eudc is not None:
+        report["eudc"] = eudc
+        report["reserved_codepoints"] = reserved
     files["reports/extraction.json"] = json_bytes(report)
     files["README.txt"] = ("ExHibit RLD 提取结果\n\n"
         "gt_input：UTF-8 翻译输入，保留全部行与顺序；姓名位于正文上方。\n"
@@ -191,13 +398,15 @@ def rebuild(workspace, output, *, jis_mode="auto"):
     if available - expected_files:
         raise ValueError("unmatched translation filenames")
     files, changed = {}, []
+    reserved = report.get("reserved_codepoints")
     for name, raw in sources.items():
         kw = _kwargs(name, sources, seeds)
         rows, manifest = export_rld(raw, seeds[name], **kw)
         filename = Path(name).stem + ".json"
         if rows:
             if (load_json(read_bounded(workspace / "gt_input" / filename)) != rows
-                    or load_json(read_bounded(workspace / "metadata" / filename)) != manifest):
+                    or load_json(read_bounded(workspace / "metadata" / filename))
+                    != with_reserved(manifest, reserved)):
                 raise ValueError(f"original JSON or manifest changed: {filename}")
         if filename in available:
             translated = load_json(read_bounded(workspace / "gt_output" / filename))
@@ -223,6 +432,67 @@ def rebuild(workspace, output, *, jis_mode="auto"):
     return result
 
 
+def readback(workspace, rebuilt, output):
+    """Re-extract a ``rebuild`` result merged over the workspace originals.
+
+    rebuilt/rld/<name> replaces that member; every other member comes from
+    workspace original/encrypted after its recorded hash check. Seeds come from
+    the workspace report, so no EXE/INI/resident.dll copy is needed. Unknown
+    files in ``rebuilt`` are refused; nothing is written to either input.
+    """
+    workspace, rebuilt, output = Path(workspace), Path(rebuilt), Path(output)
+    validate_new_tree_destination(output)
+    for root in (workspace, rebuilt):
+        if _inside(output, root) or _inside(root, output):
+            raise ValueError(f"readback output must be outside {root}")
+    report = load_json(read_bounded(workspace / "reports/extraction.json"))
+    if report.get("engine") != "exhibit" or report.get("profile") != PROFILE:
+        raise ValueError("unsupported ExHibit workspace profile")
+    members = report["members"]
+    flat_names([e["name"] for e in members])
+    if not 1 <= len(members) <= 4096:
+        raise ValueError("RLD workspace count outside budget")
+    known = {e["name"] for e in members}
+    replaced, unknown = {}, []
+    for relative, path in sorted(_tree(rebuilt).items()):
+        if relative.startswith("rld/") and relative[4:] in known:
+            replaced[relative[4:]] = read_bounded(path)
+        elif relative not in REBUILD_SIDECARS:
+            unknown.append(relative)
+    if unknown:
+        raise ValueError(f"unknown files in rebuilt directory: {unknown}")
+    if not replaced:
+        raise ValueError("rebuilt directory contains no rld/ member of this workspace")
+    sources, seeds, total = {}, {}, 0
+    for entry in members:
+        name = entry["name"]
+        if name in replaced:
+            raw = replaced[name]
+        else:
+            raw = read_bounded(workspace / "original/encrypted" / name)
+            if len(raw) != entry["size"] or sha256(raw) != entry["sha256"]:
+                raise ValueError(f"RLD source hash/size mismatch: {name}")
+        total += len(raw)
+        if total > 64 << 20:
+            raise ValueError("RLD source total exceeds 64 MiB budget")
+        sources[name], seeds[name] = raw, entry["seed"]
+    member_files, entries, row_count, json_count, _, unknown_names = _export_members(
+        sources, seeds, reserved=report.get("reserved_codepoints"))
+    files = {name: raw for name, raw in member_files.items() if name.startswith(("gt_input/", "metadata/"))}
+    result = {"engine": "exhibit", "profile": PROFILE, "mode": "readback", "members": entries,
+              "rows": row_count, "json_files": json_count, "identity_verified": len(entries),
+              "unresolved_name_ids": dict(unknown_names),
+              "readback": {"workspace": str(workspace), "rebuilt": str(rebuilt),
+                           "from_rebuilt": sorted(replaced),
+                           "from_workspace": len(members) - len(replaced)},
+              "runtime_verified": False}
+    files["reports/readback.json"] = json_bytes(result)
+    files["README.txt"] = ("ExHibit 回读结果：rebuilt 中的 rld 与工作区其余原件合并后重新解密、解析并导出。\n"
+        "gt_input 是实际回注产物的提取结果，仅用于核对（如 JIS finalize），不是翻译输入。\n").encode("utf-8")
+    write_new_tree(output, list(files.items()))
+    return result
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
@@ -238,10 +508,16 @@ def main():
     command.add_argument("workspace")
     command.add_argument("output", help="new result directory; only changed RLDs")
     command.add_argument("--jis-mode", choices=("auto", "off"), default="auto")
+    command = sub.add_parser("readback", help="re-extract a rebuild result merged over workspace originals")
+    command.add_argument("workspace")
+    command.add_argument("rebuilt", help="rebuild output directory (rld/*.rld)")
+    command.add_argument("output", help="new readback directory")
     args = vars(parser.parse_args())
     action = args.pop("command")
-    result = extract(**args) if action == "extract" else rebuild(**args)
-    summary = {k: result[k] for k in ("rows", "json_files", "identity_verified", "changed_members") if k in result}
+    actions = {"extract": extract, "readback": readback}
+    result = actions.get(action, rebuild)(**args)
+    summary = {k: result[k] for k in ("rows", "json_files", "identity_verified", "changed_members", "readback")
+               if k in result}
     print(json.dumps(summary, ensure_ascii=True))
 
 
