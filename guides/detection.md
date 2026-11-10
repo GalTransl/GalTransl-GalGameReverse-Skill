@@ -19,7 +19,7 @@
 
 ### 派生目录与目录兜底
 
-- 默认跳过派生目录：名字以 `_extract`（可带 `_2`、`-3` 等序号）或 `_Output` 结尾的目录，以及同时含 `gt_input` 与 `metadata`/`reports` 的工作区。被跳过的目录列在 `skipped_directories`（展示有上限，总数见 `skipped_directory_count`）。这些是旧提取结果或第三方解包输出，不是游戏原件；确需检查时加 `--include-derived`。被扫描的根目录本身不受此规则影响。
+- 默认跳过派生目录：名字以 `_extract` 结尾或带 `_extract_…` 后缀（如 `_extract_2`、`_extract_pack_…`）的目录，`…Extract…_Output` 形式的解包输出，同时含 `gt_input` 与 `metadata`/`reports` 的工作区，以及根下有 `verification.json` 的封包输出。仅以 `_output` 结尾的普通目录（如媒体插件的 `audio_output`）照常扫描。被跳过的目录列在 `skipped_directories`（展示有上限，总数见 `skipped_directory_count`）。这些是旧提取结果或第三方解包输出，不是游戏原件；确需检查时加 `--include-derived`。被扫描的根目录本身不受此规则影响。
 - 文件头未命中任何内置规则时，用前 4 字节查 [formats.json](../catalog/formats.json)，命中写入 `catalog_hints`（标签最多 5 个、总数有上限，统计见 `catalog_hint_stats`）。常见通用头（PNG、Ogg、RIFF、MZ、ZIP、CAB 等）和小于 `0x10000` 的版本/计数字不参与。它只是资料线索：用 `tools/query_catalog.py --magic` 继续查来源，不代表存在对应引擎页或已支持。
 - CLI 固定以 UTF-8 输出 JSON，不受控制台代码页影响。
 

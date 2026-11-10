@@ -103,25 +103,32 @@ class DetectionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
             (root / "data.xp3").write_bytes(b"XP3\r\n \n\x1a\x8bg\x01" + bytes(20))
-            for name in ("Game_extract", "Game_extract_2", "KrkrExtract_Output"):
+            derived = ("Game_extract", "Game_extract_2", "Game_extract_pack_20260101", "KrkrExtract_Output")
+            for name in derived:
                 (root / name).mkdir()
                 (root / name / "scene.ks").write_bytes(b"fixture")
             workspace = root / "renamed"
             for child in ("gt_input", "reports"):
                 (workspace / child).mkdir(parents=True)
             (workspace / "gt_input" / "a.ks").write_bytes(b"fixture")
-            plain = root / "gt_output"
-            plain.mkdir()
-            (plain / "b.ks").write_bytes(b"fixture")
+            packed = root / "deliver"
+            packed.mkdir()
+            (packed / "verification.json").write_bytes(b"{}")
+            (packed / "c.ks").write_bytes(b"fixture")
+            # Ordinary folders ending in "_output" (media plugins) and a plain
+            # gt_output must still be scanned.
+            for name in ("gt_output", "audio_output"):
+                (root / name).mkdir()
+                (root / name / "b.ks").write_bytes(b"fixture")
             report = detect_directory(root)
             skipped = {item["directory"] for item in report["skipped_directories"]}
-            self.assertEqual(skipped, {"Game_extract", "Game_extract_2", "KrkrExtract_Output", "renamed"})
-            self.assertEqual(report["skipped_directory_count"], 4)
+            self.assertEqual(skipped, set(derived) | {"renamed", "deliver"})
+            self.assertEqual(report["skipped_directory_count"], 6)
             files = {hit["file"] for hit in report["candidates"]["kirikiri"]}
-            self.assertEqual(files, {"data.xp3", "gt_output/b.ks"})
+            self.assertEqual(files, {"data.xp3", "gt_output/b.ks", "audio_output/b.ks"})
             full = detect_directory(root, include_derived=True)
             self.assertEqual(full["skipped_directories"], [])
-            self.assertEqual(full["candidate_stats"]["kirikiri"]["matched_files"], 6)
+            self.assertEqual(full["candidate_stats"]["kirikiri"]["matched_files"], 9)
             # The scanned root itself is never skipped, whatever its name.
             inner = detect_directory(root / "Game_extract")
             self.assertIn("kirikiri", inner["candidates"])

@@ -106,7 +106,9 @@ BASENAMES = {
 }
 
 # Derived trees: this skill's workspaces and common third-party dump folders.
-DERIVED_NAME = re.compile(r"(?i)(?:_extract(?:[_-]?\d+)?|(?<!^gt)_output)$")
+# "_output" alone is too common (media plugin folders such as audio_output),
+# so only extractor dump folders like "KrkrExtract_Output" match by name.
+DERIVED_NAME = re.compile(r"(?i)(?:_extract(?:[_-][\w-]*)?|extract\w*_output)$")
 MAX_SKIPPED_REPORTED = 50
 
 # Catalog fallback: generic media/container heads carry no engine signal.
@@ -183,13 +185,17 @@ def _asar_probe(path: Path, header: bytes, size: int):
 
 def _derived_reason(path: Path, name: str):
     if DERIVED_NAME.search(name):
-        return "derived output name (*_extract / *_Output)"
+        return "derived output name (*_extract* / *Extract*_Output)"
     try:
-        children = {entry.name.lower() for entry in os.scandir(path) if entry.is_dir(follow_symlinks=False)}
+        entries = list(os.scandir(path))
     except OSError:
         return None
+    children = {entry.name.lower() for entry in entries if entry.is_dir(follow_symlinks=False)}
+    files = {entry.name.lower() for entry in entries if entry.is_file(follow_symlinks=False)}
     if "gt_input" in children and ({"metadata", "reports"} & children):
         return "skill workspace (gt_input with metadata/reports)"
+    if "verification.json" in files:
+        return "skill pack output (verification.json)"
     return None
 
 
