@@ -733,7 +733,7 @@
     },
     {
       "id": "entis-gls",
-      "title": "Entis GLS：SRCXML 多语言消息、选择属性与 CSX 容器",
+      "title": "Entis GLS：NOA 归档、SRCXML 多语言消息与 CSX 容器",
       "aliases": [
         "EntisGLS",
         "Entis GLS",
@@ -743,7 +743,11 @@
       "document": "engines/entis-gls.md",
       "python_references": [
         "python/archives/entis_csx.py",
-        "python/engines/entis_gls.py"
+        "python/archives/entis_erisa.py",
+        "python/archives/entis_noa.py",
+        "python/engines/entis_extract.py",
+        "python/engines/entis_gls.py",
+        "python/engines/entis_srcxml.py"
       ],
       "public_symbols": {
         "python/archives/entis_csx.py": [
@@ -756,10 +760,50 @@
           "parse_image",
           "patch_image"
         ],
+        "python/archives/entis_erisa.py": [
+          "decode_nemesis",
+          "decode_bshf"
+        ],
+        "python/archives/entis_noa.py": [
+          "NoaEntry",
+          "NoaIndex",
+          "is_noa",
+          "read_index",
+          "read_index_file",
+          "xor_checksum",
+          "read_stored",
+          "decode_member",
+          "read_member",
+          "NoaMember",
+          "member_from_entry",
+          "build_noa"
+        ],
+        "python/engines/entis_extract.py": [
+          "read_cotomi_config",
+          "mount_order",
+          "extract",
+          "rebuild",
+          "readback",
+          "main"
+        ],
         "python/engines/entis_gls.py": [
           "Message",
           "extract_srcxml",
           "patch_srcxml"
+        ],
+        "python/engines/entis_srcxml.py": [
+          "Attribute",
+          "Element",
+          "Record",
+          "decode_value",
+          "encode_value",
+          "parse_document",
+          "languages",
+          "extract_records",
+          "name_policy",
+          "protected_tokens",
+          "escape_convention_mismatches",
+          "patch_records"
         ]
       },
       "scope": "version/stage-limited references; read the engine page",
@@ -1950,7 +1994,7 @@
     },
     {
       "id": "qlie",
-      "title": "QLIE：PACK 3.0 解包、ImoScripter 对白与模板重封包",
+      "title": "QLIE：PACK 3.0/3.1 解包、ImoScripter 对白与模板重封包",
       "aliases": [
         "qlie"
       ],
@@ -1967,22 +2011,34 @@
       "public_symbols": {
         "python/archives/qlie.py": [
           "hash_v3",
+          "hash_v31",
+          "checksum",
           "crypt_name",
+          "crypt_name31",
           "Entry",
           "Index",
+          "read_version",
           "read_index",
+          "key_data31",
           "decrypt",
           "encrypt",
           "decompress",
-          "read_member"
+          "read_member",
+          "infer_mode",
+          "external_key_required",
+          "member_keys"
         ],
         "python/archives/qlie_keys.py": [
           "pe_tform1",
+          "pe_rcdata_names",
+          "pe_rcdata",
           "icon_key_from_dfm",
           "game_key_from_pe"
         ],
         "python/archives/qlie_writer.py": [
           "hash13_tail",
+          "hash14_tail",
+          "lookup_tail",
           "rebuild"
         ],
         "python/engines/qlie.py": [
@@ -1991,6 +2047,10 @@
           "patch_qlie"
         ],
         "python/engines/qlie_extract.py": [
+          "QlieInputError",
+          "decode_script",
+          "encode_script",
+          "KeyMaterial",
           "extract",
           "main"
         ],
@@ -2072,7 +2132,9 @@
         "python/engines/renpy.py",
         "python/engines/renpy_extract.py",
         "python/engines/renpy_pickle.py",
-        "python/engines/renpy_rpyc.py"
+        "python/engines/renpy_rpyc.py",
+        "python/engines/renpy_source.py",
+        "python/engines/renpy_tl.py"
       ],
       "public_symbols": {
         "python/archives/rpa.py": [
@@ -2086,20 +2148,38 @@
         ],
         "python/engines/renpy.py": [
           "Target",
+          "say_value",
+          "encode_say",
+          "encode_python",
+          "python_value",
+          "characters",
           "extract",
           "patch"
         ],
         "python/engines/renpy_extract.py": [
+          "parsed",
           "json_bytes",
           "read_bounded",
           "flat_names",
+          "discover_loose",
+          "loader_hints",
           "scan",
           "load_archives",
+          "load_loose",
+          "resolve",
+          "gather",
           "context",
+          "config_hints",
+          "languages",
           "language",
           "names_for",
           "json_names",
+          "original_path",
+          "tl_path",
           "extract",
+          "tl_plan",
+          "tl_manifest",
+          "readme",
           "pack",
           "main"
         ],
@@ -2129,6 +2209,32 @@
           "TranslationErrors",
           "row_error",
           "patch"
+        ],
+        "python/engines/renpy_source.py": [
+          "decode",
+          "encode",
+          "collect",
+          "export",
+          "load",
+          "compiled_state",
+          "extract",
+          "pack",
+          "export_rows_only",
+          "speaker_name"
+        ],
+        "python/engines/renpy_tl.py": [
+          "MissingIdentifier",
+          "speaker_ok",
+          "literal_speaker",
+          "say_fields",
+          "say_code",
+          "plan",
+          "rows",
+          "render",
+          "parse",
+          "expected",
+          "verify",
+          "font_script"
         ]
       },
       "scope": "version/stage-limited references; read the engine page",

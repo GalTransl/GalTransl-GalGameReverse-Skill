@@ -29,7 +29,7 @@
 | EAGLS / ALIS：SCPACK、文本尾加密与标签修复 | [eagls](../engines/eagls.md) |
 | EmonEngine / EME | [emonengine](../engines/emonengine.md) |
 | Emote PSB：资源包读取与内嵌资源导出 | [emote](../engines/emote.md) |
-| Entis GLS：SRCXML 多语言消息、选择属性与 CSX 容器 | [entis-gls](../engines/entis-gls.md) |
+| Entis GLS：NOA 归档、SRCXML 多语言消息与 CSX 容器 | [entis-gls](../engines/entis-gls.md) |
 | Escu:de：ESC-ARC2、分离消息文件与 ESCR1_00 | [escude](../engines/escude.md) |
 | ExHibit：RLD v3 静态解密、文本提取与回注 | [exhibit](../engines/exhibit.md) |
 | Favorite：HCB u8 字符串长度与绝对地址更新 | [favorite](../engines/favorite.md) |
@@ -67,7 +67,7 @@
 | Patisserie：OZ / OFST 归档 | [patisserie](../engines/patisserie.md) |
 | Propeller：MSC 长度文本与样式 toggle | [propeller](../engines/propeller.md) |
 | PureMail：OBJ V1 / V2 索引文本池 | [puremail](../engines/puremail.md) |
-| QLIE：PACK 3.0 解包、ImoScripter 对白与模板重封包 | [qlie](../engines/qlie.md) |
+| QLIE：PACK 3.0/3.1 解包、ImoScripter 对白与模板重封包 | [qlie](../engines/qlie.md) |
 | Ransel：BCD / BCL 配对归档 | [ransel](../engines/ransel.md) |
 | RealLive：SEEN 容器、文本 token 与换行指令片段 | [reallive](../engines/reallive.md) |
 | Ren’Py：RPA/ARC3 归档与 RPYC2 编译脚本回填 | [renpy](../engines/renpy.md) |
