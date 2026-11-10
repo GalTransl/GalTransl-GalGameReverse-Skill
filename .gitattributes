@@ -1,2 +1,5 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+
+# Upstream verbatim copies: keep bytes identical to recorded SHA-256
+assets/ciallohook/upstream/** -text
