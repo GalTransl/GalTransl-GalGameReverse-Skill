@@ -120,14 +120,46 @@ class EaglsTextTests(unittest.TestCase):
         bad = crypt_script(bytes(plain), text_offset=144, key=self.profile.key, version=2)
         with self.assertRaises(ValueError):
             export_script(bad, self.profile)
+
+    def test_blocked_member_is_isolated_preserved_and_refused(self):
+        raw = script('$Start\n&1"text"\r\n$End\r\n', self.profile)
+        plain = bytearray(crypt_script(raw, text_offset=144, key=self.profile.key, version=2))
+        struct.pack_into("<I", plain, 36 + 32, 3)
+        bad = crypt_script(bytes(plain), text_offset=144, key=self.profile.key, version=2)
         with tempfile.TemporaryDirectory() as root:
             root = Path(root)
-            idx, pak = archive([("sc02.dat", bad)])
+            idx, pak = archive([("sc01.dat", self.raw), ("sc02.dat", bad), ("sc03.dat", raw)])
             (root / "SCPACK.idx").write_bytes(idx)
             (root / "SCPACK.pak").write_bytes(pak)
-            (root / "work").mkdir()
-            with self.assertRaisesRegex(ValueError, r"sc02\.dat.*\$End offset"):
-                extract(root, root / "work", profile=self.profile, key=b"key")
+            report = extract(root, root / "work", profile=self.profile, key=b"key")
+            self.assertEqual(report["status"], "partial")
+            self.assertEqual([b["name"] for b in report["blocked"]], ["sc02.dat"])
+            self.assertRegex(report["blocked"][0]["reason"], r"pak offset \d+.*\$End offset 3")
+            self.assertEqual(report["no_edit_members_identical"], 2)
+            self.assertEqual(report["blocked_members_copied_verbatim"], 1)
+            self.assertTrue((root / "work/gt_input/sc01.json").exists())
+            self.assertTrue((root / "work/gt_input/sc03.json").exists())
+            self.assertFalse((root / "work/gt_input/sc02.json").exists())
+            self.assertFalse((root / "work/original/scripts/sc02.dat").exists())
+            self.assertEqual((root / "work/rebuilt/roundtrip/script/SCPACK.pak").read_bytes(), pak)
+            # A translation for the blocked member is refused, not silently dropped.
+            (root / "work/gt_output/sc02.json").write_bytes(dump_rows([{"message": "x"}]))
+            with self.assertRaisesRegex(ValueError, r"blocked member.*sc02\.json.*sc02\.dat"):
+                rebuild(root / "work", root / "refused")
+            (root / "work/gt_output/sc02.json").unlink()
+            rows, _ = export_script(raw, self.profile)
+            rows[0]["message"] = "a much longer replacement text"
+            (root / "work/gt_output/sc03.json").write_bytes(dump_rows(rows))
+            result = rebuild(root / "work", root / "patch")
+            self.assertEqual(result["translated_members"], ["sc03.dat"])
+            self.assertEqual(result["copied_blocked_members"], ["sc02.dat"])
+            new_pak = (root / "patch/script/SCPACK.pak").read_bytes()
+            _, new_entries = read_index((root / "patch/script/SCPACK.idx").read_bytes(), len(new_pak),
+                                        key=b"key", long_offsets=True)
+            members = {e.name: new_pak[e.offset:e.offset + e.size] for e in new_entries}
+            self.assertEqual(members["sc02.dat"], bad)
+            self.assertEqual(members["sc01.dat"], self.raw)
+            self.assertEqual(export_script(members["sc03.dat"], self.profile)[0], rows)
 
     def test_invalid_translation_and_manifest(self):
         original, manifest = export_script(self.raw, self.profile)
@@ -162,6 +194,7 @@ class EaglsTextTests(unittest.TestCase):
             (root / 'work').mkdir()
             report = extract(root, root / "work", profile=self.profile, key=b"key", smoke_test=True)
             self.assertEqual(report["rows"], 4)
+            self.assertEqual((report["status"], report["blocked"]), ("complete", []))
             self.assertFalse((root / "work/gt_input/system.json").exists())
             rows, _ = export_script(self.raw, self.profile)
             rows[0]["message"] = "changed"

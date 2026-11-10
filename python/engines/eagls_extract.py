@@ -4,6 +4,7 @@ import argparse
 from dataclasses import asdict
 import json
 import stat
+import sys
 from pathlib import Path
 
 from ..archives.eagls import DEFAULT_INDEX_KEY, pack_archive, read_index
@@ -63,11 +64,16 @@ def extract(source, output, *, profile=Profile(), key=DEFAULT_INDEX_KEY,
         try:
             rows, manifest = export_script(raw, profile)
             rebuilt = rebuild_script(raw, rows, manifest, profile)
+            if rebuilt != raw:
+                raise ValueError("no-edit roundtrip differs")
         except (ValueError, UnicodeError) as exc:
-            # Label errors already name the label and its stored offset.
-            raise ValueError(f"member {entry.name} (pak offset {entry.offset}, size {entry.size}): {exc}") from exc
-        if rebuilt != raw:
-            raise ValueError(f"no-edit roundtrip differs: {entry.name}")
+            # One unsupported member must not hide the others. It publishes no
+            # JSON and is not passed to the writer, so every rebuilt archive
+            # carries its original encrypted bytes. Label errors already name
+            # the label and its stored offset.
+            records.append({**asdict(entry), "sha256": sha256(raw), "status": "blocked",
+                            "reason": f"pak offset {entry.offset}, size {entry.size}: {exc}", "outputs": {}})
+            continue
         replacements[entry.name] = rebuilt
         plain, _, _ = parse_script(raw, profile)
         files[f"original/scripts/{entry.name}"] = plain
@@ -83,16 +89,20 @@ def extract(source, output, *, profile=Profile(), key=DEFAULT_INDEX_KEY,
                 changed[0]["message"] += " (EAGLS roundtrip ABC)"
                 modified = rebuild_script(raw, changed, manifest, profile)
                 smoke = (entry.name, modified, filename, changed)
+    # Every parsed member went through parser/writer above; blocked members are
+    # absent from replacements and copied byte-for-byte by the archive writer.
     new_idx, new_pak = pack_archive(index, pak, replacements, key=key, long_offsets=long_offsets)
     if new_idx != index or new_pak != pak:
         raise ValueError("whole archive no-edit roundtrip differs")
     files["rebuilt/roundtrip/script/SCPACK.idx"] = new_idx
     files["rebuilt/roundtrip/script/SCPACK.pak"] = new_pak
-    report = {"engine": "eagls", "profile": profile.settings(), "index_key_hex": key.hex(),
-              "long_offsets": long_offsets, "members": records, "rows": total,
+    blocked = [{"name": r["name"], "reason": r["reason"]} for r in records if r["status"] == "blocked"]
+    report = {"engine": "eagls", "status": "partial" if blocked else "complete",
+              "profile": profile.settings(), "index_key_hex": key.hex(),
+              "long_offsets": long_offsets, "members": records, "rows": total, "blocked": blocked,
               "source_hashes": {"SCPACK.idx": sha256(index), "SCPACK.pak": sha256(pak)},
-              "no_edit_members_identical": len(entries), "no_edit_archives_identical": True,
-              "runtime_verified": False}
+              "no_edit_members_identical": len(replacements), "blocked_members_copied_verbatim": len(blocked),
+              "no_edit_archives_identical": True, "runtime_verified": False}
     if config is not None:
         report["source_hashes"]["uif_config.json"] = sha256(config)
     if smoke_test:
@@ -138,8 +148,17 @@ def rebuild(workspace, output):
     available = {p.name for p in (workspace / "gt_output").iterdir() if p.suffix.lower() == ".json"}
     if available - set(filenames):
         raise ValueError("unmatched translation filenames")
+    # Blocked at extraction: no JSON was published, so a translation for one
+    # is refused and the member stays byte-identical in the rebuilt archive.
+    blocked = {r["name"]: r["reason"] for r in report["members"] if r.get("status") == "blocked"}
+    refused = sorted(f"{f} ({name}: {blocked[name]})" for name, f in
+                     ((e.name, f) for e, f in zip(entries, filenames)) if name in blocked and f in available)
+    if refused:
+        raise ValueError("translation supplied for blocked member(s): " + "; ".join(refused))
     replacements, changed = {}, []
     for entry, filename in zip(entries, filenames):
+        if entry.name in blocked:
+            continue
         raw = pak[entry.offset:entry.offset + entry.size]
         rows, expected_manifest = export_script(raw, profile)
         if not rows:
@@ -159,6 +178,7 @@ def rebuild(workspace, output):
             changed.append(entry.name)
     new_idx, new_pak = pack_archive(index, pak, replacements, key=key, long_offsets=long_offsets)
     result = {"translated_members": changed, "copied_members": len(entries) - len(changed),
+              "copied_blocked_members": sorted(blocked),
               "runtime_verified": False, "sha256": {"SCPACK.idx": sha256(new_idx), "SCPACK.pak": sha256(new_pak)}}
     write_new_tree(Path(output), [("script/SCPACK.idx", new_idx), ("script/SCPACK.pak", new_pak),
                                  ("reports/rebuild.json", json_bytes(result))])
@@ -184,16 +204,23 @@ def main():
     pack.add_argument("workspace")
     pack.add_argument("output", help="new output directory")
     args = parser.parse_args()
-    if args.command == "extract":
-        config = read_bounded(args.uif_config) if args.uif_config else None
-        profile = load_profile(config, text_offset=args.text_offset, version=args.version,
-                               label_size=args.label_size, encoding=args.encoding, key=args.script_key.encode("ascii"))
-        result = extract(args.source, args.output, profile=profile, key=args.index_key.encode("ascii"),
-                         long_offsets=not args.short_offsets, config=config, smoke_test=args.smoke_test)
-        print(json.dumps({"members": len(result["members"]), "rows": result["rows"],
-                          "gt_input": str(Path(args.output) / "gt_input")}, ensure_ascii=True))
-    else:
+    try:
+        if args.command == "extract":
+            config = read_bounded(args.uif_config) if args.uif_config else None
+            profile = load_profile(config, text_offset=args.text_offset, version=args.version,
+                                   label_size=args.label_size, encoding=args.encoding,
+                                   key=args.script_key.encode("ascii"))
+            result = extract(args.source, args.output, profile=profile, key=args.index_key.encode("ascii"),
+                             long_offsets=not args.short_offsets, config=config, smoke_test=args.smoke_test)
+            print(json.dumps({"status": result["status"], "members": len(result["members"]), "rows": result["rows"],
+                              "blocked": result["blocked"], "gt_input": str(Path(args.output) / "gt_input")},
+                             ensure_ascii=True))
+            # Same convention as the YU-RIS workflow: partial output exits 1.
+            raise SystemExit(result["status"] != "complete")
         print(json.dumps(rebuild(args.workspace, args.output), ensure_ascii=True))
+    except (ValueError, UnicodeError, OSError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        raise SystemExit(2)
 
 
 if __name__ == "__main__":

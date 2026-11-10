@@ -97,6 +97,7 @@
 5. 调用 crypt_script 恢复成员密文。
 6. 用匹配版本的完整封包器更新 PAK 与 IDX。
 - 工作区 CLI 会执行以上步骤，并验证原文逐成员与整包往返一致后才发布提取结果。
+- 单个成员解析或原文往返失败（未知语法、标签 offset 不符、严格解码失败等）时记为 `blocked`，报告给出成员名、PAK 位置与原因；其余成员照常导出。blocked 成员不生成 JSON、不进入 writer，所有重建包按原加密字节保留；整包往返仍要求 IDX/PAK 逐字节一致。报告 `status=partial` 并列出 `blocked`，CLI 退出码：`0` 完整、`1` 部分（结果已写出）、`2` 失败（不写结果）。为 blocked 成员提供的同名译文在回填时拒收，须先扩展解析器后从原包重新提取。
 - 公共层负责备份和目录写盘，leaf 只返回 bytes/结构。
 
 ## 工作区与已有字符映射
@@ -119,7 +120,7 @@ python -m python.engines.eagls_extract extract "<游戏目录>/script" "<游戏�
 - `metadata/`：逐成员 manifest，含字节跨度、姓名槽、源哈希、映射和加密参数。manifest 的 UTF-8 指逻辑交换文字，`storage_encoding` 才是成员编码。
 - `rebuilt/roundtrip/script/`：真正经过 parser/writer 的原文重封包。
 - `rebuilt/smoke-test/script/`：可选的变长测试包，只用于验证；`reports/smoke-translation/` 保存对应测试 JSON。
-- `reports/extraction.json`：数量、全体成员、源哈希、profile 和验证结果。
+- `reports/extraction.json`：`status`、数量、全体成员（含 `blocked` 原因）、源哈希、profile 和验证结果。
 
 译文按同名文件放回 `gt_output/` 后告诉 agent，由 agent 校验并回写：
 
@@ -133,7 +134,7 @@ python -m python.engines.eagls_extract rebuild "<游戏目录>/game_extract" "<�
 - 合成测试有 MSVCRT 已知向量，不只测自身加解密互逆。
 - 测试覆盖 v1/v2、负 seed、隔字节变换、索引 footer 保留。
 - 标签测试验证新 offset、禁止前缀误匹配、紧跟 `)` 或 `"` 的标签，以及变长/缩短回填后的 offset 平移。
-- 提取或回填失败时，错误信息带成员名和 PAK 位置；标签错误另带标签名与 offset。
+- 提取时的成员错误进入 `blocked` 列表，回填错误直接失败；两者都带成员名，提取另带 PAK 位置，标签错误另带标签名与 offset。
 - 文本规则测试验证 name 与 message 在同一行的提取。
 - [test_eagls.py](../tests/test_eagls.py) 覆盖短/长索引、零/非零基址、变长重定位、填充保留、坏偏移、重名/路径、跨行姓名、选择槽、映射、篡改 manifest 和工作区回填。
 - ALIS 的验证边界为合成标签、脚本和归档布局；不支持新建标签或有空隙的归档。
