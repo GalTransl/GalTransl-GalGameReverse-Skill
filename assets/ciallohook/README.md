@@ -13,7 +13,24 @@
 
 - 上游仓库：https://github.com/Lite0812/CialloHook 。两种构建中的 `CialloHook.dll`、`winmm.dll` 都与同目录 `version.dll` 逐字节相同。同一本地构建的 x86 `version.dll` 与上表 x86 副本逐字节相同（SHA-256 一致），说明两者出自同一 v1.7 源码。
 - 导入表只有 Windows 系统 DLL：SHLWAPI、KERNEL32、USER32、GDI32、ADVAPI32、ole32、gdiplus、COMCTL32、bcrypt、SHELL32；无 VC 运行库或其他第三方 DLL 依赖，无需随附其他文件。
-- 未随包：CialloLauncher、LE/LEP 转区依赖、PAK 工具、WebM 模块、pdb/lib 及上游示例 ini/json。
+- 未随包：CialloLauncher、LE/LEP 转区依赖、PAK 工具、WebM 模块、pdb/lib、上游默认 `CialloHook.ini` 与示例映射 `subs_cn_jp.json`。
+
+## 完整配置说明（上游文档原样副本）
+
+全部配置段与键的说明以上游文档为准，随包保存 v1.7 原文，未作修改：
+
+| 文件 | 内容 | SHA-256 |
+|---|---|---|
+| [upstream/README.md](upstream/README.md) | 加载方式（proxy / loader）、最小配置、配置来源切换、常见用法（字体替换、外部字体、字体重定向/跳过、字形微调、字符集伪装、文本替换、日繁映射、补丁目录与封包、代码页伪装、转区、启动时机、各引擎兼容）、`[EngineCompat]`、主要配置段一览与常见问题 | `a90414af7858008027dcf11e59baac1feaa14c7129ec17db6be0414a8ad1e328` |
+| [upstream/CialloHook_Example.ini](upstream/CialloHook_Example.ini) | 带注释的完整示例，逐键列出全部配置段 | `bf64702f8e777cd0daa90bc6c3a435b492924652ff59caab1697f8c84ea7f376` |
+
+两份文件取自标签 `v1.7`，与上游 `main` 当前版本逐字节相同。上游 README 中的 `src/CialloHook/config/CialloHook_Example.ini` 即本目录的 `upstream/CialloHook_Example.ini`。启动器、PAK 工具、LE 转区、WebM 等章节所需组件未随包。
+
+按上游文档调整 JIS 交付的配置时注意：
+
+- 上游示例和常见问题里的 `CnJpMapJson = subs_cn_jp.json` 不适用，始终指向本批 `uif_config.json`（原因见下文）。
+- 上游常见问题对乱码给出的 `Charset = 0x86`、`[CodePage]` 932→936、LE 转区，适用于直接写入 GBK 的汉化，不适用于 JIS 替换回注：剧本仍是 CP932，改这些会让未映射的日文和代理字一起乱码。
+- 开启 `[FilePatch]`、`[TextReplace]`、`[CodePage]`、`[LocaleEmulator]` 等会改变游戏读取文件或编码的行为，只在确有需要时开启，并记录在交付说明里。
 
 上游仓库根目录与本地源码目录均未发现 LICENSE 文件，GitHub license 元数据为 null；本仓库不将此第三方二进制重新标为 GPL。源码静态链接 Microsoft Detours、miniz、zstd、LZMA SDK 等组件，其许可以上游源码为准。
 
@@ -62,7 +79,7 @@ CnJpMapReadEncoding = 932
 - **代码页**：`CnJpMapReadEncoding = 932` 让 A 接口字节按代码页 932 转为 Unicode 后查表。CP932 用户自定义区 `F040..F9FC` 对应 `U+E000..U+E757`，因此 `--proxy-policy unused` 分配的私用代理字可被查到。
 - **不要使用上游示例 `subs_cn_jp.json`**：其 3018 项与本项目随包 SExtractor 固定表（2999 项）有数十项不同，不能还原本批代理字。始终指向本批 `uif_config.json`。
 - **资源查找**：映射 JSON、字体文件按已启用的补丁目录 → CustomPak → 游戏根目录查找；生成配置未启用 `[FilePatch]`，即读取游戏 EXE 目录。
-- **字体**：`Font` 可写系统字体名（如 `SimHei`）或字体文件路径，文件内部名称不同时补 `FontName`；`RedirectFontCount` / `RedirectFromFont_i` / `RedirectToFont_i` 可只替换指定原字体。CP932 游戏不要随意设置非零 `Charset`：未映射的日文 A 接口文本会按新字符集解释而乱码。字体调整属于试注后的修正，由 agent 根据显示结果修改。
+- **字体**：`Font` 可写系统字体名（如 `SimHei`）或字体文件路径，文件内部名称不同时补 `FontName`；`RedirectFontCount` / `RedirectFromFont_i` / `RedirectToFont_i` 可只替换指定原字体。CP932 游戏不要随意设置非零 `Charset`：未映射的日文 A 接口文本会按新字符集解释而乱码。字体调整属于试注后的修正，由 agent 根据显示结果修改；各键写法见上游 README“常见用法”1–5 与示例 ini 的 `[CialloHook]` 段。
 - **私用代理字**：运行时显示尚未在真实游戏中验证；外字字体（EUDC）或引擎自用的私用区码位应通过 `reserved_codepoints` 排除，见[公共 JIS 指南](../../guides/jis-substitution.md#私用代理字与保留码位)。
 
 交付时提醒用户：把与游戏 EXE 位数一致的 `version.dll`、`version.ini` 与 `uif_config.json` 一起放到实际游戏 EXE 目录，再按引擎规则部署脚本/补丁，测试修改的对白及未修改 UI；`version.dll` 未加载时再试 `winmm.dll` 名称。已有同名 DLL/配置先检查合并，不盲目覆盖；不保证每个游戏都会加载代理 DLL。
