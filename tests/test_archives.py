@@ -282,6 +282,54 @@ class RPATests(unittest.TestCase):
         mapping["a.rpy"] = [(34 ^ 7, 4 ^ 7, b"Z")]
         self.assertEqual(rpa.extract(_rpa(pickle.dumps(mapping, protocol=3), key=7))[0].data, b"Zabc")
 
+    def _rebuilt_index(self, fixture, replacement):
+        rebuilt = rpa.rebuild(fixture, {"script.rpy": replacement})
+        index = rpa.read_index(io.BytesIO(rebuilt))
+        raw = zlib.decompress(rebuilt[index.offset:])
+        self.assertEqual(rpa.extract(rebuilt)[0].data, replacement)
+        return index, raw
+
+    def test_rebuild_keeps_protocol5_index(self):
+        mapping = {"script.rpy": [(34 ^ 7, 3 ^ 7, b"")]}
+        fixture = _rpa(pickle.dumps(mapping, protocol=5), key=7)
+        self.assertEqual(rpa.read_index(io.BytesIO(fixture)).protocol, 5)
+        index, raw = self._rebuilt_index(fixture, "中文增长".encode("utf-8"))
+        self.assertEqual(raw[:2], b"\x80\x05")
+        self.assertEqual(index.protocol, 5)
+
+    def test_rebuild_keeps_protocol2_python2_types(self):
+        fixture = _rpa(_rpa_index([(34, 4, b"a")], key=0x89abcdef), key=0x89abcdef)
+        self.assertEqual(rpa.read_index(io.BytesIO(fixture)).protocol, 2)
+        index, raw = self._rebuilt_index(fixture, b"a" + "中文增长".encode("utf-8") + b"\xff" * 300)
+        self.assertEqual(raw[:2], b"\x80\x02")
+        self.assertEqual(index.protocol, 2)
+        # py2 str stays BINSTRING; no BINBYTES, GLOBAL or REDUCE for Python 2 loaders.
+        self.assertIsInstance(index.entries[0].raw_name, bytes)
+        self.assertIsInstance(index.entries[0].prefix, bytes)
+        ops = {op.name for op, _arg, _pos in rpa._data_opcodes(raw)}
+        self.assertTrue(ops & {"SHORT_BINSTRING", "BINSTRING"})
+        self.assertFalse(ops & {"BINBYTES", "SHORT_BINBYTES", "GLOBAL", "STACK_GLOBAL", "REDUCE"})
+
+    def test_rebuild_keeps_protocol0_and_protocol1(self):
+        protocol0 = b"(dS'script.rpy'\n(l(I34\nI4\nS'\\xff'\ntas."
+        index, raw = self._rebuilt_index(_rpa(protocol0, key=0), b"\xff" + b"x" * 40)
+        self.assertEqual(index.protocol, 0)
+        self.assertEqual(rpa._pickle_protocol(raw), 0)
+        self.assertEqual(index.entries[0].prefix, b"\xff")
+        protocol1 = b"}(U\nscript.rpy]((K\"K\x03teu."
+        index, raw = self._rebuilt_index(_rpa(protocol1, key=0), b"y" * 40)
+        self.assertEqual(index.protocol, 1)
+        self.assertNotEqual(raw[:1], b"\x80")
+        self.assertIsInstance(index.entries[0].raw_name, bytes)
+
+    def test_index_writer_rejects_unknown_protocol_or_types(self):
+        with self.assertRaises(ValueError):
+            rpa._dump_index({b"a": [(1, 2)]}, 6)
+        with self.assertRaises(ValueError):
+            rpa._dump_index({b"a": [(1, 2.5)]}, 2)
+        with self.assertRaises(ValueError):
+            rpa._dump_index({b"a": [(1, 2, object())]}, 0)
+
     def test_multiple_chunks_never_silently_drop(self):
         for chunks in ([], [(34, 3, b""), (34, 3, b"")]):
             with self.assertRaisesRegex(ValueError, "multi-chunk"):

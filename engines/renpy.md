@@ -32,6 +32,7 @@ python -m python.engines.renpy_extract pack "游戏目录/游戏名_extract" "�
 - 文件长度是含前缀的总长；读取长度必须减掉索引中的 prefix，不能多读下一成员。
 - 数据专用 Pickle 解释器覆盖协议 0–5 的有限数据指令，含协议 4/5 的 `FRAME`、`MEMOIZE`、短 Unicode；索引中 GLOBAL、REDUCE、BUILD 与容器 memo 引用仍拒绝。
 - `rebuild(data, replacements)` 保留原魔数、key、前缀形式、成员顺序和间隙，随长度变化重算偏移与索引。未修改时保留原压缩索引并逐字节重建；重包后再次提取，逐成员核对所有改动与未改动数据。
+- 重写索引沿用原 Pickle 协议（`read_index().protocol`，协议 2+ 取 `PROTO`，0/1 按所用指令判定）。协议 3–5 用标准序列化；协议 0–2 用随包数据写出器，保持 Python 2 的类型：原字节串键/前缀写成 `STRING` / `BINSTRING`，原 Unicode 写成 `UNICODE` / `BINUNICODE`，不产生 `BINBYTES` 或 `GLOBAL`/`REDUCE`，供 Ren’Py 7 及更早（Python 2）读取。写出后再用数据解释器核对协议号与内容；协议超出 0–5 或含其他类型时拒绝，不改用其他协议。
 - 当前工作区每包上限 64 MiB，选中包累计 128 MiB；索引扫描可检查更大的媒体包，但不意味着工作区 writer 支持整包流式重建。
 - 多 chunk、重叠范围、未知魔数/自定义扰码、越界、重名或不安全路径明确拒绝。不同包中同路径剧本的覆盖顺序不能靠猜测，须先整理有效输入。配对的 `.rpy` / `.rpyc` 也必须先确认源码优先级。
 

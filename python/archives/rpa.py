@@ -62,6 +62,7 @@ class Index:
     key: int
     size: int
     entries: list[IndexEntry]
+    protocol: int = 3
 
 
 def _data_opcodes(data: bytes):
@@ -110,6 +111,111 @@ def _data_opcodes(data: bytes):
         yield opcode, arg, pos
         if opcode.name == "STOP":
             return
+
+
+def _pickle_protocol(data: bytes) -> int:
+    """Return the protocol of an allowlisted pickle without interpreting it.
+
+    Protocols 2+ start with PROTO. Protocols 0/1 have no header; the highest
+    opcode level used distinguishes them (an all-text stream is protocol 0).
+    """
+    level = 0
+    for opcode, arg, pos in _data_opcodes(data):
+        if opcode.name == "PROTO":
+            if pos != 0:
+                raise ValueError("unsupported RPA pickle protocol")
+            return arg
+        level = max(level, opcode.proto)
+    return level
+
+
+def _legacy_int(value: int, protocol: int) -> bytes:
+    if type(value) is not int or not 0 <= value <= 0xffffffffffffffff:
+        raise ValueError("RPA legacy pickle integer range")
+    if protocol == 0:
+        return b"I%d\n" % value
+    if value < 0x100:
+        return b"K" + bytes((value,))
+    if value < 0x10000:
+        return b"M" + value.to_bytes(2, "little")
+    if value < 0x80000000:
+        return b"J" + value.to_bytes(4, "little")
+    if protocol == 1:
+        return b"L%dL\n" % value
+    raw = value.to_bytes((value.bit_length() + 8) // 8, "little", signed=True)
+    return b"\x8a" + bytes((len(raw),)) + raw
+
+
+def _legacy_string(value, protocol: int) -> bytes:
+    """Python-2 compatible scalar: bytes -> str opcodes, str -> unicode opcodes."""
+    if type(value) is bytes:
+        if protocol == 0:
+            body = b"".join(bytes((c,)) if 0x20 <= c < 0x7f and c not in b"'\\"
+                            else b"\\" + bytes((c,)) if c in b"'\\"
+                            else b"\\x%02x" % c for c in value)
+            return b"S'" + body + b"'\n"
+        if len(value) < 0x100:
+            return b"U" + bytes((len(value),)) + value
+        return b"T" + len(value).to_bytes(4, "little") + value
+    if type(value) is str:
+        if protocol == 0:
+            text = (value.replace("\\", "\\u005c").replace("\0", "\\u0000")
+                    .replace("\n", "\\u000a").replace("\r", "\\u000d").replace("\x1a", "\\u001a"))
+            return b"V" + text.encode("raw-unicode-escape") + b"\n"
+        raw = value.encode("utf-8", errors="strict")
+        return b"X" + len(raw).to_bytes(4, "little") + raw
+    raise ValueError("RPA legacy pickle scalar type")
+
+
+def _legacy_dumps(mapping: dict, protocol: int) -> bytes:
+    """Serialize an RPA index for protocols 0..2 with Python-2 type semantics.
+
+    pickle.dumps(protocol<=2) in Python 3 writes bytes through a
+    _codecs.encode REDUCE call and str as unicode, so Python-2 byte-string keys
+    and prefixes would change type. This writer emits only allowlisted data
+    opcodes: bytes keep STRING/BINSTRING (py2 str), str keeps UNICODE/BINUNICODE.
+    """
+    if protocol not in (0, 1, 2):
+        raise ValueError("legacy RPA writer handles protocols 0..2 only")
+    out = bytearray(b"\x80\x02" if protocol == 2 else b"")
+    out += b"(d" if protocol == 0 else b"}"
+    items = list(mapping.items())
+    for start in range(0, len(items), 1000):
+        if protocol:
+            out += b"("
+        for key, chunks in items[start:start + 1000]:
+            out += _legacy_string(key, protocol)
+            if type(chunks) is not list:
+                raise ValueError("RPA legacy pickle chunk list type")
+            out += b"(l" if protocol == 0 else b"]("
+            for chunk in chunks:
+                if type(chunk) is not tuple or len(chunk) not in (2, 3):
+                    raise ValueError("RPA legacy pickle chunk tuple type")
+                body = _legacy_int(chunk[0], protocol) + _legacy_int(chunk[1], protocol)
+                if len(chunk) == 3:
+                    body += _legacy_string(chunk[2], protocol)
+                if protocol == 2:
+                    out += body + (b"\x86" if len(chunk) == 2 else b"\x87")
+                else:
+                    out += b"(" + body + b"t"
+                out += b"a" if protocol == 0 else b""
+            out += b"" if protocol == 0 else b"e"
+            out += b"s" if protocol == 0 else b""
+        if protocol:
+            out += b"u"
+    return bytes(out + b".")
+
+
+def _dump_index(mapping: dict, protocol: int) -> bytes:
+    if protocol <= 2:
+        encoded = _legacy_dumps(mapping, protocol)
+    elif protocol <= 5:
+        encoded = pickle.dumps(mapping, protocol=protocol)
+    else:
+        raise ValueError("unsupported RPA pickle protocol")
+    if _pickle_protocol(encoded) != protocol or _data_pickle(encoded) != mapping:
+        raise ValueError("RPA index re-serialization changed protocol or data")
+    return encoded
 
 
 def _data_pickle(data: bytes, *, max_ops: int = 500_000,
@@ -318,7 +424,7 @@ def read_index(stream, *, max_entries: int = 100_000,
         if entry.offset < end:
             raise ValueError("overlapping RPA member ranges")
         end = entry.offset + entry.length - len(entry.prefix)
-    return Index(header, index_at, key, size, result)
+    return Index(header, index_at, key, size, result, _pickle_protocol(index))
 
 
 def read_entry(stream, entry: IndexEntry) -> bytes:
@@ -343,6 +449,8 @@ def rebuild(data: bytes, replacements: dict[str, bytes]) -> bytes:
 
     No edits still traverse all members and reconstruct the archive exactly.
     Only a newly constructed data dictionary is serialized; no unpickling.
+    The rewritten index keeps the original pickle protocol (0..5); protocols
+    0..2 keep Python-2 byte-string vs Unicode types for Ren'Py 7 and older.
     """
     stream = io.BytesIO(data)
     index = read_index(stream)
@@ -371,7 +479,7 @@ def rebuild(data: bytes, replacements: dict[str, bytes]) -> bytes:
     if changed:
         offset = len(out)
         mapping = {e.raw_name: [chunks[e.name]] for e in index.entries}
-        out.extend(zlib.compress(pickle.dumps(mapping, protocol=3)))
+        out.extend(zlib.compress(_dump_index(mapping, index.protocol)))
         out[8:24] = f"{offset:016x}".encode("ascii")
     else:
         out.extend(data[index.offset:])
