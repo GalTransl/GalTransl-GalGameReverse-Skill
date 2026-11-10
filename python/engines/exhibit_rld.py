@@ -136,6 +136,28 @@ def records(script, names=None):
     return result
 
 
+# Protected display tokens, compared as one ordered sequence like C0 controls:
+# full-width `＄` plus full/half-width letters (player-name variables such as
+# ＄Ｎ) and Private Use Area characters (EUDC gaiji when the INI sets EUDC=*.tte).
+PROTECTED = re.compile(r"\uff04[\uff21-\uff3a\uff41-\uff5aA-Za-z]+|[\ue000-\uf8ff]|[\x00-\x1f]")
+PUA = re.compile(r"[\ue000-\uf8ff]")
+
+
+def protected_tokens(text, source=None):
+    """Ordered protected tokens of ``text``.
+
+    With ``source`` (the original string), a PUA character counts only if the
+    original row already uses it: those gaiji must keep count and order, while
+    other PUA characters in a translation are ordinary text such as JIS proxies,
+    which the shared JIS planner never draws from characters present in scripts.
+    """
+    tokens = PROTECTED.findall(text)
+    if source is not None:
+        kept = set(PUA.findall(source))
+        tokens = [t for t in tokens if not PUA.fullmatch(t) or t in kept]
+    return tuple(tokens)
+
+
 def _check_text(before, after):
     if before == after:
         return
@@ -144,10 +166,9 @@ def _check_text(before, after):
     # This is the plain-display profile, not a guessed escape/markup grammar.
     if any(c in before + after for c in "\\[]{}<>$%"):
         raise ValueError("unclassified RLD display syntax; adapt controls before editing")
-    controls = lambda s: tuple(c for c in s if ord(c) < 32)
-    if not drops_only_line_breaks(controls(before), controls(after),
+    if not drops_only_line_breaks(protected_tokens(before), protected_tokens(after, before),
                                   lambda c: c == "\n"):
-        raise ValueError("RLD display controls changed or line breaks added/moved")
+        raise ValueError("RLD display controls/variables/gaiji changed or line breaks added/moved")
 
 
 def patch(script, recs, rows, codec=None):
@@ -232,8 +253,8 @@ def export_rld(raw, seed, *, filename="script.rld", definitions=None, definition
                              sources=sources, rows=rows, encoding="cp932", locators=[r[1] for r in recs],
                              name_policies=[r[2] for r in recs], settings={"seed": seed,
                              "definition_seed": definition_seed if definitions is not None else None},
-                             protected_tokens=[list(dict.fromkeys(c for c in r[0]["message"]
-                                                                  if ord(c) < 32 and c != "\n"))
+                             protected_tokens=[list(dict.fromkeys(t for t in protected_tokens(r[0]["message"])
+                                                                  if t != "\n"))
                                                for r in recs])
     return rows, manifest
 

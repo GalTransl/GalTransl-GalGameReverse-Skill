@@ -7,7 +7,7 @@ import tempfile
 import unittest
 
 from python.engines.exhibit import xor_rld
-from python.engines.exhibit_rld import crypt, export_rld, mt_keys, parse, rebuild_rld
+from python.engines.exhibit_rld import _check_text, crypt, export_rld, mt_keys, parse, rebuild_rld
 from python.engines.exhibit_keys import bitmap_bits, ini_checksum, scenario_seed, recover_def_seed
 from python.engines.exhibit_extract import extract, rebuild
 from python.common.contract import dump_rows
@@ -151,6 +151,34 @@ class RldTests(unittest.TestCase):
             rebuild_rld(self.raw, 17, self.rows, manifest, **self.kw)
         with self.assertRaises(ValueError):
             rebuild_rld(self.raw, 17, self.rows[:-1], self.manifest, **self.kw)
+
+    def test_fullwidth_variable_and_gaiji_are_protected(self):
+        # Full-width ＄Ｎ inserts a player name; U+E00A is an EUDC gaiji (CP932 F0xx).
+        heart = "\ue00a"
+        plain = script(op(28, ("Bob", "＄Ｎさん" + heart + "また明日")), op(28, ("Bob", "＄ａ＄Ｂ。")))
+        raw = crypt(plain, 17)
+        rows, manifest = export_rld(raw, 17)
+        self.assertEqual(manifest["records"][0]["message_tokens"], ["＄Ｎ", heart])
+        self.assertEqual(manifest["records"][1]["message_tokens"], ["＄ａ", "＄Ｂ"])
+        self.assertEqual(rebuild_rld(raw, 17, rows, manifest), raw)
+        good = copy.deepcopy(rows)
+        good[0]["message"] = "＄Ｎ桑" + heart + "明日会"
+        good[1]["message"] = "＄ａ＄Ｂ長"
+        new = parse(crypt(rebuild_rld(raw, 17, good, manifest), 17))
+        self.assertEqual(new.ops[0].strings[1], "＄Ｎ桑" + heart + "明日会")
+        self.assertIn(heart.encode("cp932"), new.plain)
+        # PUA characters absent from the original row are ordinary text (e.g. JIS proxies).
+        self.assertEqual(_check_text(rows[1]["message"], "＄ａ＄Ｂ\ue123"), None)
+        for index, value in ((0, "桑" + heart + "明日会"), (0, "＄Ｎ桑明日会"), (0, heart + "＄Ｎ桑"),
+                             (0, "＄Ｍ桑" + heart), (0, "＄Ｎ桑" + heart * 2), (0, "＄Ｎ＄Ｎ桑" + heart),
+                             (1, "＄Ｂ＄ａ"), (1, "＄ａ"), (1, "＄ａ＄ＢＣ")):
+            bad = copy.deepcopy(rows)
+            bad[index]["message"] = value
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                rebuild_rld(raw, 17, bad, manifest)
+            # The writer enforces token order independently of manifest counts.
+            with self.subTest(writer=value), self.assertRaises(ValueError):
+                _check_text(rows[index]["message"], value)
 
     def test_wrong_seed_header_count_and_truncation(self):
         bad_header = bytearray(self.plain)
