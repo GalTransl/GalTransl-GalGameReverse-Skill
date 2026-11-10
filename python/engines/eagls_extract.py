@@ -30,20 +30,28 @@ def read_bounded(path, limit=128 * 1024 * 1024):
     return data
 
 
-def load_profile(config=None, **kwargs):
-    if config is not None:
-        obj = load_json(config)
-        if obj.get("tunnel_decoder", {}).get("enable"):
-            raise ValueError("UIF tunnel decoding is not supported")
-        mapping = obj.get("character_substitution", {})
-        if mapping.get("enable"):
-            kwargs.update(source_characters=mapping["source_characters"],
-                          target_characters=mapping["target_characters"])
+def load_profile(**kwargs):
     return Profile(**kwargs)
 
 
+def _legacy_profile_settings(settings):
+    """Drop the empty character-table fields of older workspaces.
+
+    Original games never ship a UIF mapping; a non-empty table means earlier
+    translation output was mixed into the source, so re-extract from the
+    original game instead.
+    """
+    settings = dict(settings)
+    source = settings.pop("source_characters", "")
+    target = settings.pop("target_characters", "")
+    if source or target:
+        raise ValueError("workspace carries a character table from earlier translation output; "
+                         "re-extract from the original game files")
+    return settings
+
+
 def extract(source, output, *, profile=Profile(), key=DEFAULT_INDEX_KEY,
-            long_offsets=True, config=None, smoke_test=False):
+            long_offsets=True, smoke_test=False):
     source, output = Path(source), Path(output)
     validate_new_tree_destination(output)
     index = read_bounded(source / "SCPACK.idx")
@@ -53,8 +61,6 @@ def extract(source, output, *, profile=Profile(), key=DEFAULT_INDEX_KEY,
     pak = read_bounded(source / "SCPACK.pak", Limits().max_total_bytes)
     files = {"original/SCPACK.idx": index, "original/SCPACK.pak": pak,
              "gt_output/.keep": b""}
-    if config is not None:
-        files["original/uif_config.json"] = config
     names = [Path(e.name).stem + ".json" for e in entries]
     validate_names(names)
     replacements, records, total = {}, [], 0
@@ -103,8 +109,6 @@ def extract(source, output, *, profile=Profile(), key=DEFAULT_INDEX_KEY,
               "source_hashes": {"SCPACK.idx": sha256(index), "SCPACK.pak": sha256(pak)},
               "no_edit_members_identical": len(replacements), "blocked_members_copied_verbatim": len(blocked),
               "no_edit_archives_identical": True, "runtime_verified": False}
-    if config is not None:
-        report["source_hashes"]["uif_config.json"] = sha256(config)
     if smoke_test:
         if smoke is None:
             raise ValueError("no scenario member available for smoke test")
@@ -130,11 +134,11 @@ def rebuild(workspace, output):
     workspace = Path(workspace)
     report = load_json(read_bounded(workspace / "reports/extraction.json"))
     for name, expected in report["source_hashes"].items():
-        if name not in {"SCPACK.idx", "SCPACK.pak", "uif_config.json"}:
+        if name not in {"SCPACK.idx", "SCPACK.pak"}:
             raise ValueError("unexpected source filename")
         if sha256(read_bounded(workspace / "original" / name, Limits().max_total_bytes)) != expected:
             raise ValueError("source hash changed")
-    settings = dict(report["profile"])
+    settings = _legacy_profile_settings(report["profile"])
     settings["key"] = bytes.fromhex(settings.pop("key_hex"))
     settings["encoding"] = settings.pop("storage_encoding")
     profile = Profile(**settings)
@@ -191,7 +195,6 @@ def main():
     export = commands.add_parser("extract")
     export.add_argument("source", help="directory containing SCPACK.idx and SCPACK.pak")
     export.add_argument("output", help="new output directory")
-    export.add_argument("--uif-config")
     export.add_argument("--short-offsets", action="store_true")
     export.add_argument("--text-offset", type=int, default=3600)
     export.add_argument("--version", type=int, choices=(1, 2), default=2)
@@ -206,12 +209,11 @@ def main():
     args = parser.parse_args()
     try:
         if args.command == "extract":
-            config = read_bounded(args.uif_config) if args.uif_config else None
-            profile = load_profile(config, text_offset=args.text_offset, version=args.version,
+            profile = load_profile(text_offset=args.text_offset, version=args.version,
                                    label_size=args.label_size, encoding=args.encoding,
                                    key=args.script_key.encode("ascii"))
             result = extract(args.source, args.output, profile=profile, key=args.index_key.encode("ascii"),
-                             long_offsets=not args.short_offsets, config=config, smoke_test=args.smoke_test)
+                             long_offsets=not args.short_offsets, smoke_test=args.smoke_test)
             print(json.dumps({"status": result["status"], "members": len(result["members"]), "rows": result["rows"],
                               "blocked": result["blocked"], "gt_input": str(Path(args.output) / "gt_input")},
                              ensure_ascii=True))

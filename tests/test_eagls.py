@@ -63,19 +63,19 @@ class EaglsArchiveTests(unittest.TestCase):
 
 class EaglsTextTests(unittest.TestCase):
     def setUp(self):
-        self.profile = Profile(text_offset=144, source_characters="遅", target_characters="迟")
+        self.profile = Profile(text_offset=144)
         self.body = '$Start\n&1"narration"#花子,104=voice01\r\n&2"遅い"&3"next"\r\n52("_SelStr12","yes")52("_SelStr0","")\r\n$End\r\n43()\r\n'
         self.raw = script(self.body, self.profile)
 
     def test_names_one_shot_choices_and_identity(self):
         rows, manifest = export_script(self.raw, self.profile)
-        self.assertEqual(rows, [{"message": "narration"}, {"name": "花子", "message": "迟い"},
+        self.assertEqual(rows, [{"message": "narration"}, {"name": "花子", "message": "遅い"},
                                 {"message": "next"}, {"message": "yes"}])
         self.assertEqual(rebuild_script(self.raw, rows, manifest, self.profile), self.raw)
 
     def test_changed_name_body_and_label_relocation(self):
         rows, manifest = export_script(self.raw, self.profile)
-        rows[1] = {"name": "太郎", "message": "迟い ABC LONGER"}
+        rows[1] = {"name": "太郎", "message": "遅い ABC LONGER"}
         modified = rebuild_script(self.raw, rows, manifest, self.profile)
         before, _, _ = parse_script(self.raw, self.profile)
         after, actual, _ = parse_script(modified, self.profile)
@@ -94,7 +94,7 @@ class EaglsTextTests(unittest.TestCase):
         self.assertEqual(rows, [{"message": "before"}, {"name": "花子", "message": "ここ"},
                                 {"message": "after $Endless"}])
         self.assertEqual(rebuild_script(raw, rows, manifest, self.profile), raw)
-        for first, second in (("much longer narration text", "迟い台詞をもっと長くする"), ("x", "短")):
+        for first, second in (("much longer narration text", "遅い台詞をもっと長くする"), ("x", "短")):
             changed = copy.deepcopy(rows)
             changed[0]["message"], changed[1]["message"] = first, second
             modified = rebuild_script(raw, changed, manifest, self.profile)
@@ -163,7 +163,7 @@ class EaglsTextTests(unittest.TestCase):
 
     def test_invalid_translation_and_manifest(self):
         original, manifest = export_script(self.raw, self.profile)
-        for value in ('bad"quote', 'bad\nline', 'injected#', '😀', '遅'):
+        for value in ('bad"quote', 'bad\nline', 'injected#', '😀', '迟'):
             rows = copy.deepcopy(original)
             rows[1]["message"] = value
             with self.subTest(value=value), self.assertRaises((ValueError, UnicodeError)):
@@ -179,11 +179,14 @@ class EaglsTextTests(unittest.TestCase):
         rows, meta = export_script(raw, p)
         self.assertEqual(rebuild_script(raw, rows, meta, p), raw)
 
-    def test_ambiguous_mapping_and_enabled_tunnel(self):
+    def test_legacy_character_table_settings(self):
+        from python.engines.eagls_extract import _legacy_profile_settings
+        self.assertEqual(_legacy_profile_settings({"version": 2, "source_characters": "", "target_characters": ""}),
+                         {"version": 2})
         with self.assertRaises(ValueError):
-            Profile(source_characters="AB", target_characters="CC")
+            _legacy_profile_settings({"version": 2, "source_characters": "A", "target_characters": "B"})
         with self.assertRaises(ValueError):
-            load_profile(b'{"tunnel_decoder":{"enable":true}}')
+            Profile().encode("迟")
 
     def test_workspace_roundtrip_partial_translation_and_no_overwrite(self):
         with tempfile.TemporaryDirectory() as root:

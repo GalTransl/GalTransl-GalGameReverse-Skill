@@ -104,20 +104,20 @@
 
 只选择实际使用的 `SCPACK.idx` / `SCPACK.pak`，不递归混入备份或既有提取目录。已有汉化补丁的输入不代表日文原版。
 
-**不要仅凭严格解码成功选择 GBK。** CP932 与 GBK 可能同时可解码；已有字符替换时，解码文字也可能只是显示替身。`uif_config.json` 的 `character_substitution.source_characters → target_characters` 决定显示映射：提取正向还原，回填反向映射并严格 CP932 编码，再核对显示一致。无法用现有映射表示的字符需另行准备公共 JIS 方案；`tunnel_decoder.enable=true` 不受此接口支持。
+**不要仅凭严格解码成功选择 GBK。** CP932 与 GBK 可能同时可解码。剧本按 `storage_encoding` 严格编解码；CP932 写不下的中文走[公共 JIS 流程](../guides/jis-substitution.md)。原版游戏不带 `uif_config.json`、`version.ini`/`winmm.ini` 等字符映射；游戏目录中出现它们，说明混入了之前的汉化或试注产物，须改用未改动的原版文件提取，不能把映射当作原作的一部分。
 
 在技能根目录运行（下列游戏路径为示例）：
 
 ```text
-python -m python.engines.eagls_extract extract "<游戏目录>/script" "<游戏目录>/game_extract" --uif-config "<游戏目录>/uif_config.json" --smoke-test
+python -m python.engines.eagls_extract extract "<游戏目录>/script" "<游戏目录>/game_extract" --smoke-test
 ```
 
-使用默认参数前先核对索引、文本区与加密布局；可通过 `--short-offsets`、`--text-offset`、`--version`、`--label-size`、`--encoding`、`--index-key`、`--script-key` 指定。没有已有 UIF 映射就省略 `--uif-config`。未知密钥须先研究，不靠默认值宣称成功。
+使用默认参数前先核对索引、文本区与加密布局；可通过 `--short-offsets`、`--text-offset`、`--version`、`--label-size`、`--encoding`、`--index-key`、`--script-key` 指定。未知密钥须先研究，不靠默认值宣称成功。
 
 - `gt_input/*.json`：按成员原名生成平铺 JSON；空成员只记入报告。
 - `gt_output/`：放翻译结果，文件名和数组顺序保持不变；提取不会把测试文本写进这里。
-- `original/`：加密原包、可选 UIF 配置副本；`original/scripts/` 是解密后的完整成员，含标签区和 footer，**不是纯文本文件**。
-- `metadata/`：逐成员 manifest，含字节跨度、姓名槽、源哈希、映射和加密参数。manifest 的 UTF-8 指逻辑交换文字，`storage_encoding` 才是成员编码。
+- `original/`：加密原包；`original/scripts/` 是解密后的完整成员，含标签区和 footer，**不是纯文本文件**。
+- `metadata/`：逐成员 manifest，含字节跨度、姓名槽、源哈希和加密参数。manifest 的 UTF-8 指逻辑交换文字，`storage_encoding` 才是成员编码。
 - `rebuilt/roundtrip/script/`：真正经过 parser/writer 的原文重封包。
 - `rebuilt/smoke-test/script/`：可选的变长测试包，只用于验证；`reports/smoke-translation/` 保存对应测试 JSON。
 - `reports/extraction.json`：`status`、数量、全体成员（含 `blocked` 原因）、源哈希、profile 和验证结果。
@@ -136,9 +136,9 @@ python -m python.engines.eagls_extract rebuild "<游戏目录>/game_extract" "<�
 - 标签测试验证新 offset、禁止前缀误匹配、紧跟 `)` 或 `"` 的标签，以及变长/缩短回填后的 offset 平移。
 - 提取时的成员错误进入 `blocked` 列表，回填错误直接失败；两者都带成员名，提取另带 PAK 位置，标签错误另带标签名与 offset。
 - 文本规则测试验证 name 与 message 在同一行的提取。
-- [test_eagls.py](../tests/test_eagls.py) 覆盖短/长索引、零/非零基址、变长重定位、填充保留、坏偏移、重名/路径、跨行姓名、选择槽、映射、篡改 manifest 和工作区回填。
+- [test_eagls.py](../tests/test_eagls.py) 覆盖短/长索引、零/非零基址、变长重定位、填充保留、坏偏移、重名/路径、跨行姓名、选择槽、编码拒绝、篡改 manifest 和工作区回填。
 - ALIS 的验证边界为合成标签、脚本和归档布局；不支持新建标签或有空隙的归档。
-- 没有启动游戏、安装补丁或验证运行时排版。离线格式自洽不能替代实际加载测试；现有字体和 UIF 运行环境是否正常仍属于部署验证。
+- 没有启动游戏、安装补丁或验证运行时排版。离线格式自洽不能替代实际加载测试；字体与 hook 运行环境是否正常仍属于部署验证。
 - 原工具的已知明文 key 搜索没有移植，参数需要有证据地提供。
 - 不宣称“IDX 解密成功”就等于“剧本往返完成”。
 

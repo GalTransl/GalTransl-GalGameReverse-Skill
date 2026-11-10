@@ -41,8 +41,8 @@ class YstbVersionTests(unittest.TestCase):
     def test_non_writer_version_is_read_only(self):
         raw, ysc = scenario(400), dictionary(400)
         self.assertEqual(export_script(raw, ysc), export_script(raw, ysc))
-        rows, manifest = export_script(raw, ysc, Profile(source_characters='遅', target_characters='迟'))
-        self.assertEqual(rows, [{'name': '花子', 'message': '「迟い」'}])
+        rows, manifest = export_script(raw, ysc, Profile())
+        self.assertEqual(rows, [{'name': '花子', 'message': '「遅い」'}])
         self.assertEqual(manifest['engine']['variant'], '400-word-raw-readonly')
         with self.assertRaises(ValueError):
             rebuild_script(raw, ysc, rows, manifest)

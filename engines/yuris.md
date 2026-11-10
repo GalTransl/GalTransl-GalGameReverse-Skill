@@ -36,7 +36,7 @@
 - `【姓名】正文` 分成 `name` 与 `message`，回填恢复括号；正文引号、原有空格与换行保留，不自动排版。
 - `GOSUB ES.CHAR.NAME` 中第一个参数为调用目标，第二个参数（ID 33）为角色键，第三个参数（ID 34）为显示名；只导出第三个参数作为独立姓名定义行（`message` 字段），角色键及后续参数保持原字节。布局不符时拒绝，不沿用选择参数的遍历规则。`ES.SEL.SET` 导出 ID 33..48 的字面量 PSTR 选项，到空参数停止；运行时显示仍须单独验证。
 - 姓名/选项表达式必须是完整 `4D + u16长度 + 引号包围的字面量`；回填更新内层 u16 长度。未知组合表达式不会当普通文字替换。
-- 已有 UIF `character_substitution` 时，提取正向还原显示文字，回填反向映射并严格 CP932 编码，再验证正向还原一致。无法表示的新字拒绝，须另行准备公共 JIS 方案；已启用的 tunnel decoder 不支持。
+- 剧本按 CP932 严格编解码；CP932 写不下的中文走[公共 JIS 流程](../guides/jis-substitution.md)。原版游戏不带 `uif_config.json`、`version.ini`/`winmm.ini` 等字符映射；游戏目录中出现它们，说明混入了之前的汉化或试注产物，须改用未改动的原版文件提取，不能把映射当作原作的一部分。
 - EF 控制序列转换、保护和回填仍使用下文的规则；译文必须保留 `\p/\c/\u` 的顺序与数量。换行可以比原文少，但不能新增或跨这些控制码移动。
 - 单字符串 EVAL 同样可拆分 `【姓名】正文`，回填保留字面量封装并更新内层长度。字段语义来源见 [文本字段来源](../provenance/common-text-fields.json)。
 - 当前 manifest 参考标识为 `yuris_text/2`。旧提取目录须从哈希通过的原始数据重新导出到新目录；新增/修正的字段会改变条数或定位，不能修改旧 manifest 或按条数猜配译文。
@@ -46,19 +46,19 @@
 在技能根目录运行；`<…>` 均为占位，按实际游戏替换。`<输出目录>` 应是游戏内新建的 `<游戏名>_extract`，可复用已存在的普通空目录，父目录须已存在；已有非空目录不能覆盖。
 
 ```text
-python -m python.engines.yuris_extract extract "<游戏目录>" "<输出目录>" --archive <剧本包相对路径>.ypf [--loose <原始松散YBN目录>] [--uif-config <映射配置>.json] [--reference-archive <其他包相对路径>.ypf] --smoke-test
+python -m python.engines.yuris_extract extract "<游戏目录>" "<输出目录>" --archive <剧本包相对路径>.ypf [--loose <原始松散YBN目录>] [--reference-archive <其他包相对路径>.ypf] --smoke-test
 ```
 
 - `--archive`：游戏目录内的 v482 剧本包，作为重封模板；其成员集合与 YSCM 决定回填范围。
 - `--loose`（可选）：与模板成员一一对应的**原始**松散 YBN 目录。省略时直接以 `--archive` 包内成员为文本基准（报告 `selected_baseline` 为 `template-archive-members`），成员须全部位于 `ysc.ybn` 所在目录。
 - **基准必须是未改动的原始脚本。** 游戏目录中的松散 `ysbin/` 或更新包可能已被汉化补丁、旧回填或其他工具覆盖；不能确认来源时不要传 `--loose`，改用原始包成员。`--reference-archive` 同样只用于对照原始包，不能把补丁产物当参考来源；报告的 `different_from_loose` 只说明差异，不判断哪一侧是原版。
-- 不自动猜测加载优先级、合并冲突文件或回溯扫描旧提取目录。没有已有字符映射时省略 `--uif-config`。
+- 不自动猜测加载优先级、合并冲突文件或回溯扫描旧提取目录。
 
 逐成员处理：某个场景解析或往返失败时只阻断该成员，记录为 `blocked`（含成员名与原因），不生成 JSON，在所有重建包中按原字节保留；其余成员照常导出。存在阻断成员时报告 `status` 为 `partial`、CLI 以非零码退出，须先研究报告 `blocked` 列表中的原因再声称完整提取。
 
 - `gt_input/`：按场景名生成平铺 JSON，无目标文字的场景和配套文件不产生空 JSON。
 - `gt_output/`：接收同名、同顺序译文；测试译文只放 `reports/smoke-translation/`，不混入这里。
-- `original/game/`：原始包、完整基准 YBN、YSCM 和可选 UIF 配置；`metadata/` 保存重新解析可核对的描述符身份及哈希。
+- `original/game/`：原始包、完整基准 YBN 和 YSCM；`metadata/` 保存重新解析可核对的描述符身份及哈希。
 - `rebuilt/roundtrip/`：场景经 parser/writer、原归档经容器 writer 重建后的原文往返结果，配套文件保留。
 - `rebuilt/current/<剧本包相对路径>.ypf`：按选定基准生成的完整包，沿用 `--archive` 的相对路径和文件名，须与基准逐成员比对，不与原包往返混淆。
 - `rebuilt/smoke-test/`：可选的变长测试脚本和完整包（同样沿用模板路径）；重新提取验证文本、描述符、原池、指令及行号。

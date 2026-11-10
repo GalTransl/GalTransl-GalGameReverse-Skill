@@ -3253,7 +3253,6 @@
         "python/engines/yuris_extract.py": [
           "read_file",
           "json_bytes",
-          "profile_from",
           "archive_members",
           "baseline_from_archive",
           "extract",

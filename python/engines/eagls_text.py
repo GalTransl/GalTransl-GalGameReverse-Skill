@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-only
-"""EAGLS source-text spans and reversible optional UIF character substitution.
+"""EAGLS source-text spans with strict storage-encoding round trips.
 
 Message/name/choice syntax informed by SExtractor's Engine_EAGLS preset;
 new bounded integration, not a general EAGLS command compiler.
@@ -17,30 +17,20 @@ class Profile:
     key: bytes = b"EAGLS_SYSTEM"
     label_size: int = 36
     encoding: str = "cp932"
-    source_characters: str = ""
-    target_characters: str = ""
-
-    def __post_init__(self):
-        a, b = self.source_characters, self.target_characters
-        if len(a) != len(b) or len(set(a)) != len(a) or len(set(b)) != len(b):
-            raise ValueError("character substitution must be a bijective table")
 
     def display(self, text):
-        return text.translate(str.maketrans(self.source_characters, self.target_characters))
+        return text
 
     def encode(self, text):
-        stored = text.translate(str.maketrans(self.target_characters, self.source_characters))
-        raw = stored.encode(self.encoding, "strict")
-        if self.display(raw.decode(self.encoding, "strict")) != text:
-            raise ValueError("translation cannot be represented by the existing display mapping")
+        raw = text.encode(self.encoding, "strict")
+        if raw.decode(self.encoding, "strict") != text:
+            raise ValueError("translation does not round-trip in the storage encoding")
         return raw
 
     def settings(self):
         return {"text_offset": self.text_offset, "version": self.version,
                 "key_hex": self.key.hex(), "label_size": self.label_size,
-                "storage_encoding": self.encoding,
-                "source_characters": self.source_characters,
-                "target_characters": self.target_characters}
+                "storage_encoding": self.encoding}
 
 
 def parse_script(encrypted: bytes, profile: Profile):

@@ -30,14 +30,20 @@ def json_bytes(value):
     return (json.dumps(value, ensure_ascii=False, indent=2) + "\n").encode("utf-8")
 
 
-def profile_from(config):
-    if config is None:
-        return Profile()
-    obj = load_json(config)
-    if obj.get("tunnel_decoder", {}).get("enable"):
-        raise ValueError("enabled tunnel decoding is not supported")
-    mapping = obj.get("character_substitution", {})
-    return Profile(source_characters=mapping["source_characters"], target_characters=mapping["target_characters"]) if mapping.get("enable") else Profile()
+def _legacy_profile_settings(settings):
+    """Drop the empty character-table fields of older workspaces.
+
+    Original games never ship a UIF mapping; a non-empty table means earlier
+    translation output was mixed into the source, so re-extract from the
+    original game instead.
+    """
+    settings = dict(settings)
+    source = settings.pop("source_characters", "")
+    target = settings.pop("target_characters", "")
+    if source or target:
+        raise ValueError("workspace carries a character table from earlier translation output; "
+                         "re-extract from the original game files")
+    return settings
 
 
 def archive_members(raw):
@@ -65,12 +71,11 @@ def baseline_from_archive(raw):
     return loose, data
 
 
-def extract(game, output, *, archive, loose=None, uif_config=None, reference_archives=(), smoke_test=False):
+def extract(game, output, *, archive, loose=None, reference_archives=(), smoke_test=False):
     game, output = Path(game), Path(output)
     validate_new_tree_destination(output)
     archive = logical_path(archive)
-    config = read_file(game / logical_path(uif_config)) if uif_config else None
-    profile = profile_from(config)
+    profile = Profile()
     if loose is None:
         # No trusted loose copy (absent or already patched): the template
         # archive itself is the original baseline.
@@ -100,9 +105,6 @@ def extract(game, output, *, archive, loose=None, uif_config=None, reference_arc
     for name, data in loose_data.items():
         files[f"original/game/{name}"] = data
         source_hashes[name] = sha256(data)
-    if config is not None:
-        files[f"original/game/{uif_config}"] = config
-        source_hashes[uif_config] = sha256(config)
     smoke = None
     versions = set()
     for name, raw in loose_data.items():
@@ -225,7 +227,7 @@ def extract(game, output, *, archive, loose=None, uif_config=None, reference_arc
               "versions": sorted(versions), "writer_versions": [WRITE_VERSION],
               "parse_versions": [PARSE_VERSIONS.start, PARSE_VERSIONS.stop - 1],
               "profile": profile.settings(), "archive": archive,
-              "loose": loose, "uif_config": uif_config, "source_hashes": source_hashes,
+              "loose": loose, "source_hashes": source_hashes,
               "counts": counts, "members": records,
               "blocked": [{"source": r["source"], "reason": r["reason"]} for r in records if r["status"] == "blocked"],
               "archives": archive_reports,
@@ -247,7 +249,7 @@ def rebuild(workspace, output):
         if sha256(data) != digest:
             raise ValueError("original source hash changed")
         sources[relative] = data
-    profile = Profile(**report["profile"])
+    profile = Profile(**_legacy_profile_settings(report["profile"]))
     loose = logical_path(report["loose"])
     ysc = sources[f"{loose}/ysc.ybn"]
     baseline = sources[logical_path(report["archive"])]
@@ -295,7 +297,6 @@ def main():
     p.add_argument("output")
     p.add_argument("--archive", required=True)
     p.add_argument("--loose", help="original loose YBN directory; omit to use --archive members")
-    p.add_argument("--uif-config")
     p.add_argument("--reference-archive", action="append", default=[])
     p.add_argument("--smoke-test", action="store_true")
     p = commands.add_parser("rebuild")
@@ -303,7 +304,7 @@ def main():
     p.add_argument("output")
     args = parser.parse_args()
     if args.command == "extract":
-        report = extract(args.game, args.output, archive=args.archive, loose=args.loose, uif_config=args.uif_config,
+        report = extract(args.game, args.output, archive=args.archive, loose=args.loose,
                          reference_archives=args.reference_archive, smoke_test=args.smoke_test)
         print(json.dumps({"status": report["status"], "counts": report["counts"],
                           "blocked": report["blocked"]}, ensure_ascii=False))

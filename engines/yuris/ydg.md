@@ -98,7 +98,7 @@ python -m python.engines.yuris_ydg_workflow font "<字体工作区>" "<新字体
 
 - 不同字号可用 `grids` 替代 `grid`，键为文件名 `sSIZE` 的十进制 SIZE；没有对应配置时拒绝。`styles` 可按字体页相对父目录覆盖默认 `style`，不根据目录名自动猜加粗或阴影。
 - `symbol_rules` 以实际目标字为键，可指定 `glyph`（显式替代字形）、整数 `dx/dy` 和 `align`（`baseline/center/bottom/left`）。只有明确规则才替代符号，不自动把缺字画成中点。
-- `--mapping` 接收单字 `目标中文 -> CP932代理字` 字典、公共流程的 `jis-mapping.json`，或已启用 `character_substitution` 的 UIF 配置。重复代理、非稳定 CP932、profile 中无对应槽均拒绝。
+- `--mapping` 接收单字 `目标中文 -> CP932代理字` 字典、公共流程的 `jis-mapping.json`，或公共流程同批输出的 `uif_config.json`（已启用 `character_substitution`）。重复代理、非稳定 CP932、profile 中无对应槽均拒绝。
 - `--jis-preset` 使用随包公共 JIS 字表并核对哈希；不复制上游字表。它与 `--mapping` 互斥。完整预设可能影响原有日文/UI，优先用公共流程本次生成的映射。
 - `--mapped-only` 只重绘映射涉及的槽，其余像素保留；省略则重绘有效 CP932 槽，仍保留非法字节对槽。每个相对目录内的每个字号分别校验页面覆盖，必须覆盖全部映射代理，否则整批拒绝。
 - 使用字体 cmap 检查缺字，并检查字形及样式是否超出格子；缺字、空字形、裁切风险不静默降级。字号和符号位置不合适时修改配置后输出另一个新目录。

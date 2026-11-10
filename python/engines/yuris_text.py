@@ -16,27 +16,18 @@ from ..common.line_layout import drops_only_line_breaks
 @dataclass(frozen=True)
 class Profile:
     key: int = 0x96AC6FD3
-    source_characters: str = ""
-    target_characters: str = ""
-
-    def __post_init__(self):
-        a, b = self.source_characters, self.target_characters
-        if len(a) != len(b) or len(set(a)) != len(a) or len(set(b)) != len(b):
-            raise ValueError("substitution table must be bijective")
 
     def display(self, text):
-        return text.translate(str.maketrans(self.source_characters, self.target_characters))
+        return text
 
     def encode(self, text):
-        stored = text.translate(str.maketrans(self.target_characters, self.source_characters))
-        data = stored.encode("cp932", "strict")
-        if self.display(data.decode("cp932", "strict")) != text:
-            raise ValueError("text cannot be represented by the existing character mapping")
+        data = text.encode("cp932", "strict")
+        if data.decode("cp932", "strict") != text:
+            raise ValueError("text does not round-trip in CP932")
         return data
 
     def settings(self):
-        return {"key": self.key, "source_characters": self.source_characters,
-                "target_characters": self.target_characters}
+        return {"key": self.key}
 
 
 # YSTB/YSCM carry their own version word. A third-party tool accepts 234..490

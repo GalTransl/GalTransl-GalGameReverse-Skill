@@ -48,7 +48,7 @@ ACP 跟随的引擎有两条路：
 - [jis_substitution.py](../python/common/jis_substitution.py)：SExtractor 固定映射、冲突检测、私用代理字分配、保留码位、配置及 hook 产物。仅依赖标准库，无需安装外部项目。
 - 工作区采用主 Skill 的 `original/metadata/reports/gt_input/gt_output` 结构；引擎接受 UTF-8 的最小 name/names/message JSON，并已有严格 CP932 writer 与真实重提取能力。
 - 必须确认**存储编码**。JSON 本身是 UTF-8，某些 manifest 的 encoding 也是交换层 UTF-8；都不能代替脚本编码证据。严格 shift_jis、UTF-8、UTF-16、GBK 不使用此流程，Kirikiri PSB/SCN 不因 XP3 文件名编码而触发它。`--encoding` 的实际写法（如 `cp932`、`CP932`、`windows-31j`）原样记入报告的 `script_encoding`。
-- 原脚本已使用 UIF 替换或 tunneling 时先识别原映射。工作区声明已有 source/target 字符表、已启用旧映射，或 `original/` 中 `CialloHook.ini`/`version.ini`/`winmm.ini` 开启 `EnableCnJpMap` 时，公共准备器拒绝直接叠加；应先制定合并/还原方案。游戏目录已有 hook 也需检查，不能用新子集配置覆盖仍在使用的旧映射。
+- 原版游戏不带 `uif_config.json`、`version.ini`/`winmm.ini` 等字符映射；游戏目录中出现它们，说明混入了之前的汉化或试注产物，须改用未改动的原版文件提取，不能把映射当作原作的一部分。工作区声明 source/target 字符表、已启用映射，或 `original/` 中 `CialloHook.ini`/`version.ini`/`winmm.ini` 开启 `EnableCnJpMap` 时，公共准备器拒绝处理；从原版重新提取，不叠加旧映射。
 
 `prepare` / `finalize` 的输出父目录须已存在，目标须不存在或为普通空目录；非空目录、文件和链接拒绝。
 

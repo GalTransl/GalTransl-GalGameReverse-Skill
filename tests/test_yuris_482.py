@@ -87,7 +87,7 @@ class Yuris482Tests(unittest.TestCase):
     def setUp(self):
         self.ysc = dictionary()
         self.raw = scenario()
-        self.profile = Profile(source_characters='遅', target_characters='迟')
+        self.profile = Profile()
 
     def test_murmur_known_upstream_vectors(self):
         self.assertEqual(murmur2(b'TEST'), 2297143075)
@@ -100,9 +100,9 @@ class Yuris482Tests(unittest.TestCase):
 
     def test_shared_text_clone_and_control_targets_preserved(self):
         rows, meta = export_script(self.raw,self.ysc,self.profile)
-        self.assertEqual(rows[0],{'name':'花子','message':'「迟い」'})
+        self.assertEqual(rows[0],{'name':'花子','message':'「遅い」'})
         self.assertEqual(rebuild_script(self.raw,self.ysc,rows,meta,self.profile),self.raw)
-        rows[0]={'name':'太郎','message':'「迟い LONGER ABC」'}
+        rows[0]={'name':'太郎','message':'「遅い LONGER ABC」'}
         changed = rebuild_script(self.raw,self.ysc,rows,meta,self.profile)
         before=Scenario(self.raw,commands_from(self.ysc),self.profile.key)
         after=Scenario(changed,commands_from(self.ysc),self.profile.key)
@@ -113,7 +113,7 @@ class Yuris482Tests(unittest.TestCase):
 
     def test_manifest_controls_unencodable_and_key_rejected(self):
         rows, meta=export_script(self.raw,self.ysc,self.profile)
-        for text in ('bad\nline','bad\\p','😀','遅'):
+        for text in ('bad\nline','bad\\p','😀','迟'):
             t=copy.deepcopy(rows);t[0]['message']=text
             with self.assertRaises((ValueError,UnicodeError)):rebuild_script(self.raw,self.ysc,t,meta,self.profile)
         bad=copy.deepcopy(meta);bad['records'][0]['locator']['attribute']=1
@@ -135,8 +135,8 @@ class Yuris482Tests(unittest.TestCase):
             rows,meta=export_script(raw,self.ysc)
             self.assertEqual(rows,[{'message':'花子'}])
             self.assertEqual(rebuild_script(raw, self.ysc, rows, meta), raw)
-            translated = [{'message': '更长的姓名'}]
-            profile = Profile(source_characters='長', target_characters='长')
+            translated = [{'message': '更長的姓名'}]
+            profile = Profile()
             rows, meta = export_script(raw, self.ysc, profile)
             result=rebuild_script(raw,self.ysc,translated,meta,profile)
             s=Scenario(result,commands_from(self.ysc),self.profile.key)
@@ -190,9 +190,9 @@ class Yuris482Tests(unittest.TestCase):
         self.assertEqual(rows, [{'message': '「本文」'}])
         self.assertEqual(stats, {'opaque_eval': 2})
         self.assertEqual(rebuild_script(raw, self.ysc, rows, meta), raw)
-        profile = Profile(source_characters='長', target_characters='长')
+        profile = Profile()
         _, meta = export_script(raw, self.ysc, profile)
-        result = rebuild_script(raw, self.ysc, [{'message': '「更长的正文 ABC」'}], meta, profile)
+        result = rebuild_script(raw, self.ysc, [{'message': '「更長的正文 ABC」'}], meta, profile)
         before = Scenario(raw, commands_from(self.ysc), self.profile.key)
         after = Scenario(result, commands_from(self.ysc), self.profile.key)
         for number in (0, 2):
