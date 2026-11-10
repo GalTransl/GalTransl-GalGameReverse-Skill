@@ -45,7 +45,7 @@ with asset.open_checked(source_path) as stream:
 - `StringGrid`：rows 数组 → name → type → textLength → headerRow。
 - 每行：rowIndex → strings 数组 → isEmpty（bool + 对齐）→ isCommentOut（bool + 对齐）。每个字符串是 LE32 UTF-8 **字节长度**、原始字节、四字节绝对对齐的零 padding。
 - `sheetName`、运行时列索引、调试缓存等不属于这份序列化布局，不因为类字段中存在就读写它们。
-- 剧情表 `textLength` 是**所有行、所有单元格的 UTF-16 code unit 总数**，不是 UTF-8 字节数，也不是 Python 字符数；非 BMP 字符算两个单位。提取校验它，回写重新计算。
+- 剧情表 `textLength` 是**所有行、所有单元格的 UTF-16 code unit 总数**，不是 UTF-8 字节数，也不是 Python 字符数；非 BMP 字符算两个单位。提取校验它，回写重新计算。剧情表缓存与实际不符时报错给出 book 名、表名及缓存值/实际值：资产可能已被其他工具修改，应改用原始备份，不自动修正缓存。
 - `AdvChapterData`：MonoBehaviour 头 → chapterName → book PPtr 数组 → settings StringGrid 数组（没有 sheet 的 entity 数组）。其缓存可能保留旧导入值，当前只报告缓存差异并原样保留整个对象，不擅自修复设置。
 
 数组、单字段、总单元格、偏移、padding 和尾部必须全部满足边界。文件解析完必须精确到结尾。新增布局先独立建 profile 与测试，不在当前解析器里吞掉未知尾部。
@@ -72,6 +72,8 @@ python -m python.engines.unity_utage_extract pack "/game/new_extract" "/game/new
 输出包含 `gt_input/`、`gt_output/`、`original/`、`metadata/`、`reports/` 和 `rebuilt/roundtrip/`。提取会通过实际表 writer 和容器 writer 重建全部目标书本，并要求完整资产原文往返逐字节一致。
 
 回填从 `gt_output` 读取同名 JSON，缺失文件保留原文，未知文件名报告但不猜配。重新读取原资产/依赖并核对哈希，重新生成条目和 manifest，与 `gt_input`、metadata 比较；源文件或 manifest 被改就停止。用户误改 `gt_input` 时按主流程先保存修改、再恢复原文，不能改 manifest 绕过校验。
+
+译文错误检查完全部表后一次列出，格式为 `<文件>.json #<JSON 下标>: 原因 (table '<表名>' row <表内行号>)`；下标从 0 开始，表内行号仅供对照原表。控制符不符时附期望/实际 token。CLI 的错误只输出到 stderr（退出码 1），结果 JSON 以 UTF-8 原样输出路径与表名，不做 `\u` 转义。
 
 writer 会重建 UTF-8 字符串、四字节 padding、表 textLength、对象大小、八字节对象对齐、对象表偏移和文件长度。保留 PathID、类型、外部引用、非目标对象及不透明间隙。回填后重读容器的实际偏移、重读剧情并核对译文；反向撤销允许的文本编辑后要求原 book 字节完整恢复。配套 `.resS/.resource` 引用与数据保持原样。
 

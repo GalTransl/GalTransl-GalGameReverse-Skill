@@ -315,6 +315,49 @@ class WorkspaceTests(unittest.TestCase):
         workflow.extract(self.source, self.work, dependencies=[dep])
         workflow.pack(self.work, self.root / "pack")
 
+    def test_translation_errors_name_json_index_and_table_row(self):
+        self.extract()
+        rows = json.loads((self.work / "gt_input/opening.json").read_text(encoding="utf-8"))
+        rows[0]["message"] = "无变量"
+        rows[1]["message"] = ""
+        (self.work / "gt_output/opening.json").write_bytes(workflow.json_bytes(rows))
+        with self.assertRaises(u.TranslationErrors) as caught:
+            workflow.pack(self.work, self.root / "pack")
+        errors = caught.exception.errors
+        self.assertEqual(len(errors), 2)
+        self.assertTrue(errors[0].startswith("opening.json #0: changes controls/line breaks (expected tokens"))
+        self.assertTrue(errors[0].endswith("(table 'sheet:opening' row 1)"))
+        self.assertEqual(errors[1], "opening.json #1: empty message (table 'sheet:opening' row 2)")
+        self.assertFalse((self.root / "pack").exists())
+
+    def test_stale_text_length_names_table_and_backup_hint(self):
+        raw = bytearray(book_bytes())
+        struct.pack_into("<i", raw, len(raw) - 16, 999)
+        self.source.write_bytes(asset([(900, 115, mono_script("AdvImportBook")), (10, 114, bytes(raw))]))
+        with self.assertRaises(FormatError) as caught:
+            self.extract()
+        message = str(caught.exception)
+        for part in ("'synthetic.book'", "'sheet:opening'", "textLength 999", "原始备份"):
+            self.assertIn(part, message)
+
+    def test_cli_prints_unescaped_paths_and_readable_errors(self):
+        import subprocess, sys
+        repo = Path(__file__).resolve().parents[1]
+        folder = self.root / "日本語"
+        folder.mkdir()
+        source = folder / "backup.assets"
+        source.write_bytes(asset())
+        command = [sys.executable, "-X", "utf8", "-m", "python.engines.unity_utage_extract", "extract",
+                   str(source), str(folder / "out")]
+        done = subprocess.run(command, cwd=repo, capture_output=True, text=True, encoding="utf-8")
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertIn("日本語", done.stdout)
+        self.assertNotIn("\\u", done.stdout)
+        done = subprocess.run(command, cwd=repo, capture_output=True, text=True, encoding="utf-8")
+        self.assertEqual(done.returncode, 1)
+        self.assertNotIn("Traceback", done.stderr)
+        self.assertTrue(done.stderr.startswith("error: "))
+
     def test_empty_sheet_and_flat_collision(self):
         grids = [grid_bytes("path:opening"), grid_bytes("other:opening", shift=True),
                  grid_bytes("file:empty", custom=[(["Command", "Arg1", "Text"], False, False)])]

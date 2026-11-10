@@ -10,6 +10,7 @@ import io
 import json
 from pathlib import Path
 import re
+import sys
 import unicodedata
 
 from ..archives import unity_serialized as archive
@@ -90,10 +91,13 @@ def inventory(data, dependencies):
         if cls["namespace"] != "Utage" or cls["class"] not in ("AdvImportBook", "AdvChapterData"):
             continue
         raw = archive.read_object(io.BytesIO(data), obj)
-        if cls["class"] == "AdvImportBook":
-            books[obj.path_id] = (raw, script.read_book(raw))
-        else:
-            chapters.append(script.read_chapter(raw))
+        try:
+            if cls["class"] == "AdvImportBook":
+                books[obj.path_id] = (raw, script.read_book(raw))
+            else:
+                chapters.append(script.read_chapter(raw))
+        except FormatError as exc:
+            raise FormatError(f"Utage {cls['class']} {name!r} (path_id {obj.path_id}): {exc}") from exc
     if not books:
         raise FormatError("no class-verified Utage AdvImportBook in source asset")
     names = script.character_names(chapters)
@@ -229,7 +233,19 @@ def pack(workspace, output):
             translated.append(name)
         by_book[member["path_id"]][member["grid"]] = rows
         expected_rows[name] = rows
-    replacements = {pid: script.patch_book(data, by_book[pid], names) for pid, (data, _) in books.items()}
+    labels = {pid: {} for pid in books}
+    for member in members:
+        if member["json"]:
+            labels[member["path_id"]][member["grid"]] = member["json"]
+    replacements, errors = {}, []
+    for pid, (data, _) in books.items():
+        try:
+            replacements[pid] = script.patch_book(data, by_book[pid], names, labels[pid])
+        except script.TranslationErrors as exc:
+            # Check every book so all rejected rows are listed at once.
+            errors.extend(exc.errors)
+    if errors:
+        raise script.TranslationErrors(errors)
     rebuilt = archive.rebuild(raw, replacements)
     # Read actual file offsets, then compare semantic exports to submitted rows.
     _, _, _, after_members, after_rows, _ = inventory(rebuilt, dep)
@@ -267,8 +283,16 @@ def main():
     p.add_argument("output")
     args = vars(parser.parse_args())
     action = args.pop("command")
-    result = extract(**args) if action == "extract" else pack(**args)
-    print(json.dumps({k: v for k, v in result.items() if k != "members"}, ensure_ascii=True))
+    try:
+        result = extract(**args) if action == "extract" else pack(**args)
+    except (ValueError, OSError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        raise SystemExit(1)
+    # Paths and sheet names stay readable; a console that cannot encode a
+    # character shows an escape instead of failing after the work is done.
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(errors="backslashreplace")
+    print(json.dumps({k: v for k, v in result.items() if k != "members"}, ensure_ascii=False))
 
 
 if __name__ == "__main__":

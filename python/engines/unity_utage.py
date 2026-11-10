@@ -116,7 +116,8 @@ def read_grid(r, *, check_total=True):
     if not 0 <= grid.header < max(1, len(rows)):
         raise FormatError("Utage header row outside grid")
     if check_total and grid.text_length != units(grid):
-        raise FormatError("Utage cached textLength differs from UTF-16 unit count")
+        raise FormatError(f"Utage table {grid.name!r}: cached textLength {grid.text_length} differs from "
+                          f"UTF-16 unit count {units(grid)}; 资产可能已被其他工具修改，请改用原始备份")
     return grid
 
 
@@ -272,35 +273,69 @@ def export_book(book, names=None):
     return result
 
 
-def patch_book(data, translations, names=None):
-    """Patch selected grids by ordinal; validate every field against fresh parse."""
+class TranslationErrors(FormatError):
+    """All rejected rows, each as ``<file>.json #<index>: reason (table, row)``."""
+
+    def __init__(self, errors):
+        self.errors = list(errors)
+        super().__init__(f"{len(self.errors)} Utage translation error(s):\n" + "\n".join(self.errors))
+
+
+def _row_error(source, target):
+    if not isinstance(target, dict) or set(target) != set(source):
+        return "fields differ from the original row"
+    if target.get("name") != source.get("name"):
+        return "name is read-only context; do not translate resource keys"
+    message = target["message"]
+    if not isinstance(message, str):
+        return "message is not a string"
+    if not message.strip() and message != source["message"]:
+        return "empty message"
+    try:
+        actual = controls(message)
+    except (FormatError, UnicodeError) as exc:
+        return str(exc)
+    expected = controls(source["message"])
+    if not drops_only_line_breaks(expected, actual, lambda token: token in LINE_BREAKS):
+        return f"changes controls/line breaks (expected tokens {expected}, actual {actual})"
+    if len(message.encode("utf-8")) > 1 << 20:
+        return "string exceeds budget"
+    return None
+
+
+def patch_book(data, translations, names=None, labels=None):
+    """Patch selected grids by ordinal; validate every field against fresh parse.
+
+    ``labels`` maps grid ordinal to its JSON filename for error messages.
+    Every rejected row is collected and raised together as TranslationErrors.
+    """
+    labels = labels or {}
     original = read_book(data)
     exports = export_book(original, names)
     if set(translations) - set(range(len(exports))):
         raise FormatError("unknown Utage grid translation")
     modified = copy.deepcopy(original)
-    projected = len(data)
+    projected, errors = len(data), []
+    footprint = lambda s: (len(s.encode("utf-8")) + 3) // 4 * 4
     for item in exports:
+        label = labels.get(item["grid"]) or f"table {item['name']!r}"
         targets = translations.get(item["grid"], item["rows"])
         if not isinstance(targets, list) or len(targets) != len(item["rows"]):
-            raise FormatError("Utage translation row count differs")
-        for source, target, loc in zip(item["rows"], targets, item["locations"]):
-            if not isinstance(target, dict) or set(target) != set(source):
-                raise FormatError("Utage translation fields differ")
-            if target.get("name") != source.get("name"):
-                raise FormatError("Utage name is read-only context; do not translate resource keys")
+            count = len(targets) if isinstance(targets, list) else "non-list"
+            errors.append(f"{label}: translation row count {count} differs from {len(item['rows'])}")
+            continue
+        for index, (source, target, loc) in enumerate(zip(item["rows"], targets, item["locations"])):
+            reason = _row_error(source, target)
+            if reason:
+                errors.append(f"{label} #{index}: {reason} (table {item['name']!r} row {loc['row']})")
+                continue
             message = target["message"]
-            if (not isinstance(message, str) or (not message.strip() and message != source["message"])
-                    or not drops_only_line_breaks(controls(source["message"]), controls(message),
-                                                  lambda token: token in LINE_BREAKS)):
-                raise FormatError(f"Utage translation is empty or changes controls/line breaks: {item['name']} row {loc['row']}")
-            if len(message.encode("utf-8")) > 1 << 20:
-                raise FormatError("Utage translation string exceeds budget")
-            footprint = lambda s: (len(s.encode("utf-8")) + 3) // 4 * 4
             projected += footprint(message) - footprint(source["message"])
-            if projected > MAX_OBJECT:
-                raise FormatError("rebuilt Utage object exceeds budget")
             modified.grids[item["grid"]].rows[loc["row"]].strings[loc["column"]] = message
+    if errors:
+        raise TranslationErrors(errors)
+    if projected > MAX_OBJECT:
+        raise FormatError("rebuilt Utage object exceeds budget")
     for grid in modified.grids:
         grid.text_length = units(grid)
     result = write_book(modified)
