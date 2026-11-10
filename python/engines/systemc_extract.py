@@ -12,6 +12,7 @@ from ..common.binary import FormatError
 from ..common.contract import dump_rows, load_json, sha256
 from ..common.jis_workflow import preflight_translations
 from ..common.safety import write_new_tree, validate_new_tree_destination
+from . import systemc_codepage as codepage
 from .systemc import MAX_BYTES, VARIANT, export_act, inject_act
 
 
@@ -143,7 +144,12 @@ def extract(game, destination, *, verify_edits=False):
               "json_rows": 0, "selection_rows": 0, "runtime_verified": False,
               "loose_data": {"matching": [], "differing": [], "missing": []},
               "source_selection": "data.fpk; loose data and sibling FPKs compared only, never merged",
-              "encoding": "cp932", "name_policy": "context-only"}
+              "encoding": "cp932", "name_policy": "context-only",
+              "runtime_codepage": {
+                  "note": "The source scripts are CP932. Some SystemC executables decode them with the system "
+                          "ANSI code page (CP_ACP); then a CP932/JIS package is garbled on a Chinese (936) "
+                          "system and pack --output-encoding gbk is the matching route. Choose by evidence.",
+                  "probe": "python -m python.common.jis_workflow codepage <exe>"}}
     packages, warnings = _sibling_packages(game, "data.fpk", members)
     report["sibling_packages"] = packages
     report["overridden_script_members"] = sorted({m for p in packages for m in p.get("differing_script_members", [])})
@@ -207,16 +213,34 @@ def extract(game, destination, *, verify_edits=False):
     return report
 
 
-def pack(workspace, destination=None, *, translations=None, jis_mode="auto", jis_preflight=False,
-         base_confirmed=False):
+def pack(workspace, destination=None, *, translations=None, jis_mode=None, jis_preflight=False,
+         base_confirmed=False, output_encoding="cp932", gbk_replace=(), gbk_replace_table=None,
+         gbk_preflight=False, gbk_keep_members=()):
+    """Rebuild a complete data.fpk.
+
+    ``output_encoding="cp932"`` keeps the original code page (JIS proxy by
+    default). ``"gbk"`` transcodes every runtime text member for executables
+    that decode script text with the system ANSI code page; it implies
+    ``jis_mode="off"`` and rejects an explicit ``"auto"``.
+    """
     from python.common.jis_substitution import JisSubstitution
 
+    if output_encoding not in ("cp932", "gbk"):
+        raise FormatError("unsupported SystemC output encoding")
+    if output_encoding == "gbk":
+        if jis_mode == "auto" or jis_preflight:
+            raise FormatError("--output-encoding gbk cannot be combined with JIS substitution "
+                              "(--jis-mode auto / --jis-preflight); GBK output implies --jis-mode off")
+        jis_mode = "off"
+    elif gbk_preflight or gbk_replace or gbk_replace_table is not None or gbk_keep_members:
+        raise FormatError("GBK options require --output-encoding gbk")
+    jis_mode = "auto" if jis_mode is None else jis_mode
     if jis_mode not in ("auto", "off"):
         raise FormatError("unsupported JIS mode")
     if jis_preflight and jis_mode != "auto":
         raise FormatError("JIS preflight requires --jis-mode auto")
     workspace = Path(workspace)
-    if not jis_preflight:
+    if not (jis_preflight or gbk_preflight):
         if destination is None:
             raise FormatError("SystemC pack requires an output destination")
         destination = Path(destination)
@@ -246,10 +270,15 @@ def pack(workspace, destination=None, *, translations=None, jis_mode="auto", jis
     translated_dir = Path(translations) if translations is not None else workspace / "gt_output"
     rewritten = dict(members)
     result = {"schema": "systemc-pack/1", "variant": VARIANT, "source_sha256": sha256(raw),
+              "output_encoding": output_encoding,
               "translations": [], "missing_translations": [], "changed_rows": 0,
               "runtime_verified": False, "compiled_members_unchanged": True}
+    gbk = None
+    if output_encoding == "gbk":
+        gbk = _gbk_setup(report, members, gbk_replace, gbk_replace_table, gbk_keep_members,
+                         base_confirmed or gbk_preflight)
     expected_json = set()
-    originals, translated = {}, {}
+    originals, translated, scripts = {}, {}, []
     for name in _acts(members):
         rows, manifest = export_act(name, members)
         if not rows:
@@ -267,7 +296,9 @@ def pack(workspace, destination=None, *, translations=None, jis_mode="auto", jis
             originals[json_name] = original
             if provided:
                 translated[json_name] = after
-        if not jis_preflight:
+        elif gbk is not None:
+            scripts.append((name, json_name, original, metadata, after))
+        else:
             rewritten[name] = inject_act(name, members, original, metadata, after, text_codec=text_codec)
         result["changed_rows"] += sum(a != b for a, b in zip(original, after))
         result["translations" if provided else "missing_translations"].append(json_name)
@@ -277,6 +308,8 @@ def pack(workspace, destination=None, *, translations=None, jis_mode="auto", jis
                  for name in [*_acts(members), "charaid.tbl"]}
         return dict(result, schema="systemc-jis-preflight/1", jis_preflight=preflight_translations(
             originals, translated, encoding="cp932", extra_texts=extra))
+    if gbk is not None:
+        return _pack_gbk(raw, members, scripts, gbk, result, destination, gbk_preflight)
     repacked = rebuild_fpk(raw, rewritten)
     _verify_archive(repacked, rewritten)
     result.update(output_sha256=sha256(repacked), size=len(repacked), reparsed_exactly=True,
@@ -285,6 +318,102 @@ def pack(workspace, destination=None, *, translations=None, jis_mode="auto", jis
     extras = text_codec.artifacts() if text_codec is not None else []
     result["jis_artifacts"] = [name for name, _ in extras]
     write_new_tree(destination, [("data.fpk", repacked), ("verification.json", _json(result)), *extras])
+    return result
+
+
+TRANSCODED_KINDS = ("act", "text", "dat-titles")
+
+
+def _gbk_setup(report, members, pairs, table_path, keep, base_confirmed):
+    table = None if table_path is None else codepage.load_replacement_table(_read(table_path))
+    mapping = codepage.parse_replacements(pairs, table)
+    kinds = codepage.classify(members, set(keep))
+    # A same-name member in another FPK may shadow the transcoded copy and
+    # reintroduce CP932 bytes at runtime, even when its content is identical.
+    shadowed = sorted({f"{p['path']}:{m['member']}" for p in report.get("sibling_packages") or []
+                       for m in p.get("same_name_members") or [] if kinds.get(m["member"]) in TRANSCODED_KINDS})
+    if shadowed and not base_confirmed:
+        raise FormatError(f"GBK output: sibling FPK(s) carry same-name text members that would stay CP932 "
+                          f"({', '.join(shadowed[:8])}); confirm data.fpk is effective, then pass --base-confirmed")
+    loose = report.get("loose_data") or {}
+    warnings = [f"loose data/{name} exists and still uses CP932; replace or remove it if the game reads loose files"
+                for name in sorted({*loose.get("matching", []), *loose.get("differing", [])})
+                if kinds.get(name) in TRANSCODED_KINDS]
+    warnings += [f"sibling package member {item} stays CP932; data.fpk confirmed effective" for item in shadowed]
+    return {"mapping": mapping, "kinds": kinds, "warnings": warnings}
+
+
+def _count_mapped(rows, before, mapping, label, counts):
+    for row, old in zip(rows, before):
+        for key, value in row.items():
+            if isinstance(value, str) and value != old.get(key):
+                for char in mapping:
+                    if char in value:
+                        counts.setdefault(char, {}).setdefault(label, 0)
+                        counts[char][label] += value.count(char)
+
+
+def _pack_gbk(raw, members, scripts, gbk, result, destination, preflight):
+    """Whole-package CP932 -> GBK transcode, ACT injection and GBK readback."""
+    mapping, kinds = gbk["mapping"], gbk["kinds"]
+    failures = codepage.scan(members, kinds, mapping,
+                             [(json_name, after, original) for _, json_name, original, _, after in scripts])
+    by_kind = {}
+    for name, kind in kinds.items():
+        by_kind.setdefault(kind, []).append(name)
+    if preflight:
+        return dict(result, schema="systemc-gbk-preflight/1", gbk_preflight={
+            "ok": not failures, "failures": failures, "characters": codepage.summarize(failures),
+            "replacements": codepage.replacement_report(mapping, {}),
+            "member_kinds": {k: len(v) for k, v in sorted(by_kind.items())}, "warnings": gbk["warnings"]})
+    if failures:
+        raise FormatError(codepage.failure_message(failures))
+    transcoded, counts = codepage.transcode(members, kinds, mapping)
+    rewritten = dict(transcoded)
+    expected_lines = {name: codepage.apply(members[name].decode("cp932"), mapping).split("\r\n")
+                      for name in _acts(members)}
+    expected_rows, untranslated = {}, 0
+    for name, json_name, original, metadata, after in scripts:
+        rows_gbk, manifest_gbk = export_act(name, transcoded, encoding="gbk")
+        if rows_gbk != codepage.map_rows(original, mapping) or manifest_gbk["records"] != metadata["records"]:
+            raise FormatError(f"GBK transcode changed SystemC text structure: {name}")
+        after_gbk = codepage.map_rows(after, mapping)
+        _count_mapped(after, original, mapping, f"gt_output/{json_name}", counts)
+        rewritten[name] = inject_act(name, transcoded, rows_gbk, manifest_gbk, after_gbk, encoding="gbk")
+        expected_rows[name] = (after_gbk, metadata["records"])
+        untranslated += sum(a == b for a, b in zip(original, after))
+        # Independent expectation: mapped source lines with translated slots
+        # substituted and shorter messages padded by empty lines.
+        lines = expected_lines[name]
+        for record, row in zip(metadata["records"], after_gbk):
+            start, slots = record["locator"]["message_line"], record["locator"]["message_lines"]
+            new = row["message"].split("\n")
+            lines[start:start + slots] = new + [""] * (slots - len(new))
+    repacked = rebuild_fpk(raw, rewritten)
+    _, packed = unpack_fpk(repacked)
+    if packed != rewritten:
+        raise FormatError("rebuilt FPK did not reproduce all expected members")
+    checked = codepage.verify_readback(members, packed, kinds, mapping, expected_lines)
+    for name, (rows, records) in expected_rows.items():
+        actual_rows, actual_manifest = export_act(name, packed, encoding="gbk")
+        if actual_rows != rows or actual_manifest["records"] != records:
+            raise FormatError(f"GBK readback reparse differs: {name}")
+    result.update(
+        output_sha256=sha256(repacked), size=len(repacked), reparsed_exactly=True, byte_identical=False,
+        compiled_members_unchanged=not by_kind.get("dat-titles"), compiled_fields_unchanged=True,
+        jis_mode="off", jis_mode_reason="implied by --output-encoding gbk", jis_artifacts=[],
+        text_encoding={"mode": "gbk-transcode", "source": "cp932", "codec": "gbk", "lossy": False},
+        transcoded_members={kind: sorted(by_kind.get(kind, [])) for kind in TRANSCODED_KINDS},
+        transcode_policy="whole ACT files (prose, name headers, labels, comments, commands), whole text members "
+                         "and DAT scene-title fields are converted CP932->GBK; only kept_cp932_members keep CP932",
+        unchanged_members={"ascii": sorted(by_kind.get("ascii", [])), "binary": len(by_kind.get("binary", []))},
+        kept_cp932_members=[{"member": name, "reason": "explicit --gbk-keep-member: confirmed not decoded "
+                             "through the ANSI code page"} for name in sorted(by_kind.get("kept", []))],
+        replacements=codepage.replacement_report(mapping, counts),
+        readback={**checked, "decoded_as": "gbk", "translated_rows_match": True,
+                  "untranslated_rows_match_source_unicode": untranslated, "compiled_bindings_unchanged": True},
+        runtime_requirement=codepage.RUNTIME_REQUIREMENT, warnings=gbk["warnings"])
+    write_new_tree(destination, [("data.fpk", repacked), ("verification.json", _json(result))])
     return result
 
 
@@ -299,21 +428,33 @@ def main():
     pk.add_argument("workspace", type=Path)
     pk.add_argument("--output", type=Path)
     pk.add_argument("--translations", type=Path)
-    pk.add_argument("--jis-mode", choices=("auto", "off"), default="auto")
+    pk.add_argument("--jis-mode", choices=("auto", "off"), default=None,
+                    help="CP932 output only; default auto. GBK output implies off")
     pk.add_argument("--jis-preflight", action="store_true", help="report JIS proxy conflicts without writing a package")
     pk.add_argument("--base-confirmed", action="store_true",
                     help="data.fpk scripts confirmed effective despite differing sibling FPK members")
+    pk.add_argument("--output-encoding", choices=("cp932", "gbk"), default="cp932",
+                    help="gbk: transcode every runtime text member for ACP-936 executables (no JIS)")
+    pk.add_argument("--gbk-replace", action="append", default=[], metavar="SRC=DST",
+                    help="explicit replacement for a character GBK cannot encode (repeatable)")
+    pk.add_argument("--gbk-replace-table", type=Path, help="JSON object of explicit GBK replacements")
+    pk.add_argument("--gbk-keep-member", action="append", default=[], metavar="MEMBER",
+                    help="keep a non-ASCII member byte-for-byte (only if the runtime never decodes it via ACP)")
+    pk.add_argument("--gbk-preflight", action="store_true",
+                    help="list every GBK-unencodable character without writing a package")
     args = parser.parse_args()
     if args.command == "pack":
-        if not args.jis_preflight and args.output is None:
-            parser.error("pack requires --output unless --jis-preflight is selected")
-        if args.jis_preflight and args.jis_mode != "auto":
+        if not (args.jis_preflight or args.gbk_preflight) and args.output is None:
+            parser.error("pack requires --output unless a preflight is selected")
+        if args.jis_preflight and args.jis_mode not in (None, "auto"):
             parser.error("--jis-preflight requires --jis-mode auto")
     try:
         result = (extract(args.game, args.output, verify_edits=args.verify_edits) if args.command == "extract"
                   else pack(args.workspace, args.output, translations=args.translations,
                             jis_mode=args.jis_mode, jis_preflight=args.jis_preflight,
-                            base_confirmed=args.base_confirmed))
+                            base_confirmed=args.base_confirmed, output_encoding=args.output_encoding,
+                            gbk_replace=args.gbk_replace, gbk_replace_table=args.gbk_replace_table,
+                            gbk_preflight=args.gbk_preflight, gbk_keep_members=args.gbk_keep_member))
     except (FormatError, ValueError, OSError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         raise SystemExit(1)
@@ -321,6 +462,8 @@ def main():
     print(json.dumps({k: v for k, v in result.items() if k not in {"scripts", "loose_data", "sibling_packages"}},
                      ensure_ascii=True, indent=2))
     if args.command == "pack" and args.jis_preflight and not result["jis_preflight"]["ok"]:
+        raise SystemExit(1)
+    if args.command == "pack" and args.gbk_preflight and not result["gbk_preflight"]["ok"]:
         raise SystemExit(1)
 
 

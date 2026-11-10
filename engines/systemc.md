@@ -2,14 +2,15 @@
 
 目录输出遵循 [公共安全写出约定](../guides/python-reference-api.md#安全写出示例)：父目录须已存在，目标须不存在或为普通空目录；非空目录、文件和链接拒绝。
 
-CP932 ACT/DAT/SPT 工作区通过 [systemc_extract.pack](../python/engines/systemc_extract.py) 回注时，默认优先使用 [公共 JIS 替换](../guides/jis-substitution.md) 处理无法编码的中文；`--jis-mode off` 保留严格 CP932。替换会话覆盖整个输出包，结果目录自动包含随包 x86 `winmm.dll`、`uif_config.json`、`jis-mapping.json` 和 `JIS-部署说明.txt`（没有实际替换则不生成）。最终提醒用户按说明部署兼容 hook 或匹配映射的替换字体，并实测加载和显示。低层 `inject_act(..., text_codec=codec)` 支持显式接入；UTF-8 TXD/PTR 不走此方案。
+CP932 ACT/DAT/SPT 工作区通过 [systemc_extract.pack](../python/engines/systemc_extract.py) 回注时有两种输出编码：默认 `--output-encoding cp932`，优先使用 [公共 JIS 替换](../guides/jis-substitution.md) 处理无法编码的中文，`--jis-mode off` 保留严格 CP932；`--output-encoding gbk` 用于剧本按系统 ANSI 码页解码的 EXE，整体转码为 GBK、不用 JIS，见下文[运行时码页与 GBK 路线](#运行时码页与-gbk-路线)。先判定码页再选路线。替换会话覆盖整个输出包，结果目录自动包含随包 x86 `winmm.dll`、`uif_config.json`、`jis-mapping.json` 和 `JIS-部署说明.txt`（没有实际替换则不生成）。最终提醒用户按说明部署兼容 hook 或匹配映射的替换字体，并实测加载和显示。低层 `inject_act(..., text_codec=codec)` 支持显式接入；UTF-8 TXD/PTR 不走此方案。
 
 ## 模块分工
 
 | 层 | 模块与接口 |
 |---|---|
 | 归档 | [archives/systemc.py](../python/archives/systemc.py)：ZLC2 回指解码、literal 编码、加密尾索引 FPK 读写；`read_fpk_index_stream` / `read_fpk_member` 只读索引与指定成员 |
-| CP932 脚本 | [engines/systemc.py](../python/engines/systemc.py)：`export_act`、`inject_act`、`systemc_name_header` |
+| CP932 脚本 | [engines/systemc.py](../python/engines/systemc.py)：`export_act`、`inject_act`、`systemc_name_header`；`encoding="gbk"` 读写已整体转码的包 |
+| 运行时码页 | [systemc_codepage.py](../python/engines/systemc_codepage.py)：成员分类、CP932→GBK 整体转码、显式替换表、不可转码定位与 GBK 读回 |
 | UTF-8 文本表 | [systemc_txd.py](../python/engines/systemc_txd.py)：`read_table`、`export_table`、`inject_table` |
 | UTF-8 工作区 | [systemc_txd_extract.py](../python/engines/systemc_txd_extract.py)：`extract` / `pack` CLI |
 
@@ -37,11 +38,11 @@ CP932 ACT/DAT/SPT 工作区通过 [systemc_extract.pack](../python/engines/syste
 
 - `$S/$L` 按整条物理行选择字号。保持全文控制码顺序和数量，并保留非空字号控制分组：可合并普通文本行或移动分组所在的行号，但不能将不同原始字号行的控制码合并到同一行，或拆散同一行的分组。`&heart;` 保持全文顺序/数量。
 - 自动补齐只生成正文末尾的空行。继续拒绝用户译文中的空行、仅空白字符的行、完全空正文、未知控制语法、命令/姓名头注入、超长行及有损编码；不把段落间的空白或未知数据当成补齐槽。
-- 中文使用公共 JIS 替换；原始行布局保持不变，但空槽的运行时排版、中文字体覆盖和实际加载仍需游戏内验证。
+- CP932 输出时中文使用公共 JIS 替换，GBK 输出时直接按 GBK 编码；原始行布局保持不变，但空槽的运行时排版、中文字体覆盖和实际加载仍需游戏内验证。
 
 ### 严格 CP932 与回填前确认生效版本
 
-- ACT 与 `charaid.tbl` 按行严格解码。失败时报 `<成员>:<行号>`、行内字节位置及附近字节的十六进制片段；该行若能按 GBK 严格解码，另提示“疑似已有中文汉化（GBK）输入，请改用日文原版”。CP932 与 GBK 字节范围大量重叠，能解码不代表是日文原版，此提示只用于定位已汉化输入，不据此改用 GBK 回写。
+- ACT 与 `charaid.tbl` 按行严格解码。失败时报 `<成员>:<行号>`、行内字节位置及附近字节的十六进制片段；该行若能按 GBK 严格解码，另提示“疑似已有中文汉化（GBK）输入，请改用日文原版”。CP932 与 GBK 字节范围大量重叠，能解码不代表是日文原版。**输入必须是日文原版**（找备份或副本，不用已汉化包）；是否 GBK 回写由运行时码页证据决定，与输入是否含 GBK 无关。
 - `extract` 只把 `data.fpk` 作为文本基准，同时只读扫描同目录其他 `*.fpk` 的索引（不递归、不读取无关成员）：列出与 `data.fpk` 同名的成员并逐个解码比较内容（`identical` / `different`），无法识别的包记为 `unsupported`。包内有 `replace.txt` 时按 `!节名` 与其后的成员名解析为列表，写入 `reports/extraction.json` 的 `sibling_packages`，并列出其中覆盖 `data.fpk` 的成员。
 - 同名 ACT/DAT/SPT/`charaid.tbl` 内容不同时，`extract` 在 stderr 输出 `WARNING`，报告写入 `overridden_script_members` 与 `warnings`。此时补丁包很可能才是运行时生效的剧本，只改 `data.fpk` 可能无效，或使 ACT/DAT/SPT 新旧混用。**回填前须确认生效版本**：补丁包与基准包剧本不一致时，`pack` 默认拒绝；确认 `data.fpk` 版本确实生效后才加 `--base-confirmed`。当前不支持把补丁包成员叠加为提取基准，也不重建补丁包。
 
@@ -55,8 +56,47 @@ python -m python.engines.systemc_extract pack "<新输出目录>" --output "<新
 
 - `pack --jis-preflight` 保留为[公共预检](../guides/jis-substitution.md#打包前只读预检)的适配入口，调用共享 `preflight_translations`，输出在 `jis_preflight` 中。它先校验 SystemC 源快照、JSON 与 manifest，再将原始 ACT/`charaid.tbl` 的解码文本一并传入公共层，因此未翻译脚本、姓名头及注释中的代理字也参与检查。无需 `--output`，不写出文件，与 `--jis-mode off` 不兼容，支持 `--translations`。
 - 使用结构与编码标识重新导出元数据；旧 manifest 保护换行数量或使用旧标识时，应从哈希验证通过的原包导出到新工作区。核对原文 JSON 的字段、条数和顺序后保留同名 `gt_output` 译文，不修改旧 manifest 绕过校验或覆盖已有输入。
-- [test_systemc.py](../tests/test_systemc.py) 覆盖原文往返、少换行补齐、多个空槽、已有补齐脚本再次往返、按编译引用确定容量、变长中文/JIS 回读、非文本成员保留、坏译文拒绝、工作区封包、CP932 失败定位与 GBK 提示、仅读索引的同目录补丁包比较、`replace.txt` 解析及封包拒绝。
+- [test_systemc.py](../tests/test_systemc.py) 覆盖原文往返、少换行补齐、多个空槽、已有补齐脚本再次往返、按编译引用确定容量、变长中文/JIS 回读、非文本成员保留、坏译文拒绝、工作区封包、CP932 失败定位与 GBK 提示、仅读索引的同目录补丁包比较、`replace.txt` 解析及封包拒绝；GBK 路线的整体转码往返、不可转码定位与拒绝、替换表生效与记录、选项冲突、未知成员显式保留、同名补丁成员拒绝及默认 CP932 不变。
 - [test_jis_preflight.py](../tests/test_jis_preflight.py) 覆盖公共预检及 SystemC 的跨脚本、人物表和源快照适配。
+
+### 运行时码页与 GBK 路线
+
+先按 [公共码页判定](../guides/jis-substitution.md#先判定运行时码页) 确认 EXE 如何解码剧本，再选路线：
+
+| 证据 | 路线 |
+|---|---|
+| 固定 CP932（如 `MultiByteToWideChar(932, …)`、固定 SHIFTJIS_CHARSET） | 默认 `--output-encoding cp932`，中文走 JIS 替换 |
+| 跟随系统 ACP（`MultiByteToWideChar(CP_ACP, …)`，按 `GetACP()` 分支选字体 charset；原版在简中系统不转区即乱码） | `--output-encoding gbk`；JIS 代理在 ACP 936 下必然乱码，不可用 |
+
+静态证据由 `python -m python.common.jis_workflow codepage "<游戏目录>/<实际启动的.exe>"` 提供；结论不明时用同一开场句分别做两种版本，在目标系统试显示后再定。`extract` 报告的 `runtime_codepage` 字段给出同样提醒。
+
+**整体转码**：ACP 跟随时，同一文件不能同时含 CP932 与 GBK 字节。`--output-encoding gbk` 把以下成员整体从 CP932 严格转为 GBK，未翻译行同样转码：
+
+- `ACT_*.txt` 全文：正文、姓名头、`***` 场景标签、`//` 注释与命令行。标签注释会被编译进 DAT 的场景标题，注释也按严格规则转码，不保留 CP932。
+- `ACT_*.DAT` 每条记录前 80 字节的 NUL 结尾场景标题（运行时可见文本）；其余编译字段逐字节保留，标题须仍能放入该字段。
+- 其他非 ASCII、无 NUL、可严格按 CP932 解码的文本成员：`charaid.tbl`、提示文本、配置/资源表等。纯 ASCII 成员在两种码页下相同，不改。
+- SPT、媒体及含 NUL 的二进制成员逐字节保留。非 ASCII 但既非二进制也不能严格按 CP932 解码的成员拒绝；只有确认运行时不经 ACP 解码时才用 `--gbk-keep-member <成员>` 保留，报告 `kept_cp932_members` 列出并说明理由。
+
+`pack` 产出完整的 `data.fpk`，所有成员都在包内，未修改但含日文的成员同样已转码。同目录其他 FPK 若含同名文本成员（无论内容是否相同），可能以 CP932 版本覆盖，GBK 封包默认拒绝，确认 `data.fpk` 生效后才加 `--base-confirmed`，报告 `warnings` 仍列出这些成员；松散 `data/` 下的同名文件同样列入警告。
+
+**不可转码字符**：CP932 中部分记号没有 GBK 映射，常见如片假名中点 U+30FB、半角片假名 U+FF61–U+FF9F、音符 U+266A、剑号 U+2020、`⇒` U+21D2；日文汉字通常可转。任一位置失败时整体拒绝且不写出，按 `<成员>:<行号>`（DAT 为 `<成员>:record <序号>`，译文为 `gt_output/<文件>:<行序号>:<字段>`）列出字符与 U+ 码位。不静默替换，须由用户或 agent 明确给出：
+
+```text
+python -m python.engines.systemc_extract pack "<工作区>" --output-encoding gbk --gbk-preflight
+python -m python.engines.systemc_extract pack "<工作区>" --output-encoding gbk --gbk-replace "・=·" --gbk-replace-table "<替换表.json>" --output "<工作区>/rebuilt/translated-gbk-01"
+```
+
+- `--gbk-preflight` 只读，输出全部失败位置与按字符汇总，不需要 `--output`。
+- 替换表是 JSON 对象 `{"原字": "替换"}`，可与重复的 `--gbk-replace` 合用；原字须为单个非 ASCII 字符，替换须可 GBK 编码，且不得含控制字符、ASCII 字母或 `$&\<>[]{}@#%^|~/*_` 等会形成命令/控制码的符号。替换对全包（含译文）生效，每项的出现次数和成员分布写入报告。半角片假名可用 NFKC 对应的全角字形，浊点需单独映射。
+- `--output-encoding gbk` 隐含 `--jis-mode off`，与显式 `--jis-mode auto` 或 `--jis-preflight` 冲突时报错；GBK 选项在 CP932 输出下报错。
+
+**读回校验**：用真实 reader 按 GBK 重新解包、解析：成员列表不变；ACT 每行与“原文按替换表映射、译文槽替换并补空行”的期望逐行相同，行数、控制码与 SPT/DAT 绑定不变；其他文本成员按 Unicode 与原文（替换后）一致；DAT 仅标题字段变化；二进制与 ASCII 成员逐字节相同。`verification.json` 记录 `output_encoding: gbk`、`jis_mode: off`、`transcoded_members`、`unchanged_members`、`kept_cp932_members`、`replacements`、`readback` 与 `runtime_requirement`。DAT 标题改变，所以 `compiled_members_unchanged` 为 false，`compiled_fields_unchanged` 为 true。
+
+**运行条件与交付**：
+
+- 补丁只在系统 ACP 为 936（简体中文 Windows）时正确显示；**不要用 Locale Emulator 或日文区域运行**，ACP 变回 932 后整包乱码。
+- 不需要 JIS 映射，不交付 `jis-mapping.json`/UIF。若仍用 CialloHook 等 hook（例如换字体），关闭 `EnableCnJpMap` 与 `[CodePage]`，`Charset` 保持 0，由引擎按 ACP 自选 charset；默认字体缺中文字形时才设置替换字体。
+- 交付时告知用户上述运行条件及替换表内容；存档标题、提示文本等的实际显示仍须游戏内验证。
 
 ## UTF-8 TXD/PTR 工作流
 

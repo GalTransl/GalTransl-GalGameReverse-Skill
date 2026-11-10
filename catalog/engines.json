@@ -2603,6 +2603,7 @@
       "python_references": [
         "python/archives/systemc.py",
         "python/engines/systemc.py",
+        "python/engines/systemc_codepage.py",
         "python/engines/systemc_extract.py",
         "python/engines/systemc_txd.py",
         "python/engines/systemc_txd_extract.py"
@@ -2626,6 +2627,19 @@
           "cp932_error",
           "export_act",
           "inject_act"
+        ],
+        "python/engines/systemc_codepage.py": [
+          "parse_replacements",
+          "load_replacement_table",
+          "apply",
+          "map_rows",
+          "classify",
+          "scan",
+          "summarize",
+          "failure_message",
+          "transcode",
+          "replacement_report",
+          "verify_readback"
         ],
         "python/engines/systemc_extract.py": [
           "extract",

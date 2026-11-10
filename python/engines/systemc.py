@@ -36,7 +36,7 @@ def systemc_name_header(line):
     return {"name": match[1], "suffix": line[match.end(1):]} if match else None
 
 
-def _lines(data, member="<text>"):
+def _lines(data, member="<text>", encoding="cp932"):
     if len(data) > MAX_BYTES or b"\0" in data:
         raise FormatError(f"{member}: SystemC text exceeds budget or contains NUL")
     raw = data.split(b"\r\n")
@@ -45,8 +45,11 @@ def _lines(data, member="<text>"):
     lines = []
     for number, line in enumerate(raw, 1):
         try:
-            lines.append(line.decode("cp932", errors="strict"))
+            lines.append(line.decode(encoding, errors="strict"))
         except UnicodeDecodeError as exc:
+            if encoding != "cp932":
+                raise FormatError(f"{member}:{number}: SystemC text is not strict {encoding} "
+                                  f"at line byte {exc.start}") from exc
             raise FormatError(cp932_error(member, number, line, exc)) from exc
     return raw, lines
 
@@ -73,7 +76,7 @@ def _records(data, width):
     return [data[4 + i * width:4 + (i + 1) * width] for i in range(count)]
 
 
-def _parse(act_name, members):
+def _parse(act_name, members, encoding="cp932"):
     """Bind DAT ranges to labels, then require matching SPT text references.
 
     Name headers can include an extra voice-actor alias. Retain the whole
@@ -86,9 +89,9 @@ def _parse(act_name, members):
     for name in (act_name, dat_name, "charaid.tbl"):
         if name not in members:
             raise FormatError(f"missing SystemC source: {name}")
-    raw, lines = _lines(members[act_name], act_name)
+    raw, lines = _lines(members[act_name], act_name, encoding)
     sources = {name: members[name] for name in (act_name, dat_name, "charaid.tbl")}
-    char_lines = _lines(members["charaid.tbl"], "charaid.tbl")[1]
+    char_lines = _lines(members["charaid.tbl"], "charaid.tbl", encoding)[1]
     characters = []
     for line in char_lines:
         if not line or line.startswith("//"):
@@ -179,22 +182,30 @@ def _parse(act_name, members):
     return rows, locators, sources, sections, raw
 
 
-def export_act(act_name, members):
-    rows, locators, sources, sections, _ = _parse(act_name, members)
+def export_act(act_name, members, *, encoding="cp932"):
+    """``encoding`` is the whole-package text codec: CP932 source or a GBK transcode."""
+    rows, locators, sources, sections, _ = _parse(act_name, members, encoding)
     tokens = [list(dict.fromkeys(CONTROL.findall(row["message"])))
               for row in rows]
     manifest = make_manifest(engine="systemc", variant=VARIANT,
         reference="python/engines/systemc.py", sources=sources, rows=rows, locators=locators,
-        encoding="cp932", protected_tokens=tokens,
+        encoding=encoding, protected_tokens=tokens,
         settings={"act": act_name, "sections": sections, "line_endings": "CRLF",
                   "name": "context-only; preserve header and compiled character/voice IDs",
                   "newline_policy": "pad fewer message lines with empty trailing slots; preserve DAT/SPT and font-control groups"})
     return rows, manifest
 
 
-def inject_act(act_name, members, original_rows, manifest, translated_rows, *, text_codec=None):
-    """Rewrite ACT only, padding shorter messages to preserve compiled bindings."""
-    expected_rows, expected_manifest = export_act(act_name, members)
+def inject_act(act_name, members, original_rows, manifest, translated_rows, *, text_codec=None,
+               encoding="cp932"):
+    """Rewrite ACT only, padding shorter messages to preserve compiled bindings.
+
+    ``encoding="gbk"`` expects members already transcoded as a whole package;
+    it cannot be combined with a JIS proxy codec.
+    """
+    if text_codec is not None and encoding != "cp932":
+        raise FormatError("SystemC JIS substitution requires CP932 output")
+    expected_rows, expected_manifest = export_act(act_name, members, encoding=encoding)
     if expected_rows != original_rows or expected_manifest != manifest:
         raise FormatError("SystemC export/manifest differs from source parser")
     sources = {item["path"]: members[item["path"]] for item in manifest["sources"]}
@@ -204,7 +215,7 @@ def inject_act(act_name, members, original_rows, manifest, translated_rows, *, t
         text_codec.reserve(members[act_name].decode("cp932"))
         text_codec.reserve(members["charaid.tbl"].decode("cp932"))
     translated = validate_translation(manifest, sources, original_rows, translated_rows, text_codec=text_codec)
-    raw, _ = _lines(members[act_name], act_name)
+    raw, _ = _lines(members[act_name], act_name, encoding)
     for before, after, rec in zip(original_rows, translated, manifest["records"]):
         old_lines = before["message"].split("\n")
         new_lines = after["message"].split("\n")
@@ -229,19 +240,19 @@ def inject_act(act_name, members, original_rows, manifest, translated_rows, *, t
                 raise FormatError("translation introduces unknown SystemC text controls")
             unchanged = i < len(old_lines) and old_lines[i] == new
             encoded = raw[rec["locator"]["message_line"] + i] if unchanged else (
-                text_codec.encode(new) if text_codec is not None else new.encode("cp932", errors="strict"))
-            decoded = encoded.decode("cp932")
+                text_codec.encode(new) if text_codec is not None else new.encode(encoding, errors="strict"))
+            decoded = encoded.decode(encoding)
             if text_codec is not None:
                 decoded = text_codec.display(decoded)
             if len(encoded) > 4096 or decoded != new:
-                raise FormatError("SystemC line exceeds budget or is not lossless CP932")
+                raise FormatError(f"SystemC line exceeds budget or is not lossless {encoding}")
             raw[rec["locator"]["message_line"] + i] = encoded
         start = rec["locator"]["message_line"]
         raw[start + len(new_lines):start + slot_count] = [b""] * (slot_count - len(new_lines))
     rebuilt = b"\r\n".join(raw)
     if len(rebuilt) > MAX_BYTES:
         raise FormatError("SystemC rebuilt ACT exceeds budget")
-    parsed_rows, parsed_manifest = export_act(act_name, dict(members, **{act_name: rebuilt}))
+    parsed_rows, parsed_manifest = export_act(act_name, dict(members, **{act_name: rebuilt}), encoding=encoding)
     if text_codec is not None:
         parsed_rows = [{key: text_codec.display(value) for key, value in row.items()} for row in parsed_rows]
     if parsed_rows != translated or parsed_manifest["records"] != manifest["records"]:

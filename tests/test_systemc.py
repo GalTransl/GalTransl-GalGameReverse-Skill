@@ -375,5 +375,159 @@ class DiagnosticsTests(unittest.TestCase):
             self.assertEqual(report["overridden_script_members"], [])
 
 
+def gbk_fixture():
+    """CP932 package with GBK-unencodable 「・」 in prose, a comment and a DAT title."""
+    members = fixture()
+    members["ACT_A.txt"] = (members["ACT_A.txt"].replace(b"$S", b"").replace(b"$L", b"")
+                            .replace("地の文。".encode("cp932"), "地の文・続き。".encode("cp932"))
+                            .replace(b"//section", "//場面・一".encode("cp932")))
+    dat = bytearray(members["ACT_A.DAT"])
+    dat[4:4 + 80] = "場面・一".encode("cp932").ljust(80, b"\0")
+    members["ACT_A.DAT"] = bytes(dat)
+    members["hint.txt"] = "cfgBack=前の画面に戻ります。\r\n".encode("cp932")
+    members["cvdiv.txt"] = b"1:500,1000\r\n"
+    return members
+
+
+class GbkOutputTests(unittest.TestCase):
+    def workspace(self, temp, members):
+        game = Path(temp)
+        (game / "data.fpk").write_bytes(archive(members))
+        work = game / "work"
+        extract(game, work)
+        return game, work
+
+    def translate(self, work, message):
+        rows = json.loads((work / "gt_input/ACT_A.json").read_text(encoding="utf-8"))
+        rows[0]["message"] = message
+        (work / "gt_output/ACT_A.json").write_text(json.dumps(rows, ensure_ascii=False), encoding="utf-8")
+        return rows
+
+    def test_unencodable_characters_are_located_and_refused(self):
+        with tempfile.TemporaryDirectory() as temp:
+            game, work = self.workspace(temp, gbk_fixture())
+            self.translate(work, "「变长的中文译文♪")
+            with self.assertRaises(FormatError) as caught:
+                pack(work, game / "refused", output_encoding="gbk")
+            message = str(caught.exception)
+            for location in ("ACT_A.txt:2:", "ACT_A.txt:8:", "ACT_A.DAT:record 1:", "gt_output/ACT_A.json:1:message"):
+                self.assertIn(location, message)
+            self.assertIn("U+30FB", message)
+            self.assertIn("U+266A", message)
+            self.assertFalse((game / "refused").exists())
+            report = pack(work, output_encoding="gbk", gbk_preflight=True)["gbk_preflight"]
+            self.assertFalse(report["ok"])
+            self.assertEqual({c["codepoint"] for c in report["characters"]}, {"U+30FB", "U+266A"})
+
+    def test_gbk_roundtrip_transcodes_whole_package(self):
+        with tempfile.TemporaryDirectory() as temp:
+            members = gbk_fixture()
+            game, work = self.workspace(temp, members)
+            self.translate(work, "「这是一段明显更长的简体中文译文，只占一行")
+            result = pack(work, game / "out", output_encoding="gbk", gbk_replace=["・=·", "♪=～"])
+            self.assertEqual(result["output_encoding"], "gbk")
+            self.assertEqual(result["jis_mode"], "off")
+            self.assertEqual(result["jis_artifacts"], [])
+            self.assertEqual(result["runtime_requirement"]["system_acp"], 936)
+            self.assertEqual(result["transcoded_members"],
+                             {"act": ["ACT_A.txt"], "text": ["charaid.tbl", "hint.txt"], "dat-titles": ["ACT_A.DAT"]})
+            self.assertEqual(result["unchanged_members"]["ascii"], ["cvdiv.txt", "resource.bin"])
+            self.assertEqual(result["kept_cp932_members"], [])
+            replaced = {r["source"]: r for r in result["replacements"]}
+            self.assertEqual(replaced["・"]["occurrences"], 3)
+            self.assertEqual(replaced["・"]["members"], {"ACT_A.txt": 2, "ACT_A.DAT": 1})
+            self.assertEqual(replaced["♪"]["occurrences"], 0)
+            self.assertEqual(result["readback"]["untranslated_rows_match_source_unicode"], 1)
+            self.assertFalse((game / "out/jis-mapping.json").exists())
+            verification = json.loads((game / "out/verification.json").read_text(encoding="utf-8"))
+            self.assertEqual(verification["output_encoding"], "gbk")
+            _, packed = unpack_fpk((game / "out/data.fpk").read_bytes())
+            # Reader reparses as GBK: translated row, untranslated Japanese row, names, bindings.
+            rows, meta = export_act("ACT_A.txt", packed, encoding="gbk")
+            self.assertEqual(rows[0], {"name": "仮名", "message": "「这是一段明显更长的简体中文译文，只占一行"})
+            self.assertEqual(rows[1], {"message": "地の文·続き。"})
+            self.assertEqual(meta["records"], export_act("ACT_A.txt", members)[1]["records"])
+            old_lines = members["ACT_A.txt"].decode("cp932").split("\r\n")
+            new_lines = packed["ACT_A.txt"].decode("gbk").split("\r\n")
+            self.assertEqual(len(new_lines), len(old_lines))
+            self.assertEqual(new_lines[1], old_lines[1].replace("・", "·"))
+            self.assertEqual(new_lines[5], "")
+            self.assertEqual(packed["charaid.tbl"].decode("gbk"), members["charaid.tbl"].decode("cp932"))
+            self.assertNotEqual(packed["charaid.tbl"], members["charaid.tbl"])
+            self.assertEqual(packed["hint.txt"].decode("gbk"), members["hint.txt"].decode("cp932"))
+            self.assertEqual(packed["ACT_A.DAT"][4:84].rstrip(b"\0").decode("gbk"), "場面·一")
+            self.assertEqual(packed["ACT_A.DAT"][84:], members["ACT_A.DAT"][84:])
+            for name in ("A0000_00.spt", "orphan.spt", "resource.bin", "cvdiv.txt"):
+                self.assertEqual(packed[name], members[name])
+
+    def test_replacement_table_applies_to_translations_and_is_recorded(self):
+        with tempfile.TemporaryDirectory() as temp:
+            game, work = self.workspace(temp, gbk_fixture())
+            self.translate(work, "「中文♪")
+            table = game / "table.json"
+            table.write_text(json.dumps({"・": "·", "♪": "～"}, ensure_ascii=False), encoding="utf-8")
+            result = pack(work, game / "out", output_encoding="gbk", gbk_replace_table=table)
+            replaced = {r["source"]: r for r in result["replacements"]}
+            self.assertEqual(replaced["♪"]["members"], {"gt_output/ACT_A.json": 1})
+            self.assertEqual(replaced["♪"]["source_codepoint"], "U+266A")
+            _, packed = unpack_fpk((game / "out/data.fpk").read_bytes())
+            self.assertEqual(export_act("ACT_A.txt", packed, encoding="gbk")[0][0]["message"], "「中文～")
+
+    def test_option_conflicts_and_unsafe_replacements(self):
+        with tempfile.TemporaryDirectory() as temp:
+            game, work = self.workspace(temp, gbk_fixture())
+            with self.assertRaisesRegex(FormatError, "jis"):
+                pack(work, game / "a", output_encoding="gbk", jis_mode="auto")
+            with self.assertRaisesRegex(FormatError, "GBK"):
+                pack(work, game / "b", jis_preflight=True, output_encoding="gbk")
+            with self.assertRaisesRegex(FormatError, "output-encoding gbk"):
+                pack(work, game / "c", gbk_replace=["・=·"])
+            for bad in ("・=$", "・=A", "・=", "a=b", "・=♪", "・"):
+                with self.subTest(bad=bad), self.assertRaises(FormatError):
+                    pack(work, game / "d", output_encoding="gbk", gbk_replace=[bad])
+            with self.assertRaises(FormatError):
+                pack(work, game / "e", output_encoding="gbk", gbk_replace=["・=·", "・=。"])
+            self.assertFalse(any((game / n).exists() for n in "abcde"))
+            # Explicit off is compatible; it is what gbk implies.
+            self.assertEqual(pack(work, game / "f", output_encoding="gbk", jis_mode="off",
+                                  gbk_replace=["・=·"])["jis_mode"], "off")
+
+    def test_unknown_non_ascii_member_requires_explicit_keep(self):
+        with tempfile.TemporaryDirectory() as temp:
+            members = gbk_fixture()
+            members["blob.cfg"] = b"\x80\xff\x81"
+            game, work = self.workspace(temp, members)
+            with self.assertRaisesRegex(FormatError, "blob.cfg"):
+                pack(work, game / "out", output_encoding="gbk", gbk_replace=["・=·"])
+            result = pack(work, game / "kept", output_encoding="gbk", gbk_replace=["・=·"],
+                          gbk_keep_members=["blob.cfg"])
+            self.assertEqual([k["member"] for k in result["kept_cp932_members"]], ["blob.cfg"])
+            self.assertEqual(unpack_fpk((game / "kept/data.fpk").read_bytes())[1]["blob.cfg"], b"\x80\xff\x81")
+
+    def test_sibling_text_member_blocks_gbk_until_confirmed(self):
+        with tempfile.TemporaryDirectory() as temp:
+            members = gbk_fixture()
+            game = Path(temp)
+            (game / "data.fpk").write_bytes(archive(members))
+            (game / "patch.fpk").write_bytes(archive({"hint.txt": members["hint.txt"]}))
+            work = game / "work"
+            extract(game, work)
+            with self.assertRaisesRegex(FormatError, "patch.fpk:hint.txt"):
+                pack(work, game / "out", output_encoding="gbk", gbk_replace=["・=·"])
+            result = pack(work, game / "out", output_encoding="gbk", gbk_replace=["・=·"], base_confirmed=True)
+            self.assertTrue(any("patch.fpk:hint.txt" in w for w in result["warnings"]))
+
+    def test_default_cp932_output_is_unchanged(self):
+        with tempfile.TemporaryDirectory() as temp:
+            members = gbk_fixture()
+            game, work = self.workspace(temp, members)
+            result = pack(work, game / "out")
+            self.assertEqual(result["output_encoding"], "cp932")
+            self.assertTrue(result["byte_identical"])
+            self.assertEqual((game / "out/data.fpk").read_bytes(), (game / "data.fpk").read_bytes())
+            self.assertIn("jis_workflow codepage", json.loads(
+                (work / "reports/extraction.json").read_text(encoding="utf-8"))["runtime_codepage"]["probe"])
+
+
 if __name__ == "__main__":
     unittest.main()
