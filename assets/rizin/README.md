@@ -9,7 +9,8 @@
 | 源码 | <https://github.com/xd2333/rizin>（`dev` 分支，提交 `47cc7c6e26a3ab8c3f4671494a2e95a22d0969ad` “Add windows-only build profile”） |
 | 上游 | [rizinorg/rizin](https://github.com/rizinorg/rizin)，版本 0.10.0；精简改动之前的上游提交为 `4162458dc4fc61c6e78c90fd80cbc31e03641444` |
 | 精简内容 | `-Dwindows_only=true`：只保留 x86 架构、PE/COFF/PDB 格式与 Windows 调试器相关插件，去掉其他架构、非 Windows 格式、远程/归档 IO 插件和无关工具 |
-| 构建 | MSVC 19.44 x64，meson 1.12.1；`--buildtype=release -Dportable=true -Dwindows_only=true -Denable_tests=false -Denable_rz_test=false -Denable_benchmarks=false -Denable_doc=false -Duse_gpl=false`；未用 UPX 压缩 |
+| 构建 | MSVC 19.44 x64，meson 1.12.1；`--buildtype=release -Dportable=true -Dwindows_only=true -Denable_tests=false -Denable_rz_test=false -Denable_benchmarks=false -Denable_doc=false -Duse_gpl=false` |
+| 压缩 | `bin/` 下全部 EXE/DLL 用 UPX 5.2.1 `--best --lzma` 压缩（约 11 MB → 3.4 MB），分析结果与未压缩版一致，每次调用多约 0.3 秒解压开销。若安全软件拦截，可用 `upx -d` 还原后同步更新 `SHA256SUMS` |
 
 必须用 `-Dportable=true` 构建：否则安装前缀会写死在 DLL 中，换目录后找不到 `share/` 数据（类型库、调用约定、格式定义），`aaa` 的参数和导入函数签名会缺失。
 
