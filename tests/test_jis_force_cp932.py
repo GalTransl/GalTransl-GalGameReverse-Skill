@@ -157,7 +157,7 @@ class PrepareDecisionTests(unittest.TestCase):
     def test_probe_error_is_undetermined_and_forces(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            with mock.patch.object(jis_workflow, "probe_codepage", side_effect=FormatError("unsupported PE")):
+            with mock.patch.object(jis_workflow, "analyze_codepage", side_effect=FormatError("unsupported PE")):
                 _, plan, support = self.prepare(root, "broken", x86_exe([932]))
             record = plan["runtime_codepage"]
             self.assertEqual((record["verdict"], record["force_cp932"]), ("undetermined", True))

@@ -6,3 +6,6 @@ assets/ciallohook/upstream/** -text
 
 # Bundled Locale Emulator / LE Plus binaries: never normalize
 assets/ciallohook/locale-emulator/** -text
+
+# Bundled rizin binaries and data: never normalize
+assets/rizin/** -text

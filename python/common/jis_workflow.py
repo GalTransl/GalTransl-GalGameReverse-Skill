@@ -17,7 +17,7 @@ import struct
 import sys
 
 from .binary import FormatError
-from .codepage_probe import MAX_SITES, probe_codepage
+from .codepage_probe import MAX_SITES, analyze_codepage
 from .contract import dump_rows, load_json, sha256, validate_rows
 from .jis_substitution import (CIALLOHOOK_NAMES, HOOKS, JisSubstitution, batch_mapping_sha256,
                                format_reserved_codepoints, is_cp932, parse_reserved_codepoints)
@@ -471,9 +471,11 @@ def runtime_codepage(exe, mode, hook, warnings):
               "probe_error": None, "force_cp932_mode": mode}
     if exe is not None:
         try:
-            probe = probe_codepage(exe)
+            probe = analyze_codepage(exe)
             record.update(verdict=probe["verdict"], confidence=probe["confidence"],
-                          reasons=probe["reasons"])
+                          reasons=probe["reasons"], verdict_source=probe["verdict_source"])
+            if probe["verdict_source"] == "rizin":
+                record["reasons"] = probe["rizin"]["reasons"]
         except FormatError as error:
             record.update(verdict="undetermined", probe_error=f"{type(error).__name__}: {error}")
     ciallo = hook in CIALLOHOOK_NAMES
@@ -777,13 +779,18 @@ def main():
     command.add_argument("exe", nargs="+")
     command.add_argument("--max-sites", type=int, default=MAX_SITES,
                          help="cap each listed call/compare site list (summary keeps totals); 0 = unlimited")
+    command.add_argument("--rizin", default="auto",
+                         help="auto (default): bundled rizin deep probe on Windows, else $GALTRANSL_RIZIN; "
+                              "off: byte probe only; or a rizin.exe path")
+    command.add_argument("--rizin-timeout", type=int, default=None, help="seconds (default 180)")
     args = vars(parser.parse_args())
     action = args.pop("command")
     if action == "codepage":
         results, failed = [], False
         for exe in args["exe"]:
             try:
-                results.append(probe_codepage(exe, max_sites=args["max_sites"]))
+                results.append(analyze_codepage(exe, max_sites=args["max_sites"], rizin=args["rizin"],
+                                                rizin_timeout=args["rizin_timeout"]))
             except (FormatError, OSError) as error:
                 failed = True
                 results.append({"ok": False, "file": exe, "error": f"{type(error).__name__}: {error}"})

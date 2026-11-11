@@ -727,3 +727,31 @@ def _verdict(relevant, ordinals, conversions, getacp, compares, hints, sjis_tabl
     reasons.append("the engine may decode text with its own tables; compare GBK and JIS lines in a small test")
     return "undetermined", reasons
 
+
+
+def analyze_codepage(path, *, max_sites=MAX_SITES, rizin="auto", rizin_timeout=None):
+    """Byte probe, refined by the optional rizin deep probe when available.
+
+    The byte-probe fields stay unchanged (``byte_verdict`` keeps its verdict);
+    ``verdict``/``confidence`` come from rizin when it ran, and
+    ``verdict_source`` says which. rizin failures fall back silently to the
+    byte probe and are recorded under ``rizin.error``.
+    """
+    from . import rizin_probe
+
+    result = probe_codepage(path, max_sites=max_sites)
+    result.update(byte_verdict=result["verdict"], byte_confidence=result["confidence"],
+                  verdict_source="byte-probe")
+    if result["packing"]["suspected"]:
+        result["rizin"] = {"skipped": "packed or protected executable"}
+        return result
+    try:
+        kwargs = {"timeout": rizin_timeout} if rizin_timeout else {}
+        deep = rizin_probe.probe(path, rizin=rizin,
+                                 embedded_sjis=result["embedded_sjis_table"]["found"], **kwargs)
+    except rizin_probe.RizinUnavailable as error:
+        result["rizin"] = {"error": str(error)}
+        return result
+    result["rizin"] = deep
+    result.update(verdict=deep["verdict"], confidence=deep["confidence"], verdict_source="rizin")
+    return result

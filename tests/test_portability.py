@@ -53,6 +53,10 @@ class PortabilityTests(unittest.TestCase):
         from python.common.jis_substitution import LOCALE_EMULATOR_FILES
         allowed.update({f"assets/ciallohook/locale-emulator/{package}/{name}": digest
                         for name, (package, digest, _) in LOCALE_EMULATOR_FILES.items()})
+        # Bundled rizin static-analysis tool, pinned by assets/rizin/SHA256SUMS.
+        for line in (ROOT / "assets/rizin/SHA256SUMS").read_text(encoding="ascii").splitlines():
+            digest, name = line.split(maxsplit=1)
+            allowed[f"assets/rizin/{name}"] = digest
         for relative, expected_hash in allowed.items():
             self.assertEqual(hashlib.sha256((ROOT / relative).read_bytes()).hexdigest(),
                              expected_hash, relative)

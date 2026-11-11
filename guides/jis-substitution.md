@@ -21,7 +21,8 @@ ACP 跟随的引擎在 ACP 不是 932 的系统上运行时，JIS 代理必然�
    python -m python.common.jis_workflow codepage "游戏目录/实际启动的.exe"
    ```
 
-   输出 `verdict`：`acp-following`、`fixed-cp932`、`mixed` 或 `undetermined`，以及 `confidence`、调用点（`conversion_calls`，CodePage 解不出记 `unknown`）、`getacp_calls`、`embedded_sjis_table`、`packing` 与 `reasons`。这是字节模式启发式，不是反汇编，只作选路线的证据；只对多字节 ANSI 剧本有意义，UTF-8/UTF-16 剧本不必看。多个 EXE 可一次传入。
+   输出 `verdict`：`acp-following`、`fixed-cp932`、`mixed` 或 `undetermined`，以及 `confidence`、调用点（`conversion_calls`，CodePage 解不出记 `unknown`）、`getacp_calls`、`embedded_sjis_table`、`packing` 与 `reasons`。只对多字节 ANSI 剧本有意义，UTF-8/UTF-16 剧本不必看。多个 EXE 可一次传入。
+   Windows 上默认再用随包 [rizin](../assets/rizin/README.md) 做只读反汇编深度探测（`--rizin off` 关闭，`--rizin <路径>` 或环境变量 `GALTRANSL_RIZIN` 指定其他 rizin）：逐调用点读取 CodePage，按 MAX_PATH 缓冲区排除路径转换，解出 GetACP→字体 charset 的分支，并列出字体创建调用。此时 `verdict`/`confidence` 取 rizin 结果（`verdict_source: rizin`），字节探测结论保留在 `byte_verdict`，详情在 `rizin` 字段；rizin 不可用、超时或 EXE 加壳时自动退回字节探测。`prepare --exe` 的强制 932 判定使用同一结果。仍为 `mixed`/`undetermined` 时可按 [rizin 简易指南](rizin.md) 手动追调用方。
    - `acp-following` + `strong`：`GetACP()` 之后紧跟按 932/936/950/949 分支或载入字体 charset（0x80/0x86/0x88/0x81），是最直接的证据。`weak` 只有若干 `CP_ACP` 转换调用，可能只用于路径或系统文本，需旁证。
    - `fixed-cp932`：转换调用的 CodePage 为 932，或程序内嵌 SJIS→Unicode 表。
    - `mixed`：两类证据都有，常见于少量 `CP_ACP` 处理路径、剧本另走 932 或自带表的引擎。不能据此直接选 GBK；默认走 JIS + 强制 932。

@@ -41,6 +41,10 @@ GARbro 的根 MIT **不代表所有内嵌代码**。必须区分已经明确的�
 - 为不完整、宽松或游戏专用的上游路径保留边界，并加入拒绝未知版本、越界、丢失编码和冲突的条件。不能继承未知 opcode 的缺省空模板或解码失败回退原 bytes 后声称成功。
 - 资料中描述的 upstream writer 不一定在本包实现；每篇引擎页及对应 module docstring 才是这份参考的实际适用范围。`source_only` 是上游注册证据，不是当前 Python 能力状态。
 
+### rizin 静态分析工具
+
+`assets/rizin/` 为 rizin 0.10.0 的 Windows x86/x64 精简版可执行程序，源码见 <https://github.com/xd2333/rizin>（提交 `47cc7c6e26`，基于上游 rizinorg/rizin），按 LGPL-3.0-only 分发并随包附上游 `COPYING`、`COPYING.LESSER` 及全部 SPDX 许可文本，构建参数见 [rizin 说明](../assets/rizin/README.md)。`python/common/rizin_probe.py` 只以子进程方式调用它做只读分析，不链接、不复制其源码，本项目代码许可不受影响。
+
 ### Entis NOA 与 ERISA-N
 
 Entis NOA 索引、BSHF/SimpleCrypt32 解密与 ERISA-N 解码移植自 GARbro-Mod 的 `ArcFormats/Entis/ArcNOA.cs`、`ErisaNemesis.cs` 与 `EriReader.cs`（MIT，Copyright morkt；ERISA 库原作 Leshade Entis / Entis-soft，原通知见 [garbro-archive-notices.md](garbro-archive-notices.md)）。`python/archives/entis_erisa.py`、`entis_noa.py` 保留 MIT 标记；SRCXML 方言读写与工作流为本项目实现，记录选择沿用 msg-tool（GPL-3.0-or-later）。

@@ -98,6 +98,7 @@ JIS 交付默认将随包 [CialloHook x86/x64 version.dll](assets/ciallohook/REA
 - [独立 Python API 与运行约定](guides/python-reference-api.md)
 - [通用集成步骤：导出 JSON、保存 manifest、回填新脚本](guides/worked-roundtrip.md)
 - [增补未知引擎或游戏变体](guides/extending-engines.md)
+- [rizin 简易指南：只读静态分析游戏 EXE](guides/rizin.md)（随包 Windows x86/x64 精简版）
 - [引擎页目录](catalog/engines.md)：全部引擎页的浏览列表，由 `tools/update_engine_index.py` 生成。
 - [归档/脚本格式 catalog](catalog/formats.json)：无损去重的资料目录，用[查询器](tools/query_catalog.py)分页读取，不是 Python 支持列表。
 - [归档布局与解密资料](catalog/archive-notes.md)：按格式查阅索引、key 派生和成员解码规则；资料不代表已实现。
