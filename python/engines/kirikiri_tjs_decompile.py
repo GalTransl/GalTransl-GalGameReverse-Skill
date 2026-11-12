@@ -1443,7 +1443,13 @@ def main(argv: list[str] | None = None) -> int:
         payload = encode_source(text, args.encoding) if args.mode == 'decompile' else text.encode('utf-8')
         entries.append((name, payload))
     if entries:
-        write_new_tree(args.output, entries)
+        try:
+            write_new_tree(args.output, entries)
+        except FileExistsError as error:
+            # The pre-check only knows result directories; a published name
+            # that already exists is found here.
+            print(str(error), file=sys.stderr)
+            return 1
     return 1 if failures else 0
 
 

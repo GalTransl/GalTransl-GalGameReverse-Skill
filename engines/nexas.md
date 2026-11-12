@@ -21,7 +21,7 @@ BIN 方言与 PAC 压缩类型没有对应关系。含 extras 的布局必须按
 
 ## 导出与回封
 
-从 skill 根目录运行，替换下面的示意路径。输出目录须不存在或为普通空目录，且父目录已存在；非空时改用新名字。
+从 skill 根目录运行，替换下面的示意路径。输出目录须不存在或为可复用的已有目录（不含同名产物或非空结果目录），且父目录已存在；冲突时改用新名字。
 
 ~~~text
 python -m python.engines.nexas_extract extract /path/to/game --output /path/to/game/game_extract --archives Script.pac Update3.pac

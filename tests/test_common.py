@@ -238,23 +238,88 @@ class SafetyTests(unittest.TestCase):
             self.assertEqual((destination / "nested/data.bin").read_bytes(), b"data")
             self.assertEqual(list(Path(root).iterdir()), [destination])
 
-    def test_existing_nonempty_tree_and_file_rejected(self):
+    def test_existing_empty_tree_that_is_the_working_directory(self):
+        # Agent harnesses run Python with the output root as cwd; Windows cannot
+        # remove a directory that is some process's cwd, so publishing must not
+        # depend on replacing the destination directory itself.
+        previous = os.getcwd()
         with tempfile.TemporaryDirectory() as root:
-            directory = Path(root) / "with-subdirectory"
-            directory.mkdir()
-            (directory / "empty").mkdir()
-            hidden = Path(root) / "with-hidden-file"
-            hidden.mkdir()
-            (hidden / ".keep").write_bytes(b"original")
+            destination = Path(root) / "output"
+            destination.mkdir()
+            os.chdir(destination)
+            try:
+                entries = [("gt_input/a.json", b"[]"), ("manifest.json", b"{}")]
+                self.assertEqual(write_new_tree(destination, entries), [name for name, _ in entries])
+                self.assertTrue(os.path.samefile(os.getcwd(), destination))
+            finally:
+                os.chdir(previous)
+            self.assertEqual((destination / "gt_input/a.json").read_bytes(), b"[]")
+            self.assertEqual((destination / "manifest.json").read_bytes(), b"{}")
+            self.assertEqual(list(Path(root).iterdir()), [destination])
+
+    def test_existing_tree_keeps_unrelated_entries(self):
+        # A host may keep a scratch tmp/ (or notes) in the output root; only the
+        # published names must be free, and empty result directories are reused.
+        with tempfile.TemporaryDirectory() as root:
+            destination = Path(root) / "output"
+            (destination / "tmp").mkdir(parents=True)
+            (destination / "tmp/scratch.bin").write_bytes(b"scratch")
+            (destination / "gt_input").mkdir()
+            entries = [("gt_input/a.json", b"[]"), ("reports/r.json", b"{}")]
+            self.assertEqual(write_new_tree(destination, entries), [name for name, _ in entries])
+            self.assertEqual((destination / "tmp/scratch.bin").read_bytes(), b"scratch")
+            self.assertEqual((destination / "gt_input/a.json").read_bytes(), b"[]")
+            self.assertEqual((destination / "reports/r.json").read_bytes(), b"{}")
+
+    def test_existing_entries_and_results_rejected(self):
+        with tempfile.TemporaryDirectory() as root:
+            # A published name already present: a file or a non-empty directory.
+            collision = Path(root) / "collision"
+            collision.mkdir()
+            (collision / "new.bin").write_bytes(b"original")
+            (collision / "script").mkdir()
+            (collision / "script/keep.ks").write_bytes(b"original")
+            # A non-empty result directory marks a previous output, even when
+            # the new entries would not collide with it.
+            previous = Path(root) / "previous"
+            (previous / "gt_input").mkdir(parents=True)
+            (previous / "gt_input/old.json").write_bytes(b"original")
             file = Path(root) / "file"
             file.write_bytes(b"original")
-            for destination in (directory, hidden, file):
-                with self.subTest(destination=destination.name):
+            cases = [(collision, [("new.bin", b"new")]), (collision, [("script/new.ks", b"new")]),
+                     (previous, [("other.bin", b"new")]), (file, [("new.bin", b"new")])]
+            for destination, entries in cases:
+                with self.subTest(destination=destination.name, name=entries[0][0]):
                     with self.assertRaises((FileExistsError, FormatError)):
-                        write_new_tree(destination, [("new.bin", b"new")])
-            self.assertEqual(list(directory.iterdir()), [directory / "empty"])
-            self.assertEqual((hidden / ".keep").read_bytes(), b"original")
+                        write_new_tree(destination, entries)
+            self.assertEqual((collision / "new.bin").read_bytes(), b"original")
+            self.assertEqual(sorted(p.name for p in collision.iterdir()), ["new.bin", "script"])
+            self.assertEqual(list((collision / "script").iterdir()), [collision / "script/keep.ks"])
+            self.assertEqual(list(previous.iterdir()), [previous / "gt_input"])
             self.assertEqual(file.read_bytes(), b"original")
+            self.assertEqual(sorted(p.name for p in Path(root).iterdir()), ["collision", "file", "previous"])
+
+    def test_publish_failure_restores_existing_tree(self):
+        # If moving a staged entry fails midway, already published entries and
+        # replaced empty directories go back, leaving the target as found.
+        from unittest import mock
+        with tempfile.TemporaryDirectory() as root:
+            destination = Path(root) / "output"
+            (destination / "gt_input").mkdir(parents=True)
+            (destination / "tmp").mkdir()
+            real_rename, calls = os.rename, []
+
+            def flaky(src, dst):
+                calls.append(dst)
+                if len(calls) == 2:
+                    raise OSError("simulated")
+                return real_rename(src, dst)
+
+            with mock.patch("python.common.safety.os.rename", flaky), self.assertRaises(OSError):
+                write_new_tree(destination, [("gt_input/a.json", b"[]"), ("reports/r.json", b"{}")])
+            self.assertEqual(sorted(p.name for p in destination.iterdir()), ["gt_input", "tmp"])
+            self.assertEqual(list((destination / "gt_input").iterdir()), [])
+            self.assertEqual(list(Path(root).iterdir()), [destination])
 
     def test_existing_empty_tree_preserved_on_validation_failure(self):
         cases = [

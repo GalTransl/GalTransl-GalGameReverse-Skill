@@ -238,10 +238,11 @@ class WorkspaceTests(unittest.TestCase):
         with self.assertRaises(FormatError):
             ta.pack(ws, self.root / "out")  # nothing to replace
         (ws / "replace/scene_a.txt").write_bytes(b"\x00\x01raw")
-        (self.root / "busy").mkdir()
-        (self.root / "busy/file").write_bytes(b"x")
+        (self.root / "busy/reports").mkdir(parents=True)
+        (self.root / "busy/reports/old.json").write_bytes(b"x")
         with self.assertRaises(FileExistsError):
             ta.pack(ws, self.root / "busy")
+        self.assertEqual(sorted(p.name for p in (self.root / "busy").iterdir()), ["reports"])
         result = ta.pack(ws, self.root / "out")
         self.assertFalse(result["text_mode"])
         (ws / "original/textassets/scene_a.txt").write_bytes(b"edited")

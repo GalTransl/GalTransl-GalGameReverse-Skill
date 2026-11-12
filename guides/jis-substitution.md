@@ -51,7 +51,7 @@ ACP 跟随的引擎有两条路：
 - 必须确认**存储编码**。JSON 本身是 UTF-8，某些 manifest 的 encoding 也是交换层 UTF-8；都不能代替脚本编码证据。严格 shift_jis、UTF-8、UTF-16、GBK 不使用此流程，Kirikiri PSB/SCN 不因 XP3 文件名编码而触发它。`--encoding` 的实际写法（如 `cp932`、`CP932`、`windows-31j`）原样记入报告的 `script_encoding`。
 - 原版游戏不带 `uif_config.json`、`version.ini`/`winmm.ini` 等字符映射；游戏目录中出现它们，说明混入了之前的汉化或试注产物，须改用未改动的原版文件提取，不能把映射当作原作的一部分。工作区声明 source/target 字符表、已启用映射，或 `original/` 中 `CialloHook.ini`/`version.ini`/`winmm.ini` 开启 `EnableCnJpMap` 时，公共准备器拒绝处理；从原版重新提取，不叠加旧映射。
 
-`prepare` / `finalize` 的输出父目录须已存在，目标须不存在或为普通空目录；非空目录、文件和链接拒绝。
+`prepare` / `finalize` 的输出父目录须已存在，目标须不存在或为可复用的已有目录（不含同名产物或非空结果目录）；文件和链接拒绝。
 
 ## 常规路线：试注用 unused + hook，全量后再看固定表
 

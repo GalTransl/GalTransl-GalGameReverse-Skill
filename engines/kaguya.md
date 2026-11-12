@@ -15,7 +15,7 @@
 
 ## ver4 提取与回填
 
-在仓库根目录执行，输入为含 `message.dat` 的目录，输出目录须不存在或为普通空目录，且父目录已存在：
+在仓库根目录执行，输入为含 `message.dat` 的目录，输出目录须不存在或为可复用的已有目录（不含同名产物或非空结果目录），且父目录已存在：
 
 ```text
 python -m python.engines.kaguya_extract extract /path/to/game --output /path/to/game/game_extract --verify-edits

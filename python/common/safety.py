@@ -1,4 +1,4 @@
-"""Conservative archive path checks and no-overwrite output to a new or empty tree.
+"""Conservative archive path checks and no-overwrite output to a new or existing tree.
 
 New implementation for this skill; standard library only. Use a trusted,
 user-owned output parent, not a directory another process can maliciously
@@ -79,11 +79,43 @@ def _check_existing_ancestors(path: Path) -> None:
             raise FormatError(f"output ancestor is not an ordinary directory: {component}")
 
 
+# Result directories of the standard output layout (SKILL.md). An existing
+# output root may hold other entries (a host's scratch tmp/, notes), but
+# results already present here mean the root is a previous output.
+RESULT_DIRS = ("gt_input", "original", "metadata", "reports")
+
+
+def _empty_directory(path: Path) -> bool:
+    info = path.lstat()
+    reparse = getattr(info, "st_file_attributes", 0) & getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x400)
+    return stat.S_ISDIR(info.st_mode) and not stat.S_ISLNK(info.st_mode) and not reparse \
+        and not any(path.iterdir())
+
+
+def _check_free(destination: Path, names) -> list[str]:
+    """Reject top-level names that exist unless they are ordinary empty directories.
+
+    Return the names that exist as empty directories and will be replaced.
+    """
+    replaced = []
+    for name in names:
+        target = destination / name
+        if not os.path.lexists(target):
+            continue
+        if not _empty_directory(target):
+            raise FileExistsError(f"refusing to replace existing output entry: {target}")
+        replaced.append(name)
+    return replaced
+
+
 def validate_new_tree_destination(destination: Path) -> tuple[int, int] | None:
     """Check the output parent and target before parsing or writing resources.
 
-    Return the identity of an existing ordinary empty directory, or None when
-    the target is absent. This check neither creates nor removes directories.
+    Return the identity of an existing ordinary directory, or None when the
+    target is absent. An existing directory may contain unrelated entries, but
+    not a non-empty result directory (RESULT_DIRS). write_new_tree still
+    refuses to replace any existing entry it would publish. This check neither
+    creates nor removes directories.
     """
     destination = Path(os.path.abspath(destination))
     logical_path(destination.name)
@@ -91,8 +123,7 @@ def validate_new_tree_destination(destination: Path) -> tuple[int, int] | None:
     if not os.path.lexists(destination):
         return None
     _check_existing_ancestors(destination)
-    if any(destination.iterdir()):
-        raise FileExistsError(f"refusing to replace non-empty output: {destination}")
+    _check_free(destination, RESULT_DIRS)
     info = destination.lstat()
     return info.st_dev, info.st_ino
 
@@ -116,11 +147,13 @@ class _BoundedWriter:
 
 def write_new_tree(destination: Path, entries: list[tuple[str, bytes]],
                    limits: Limits = Limits(), *, streams=()) -> list[str]:
-    """Validate all entries, stage them, then publish to a new or empty directory.
+    """Validate all entries, stage them, then publish without replacing anything.
 
     Returned names are relative to destination. The parent must exist; an
-    existing destination must be an ordinary empty directory. Never point this
-    at a game directory or a previous output. The caller must bound
+    existing destination must be an ordinary directory in which every
+    top-level entry to publish is absent or an ordinary empty directory (see
+    validate_new_tree_destination). Never point this at a game directory or a
+    previous output. The caller must bound
     decompression BEFORE building entries; these checks cannot undo an earlier
     excessive allocation. No output file is opened in overwrite mode.
 
@@ -134,6 +167,9 @@ def write_new_tree(destination: Path, entries: list[tuple[str, bytes]],
     existing = identity is not None
     streams = list(streams)
     names = validate_names([entry[0] for entry in entries] + [item[0] for item in streams], limits)
+    tops = list(dict.fromkeys(name.split("/")[0] for name in names))
+    if existing:
+        _check_free(destination, tops)
     total = 0
     for _, payload in entries:
         if not isinstance(payload, bytes) or len(payload) > limits.max_file_bytes:
@@ -157,25 +193,50 @@ def write_new_tree(destination: Path, entries: list[tuple[str, bytes]],
             target.parent.mkdir(parents=True, exist_ok=True)
             with target.open("xb") as stream:
                 writer(_BoundedWriter(stream, max_bytes))
-        # Reserve absent destinations exclusively; reuse only a verified empty
-        # directory. Failure cleanup removes only reservations created here.
+        # Reserve absent destinations exclusively; reuse an existing directory
+        # only if every published name is still free. Failure cleanup removes
+        # only reservations and entries created here.
         if not existing:
             destination.mkdir()
             reserved = True
             info = destination.lstat()
             identity = (info.st_dev, info.st_ino)
         current = destination.lstat()
-        if (current.st_dev, current.st_ino) != identity or any(destination.iterdir()):
+        if (current.st_dev, current.st_ino) != identity:
             raise FormatError("output reservation changed during staging")
-        if os.name == "nt":
-            # Windows rename does not replace an empty directory. In the trusted
-            # parent, remove the empty target; os.rename still refuses collisions.
-            destination.rmdir()
-            reserved = False
-            os.rename(staging, destination)
-        else:
-            os.replace(staging, destination)
-            reserved = False
+        try:
+            replaced = set(_check_free(destination, tops))
+        except FileExistsError as error:
+            raise FormatError(f"output changed during staging: {error}") from None
+        # Move staged top-level entries into the target one by one rather than
+        # replacing the target itself: an existing root may hold unrelated
+        # entries, and Windows cannot remove a directory that is a process's
+        # cwd (agent harnesses run in the output root). Windows rename refuses
+        # collisions; elsewhere the free check above guards the same names.
+        # A failure moves published entries back and restores emptied
+        # directories, so the target is left as it was found.
+        moved, removed = [], []
+        try:
+            for name in tops:
+                target = destination / name
+                if name in replaced:
+                    target.rmdir()
+                    removed.append(name)
+                os.rename(staging / name, target)
+                moved.append(name)
+        except BaseException:
+            for name in reversed(moved):
+                try:
+                    os.rename(destination / name, staging / name)
+                except OSError:
+                    pass
+            for name in removed:
+                try:
+                    (destination / name).mkdir()
+                except OSError:
+                    pass
+            raise
+        reserved = False
         return names
     finally:
         if staging.exists():

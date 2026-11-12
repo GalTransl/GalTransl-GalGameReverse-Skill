@@ -1,6 +1,6 @@
 # Unity：UnityFS / serialized 容器、TextAsset、Utage 剧情表与 .bin/.idx 容器
 
-目录输出遵循 [公共安全写出约定](../guides/python-reference-api.md#安全写出示例)：父目录须已存在，目标须不存在或为普通空目录；非空目录、文件和链接拒绝。
+目录输出遵循 [公共安全写出约定](../guides/python-reference-api.md#安全写出示例)：父目录须已存在，目标须不存在或为可复用的已有目录（不含同名产物或非空结果目录）；文件和链接拒绝。
 
 ## 选择路径
 

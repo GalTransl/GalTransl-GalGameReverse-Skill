@@ -37,7 +37,7 @@ python -m python.engines.exhibit_extract rebuild "游戏目录/游戏名_extract
 | `rebuilt/growth-test/rld/` | 启用 smoke-test 时，各文本文件首行增加 ` ABC` 的离线测试产物 |
 | `reports/extraction.json` | 全部成员状态、数量、密钥恢复依据、未解析 ID、验证结果 |
 
-`rebuild`（别名 `pack`）只输出实际变化的 `rld/*.rld`，保留原文件名。未提供译文的成员不需要部署；未知译文文件名报错，避免静默漏回填。原文 JSON、manifest、配套定义或源文件改变则拒绝回写。输出目录须不存在或为普通空目录，拒绝覆盖非空目录。换行保护项调整后，旧 metadata 无法通过 manifest 比对；应从哈希验证通过的原件重新提取到新目录，再放回同名译文。
+`rebuild`（别名 `pack`）只输出实际变化的 `rld/*.rld`，保留原文件名。未提供译文的成员不需要部署；未知译文文件名报错，避免静默漏回填。原文 JSON、manifest、配套定义或源文件改变则拒绝回写。输出目录须不存在或为可复用的已有目录（不含同名产物或非空结果目录），不覆盖已有产物。换行保护项调整后，旧 metadata 无法通过 manifest 比对；应从哈希验证通过的原件重新提取到新目录，再放回同名译文。
 
 回读 `rebuild` 结果不需要复制 `original/encrypted`、INI 或 `resident.dll` 拼验证副本：
 
