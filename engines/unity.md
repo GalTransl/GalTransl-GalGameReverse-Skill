@@ -1,5 +1,14 @@
 # Unity：UnityFS / serialized 容器、TextAsset、Utage 剧情表与 .bin/.idx 容器
 
+## 快速路径
+
+识别为本格式后先直接运行提取命令：按实际路径替换占位符，多条命令对应不同方言或来源，按下文的识别条件选一条。提取器自行校验格式并用原文走真实的解析与回写，结构不符时拒绝并指出失败位置。命令成功就不必读实现源码或研究资料；失败时再按报错读本页对应章节和 `python/` 中的实现。
+
+```text
+python -m python.engines.unity_textasset extract "/game/Game_Data/Data/scenario_bundle" "/work/ta" --name "_01*" --target "Game_Data/Data/scenario_bundle"
+python -m python.engines.unity_utage_extract extract "/game/Game_Data/dialogue-backup.assets" "/game/new_extract" --dependency "/game/Game_Data/globalgamemanagers.assets" --target "Game_Data/sharedassets0.assets"
+```
+
 目录输出遵循 [公共安全写出约定](../guides/python-reference-api.md#安全写出示例)：父目录须已存在，目标须不存在或为可复用的已有目录（不含同名产物或非空结果目录）；文件和链接拒绝。
 
 ## 选择路径

@@ -1,5 +1,13 @@
 # NeXAS：PAC 尾索引与 BIN 字符串池回填
 
+## 快速路径
+
+识别为本格式后先直接运行提取命令：按实际路径替换占位符，多条命令对应不同方言或来源，按下文的识别条件选一条。提取器自行校验格式并用原文走真实的解析与回写，结构不符时拒绝并指出失败位置。命令成功就不必读实现源码或研究资料；失败时再按报错读本页对应章节和 `python/` 中的实现。
+
+```text
+python -m python.engines.nexas_extract extract /path/to/game --output /path/to/game/game_extract --archives Script.pac Update3.pac
+```
+
 ## 入口与范围
 
 检查 PAC 前三字节 `PAC`、偏移 4 的成员数、偏移 8 的压缩类型及尾部索引。第四字节不一定为零，不能仅匹配 `PAC\0`。

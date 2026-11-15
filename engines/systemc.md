@@ -1,5 +1,14 @@
 # SystemC / SystemB3：FPK、ACT 与 UTF-8 TXD/PTR
 
+## 快速路径
+
+识别为本格式后先直接运行提取命令：按实际路径替换占位符，多条命令对应不同方言或来源，按下文的识别条件选一条。提取器自行校验格式并用原文走真实的解析与回写，结构不符时拒绝并指出失败位置。命令成功就不必读实现源码或研究资料；失败时再按报错读本页对应章节和 `python/` 中的实现。
+
+```text
+python -m python.engines.systemc_extract extract "<游戏目录>" --output "<新输出目录>" --verify-edits
+python -m python.engines.systemc_txd_extract extract "<游戏目录>" --output "<输出目录>" --verify-edits
+```
+
 目录输出遵循 [公共安全写出约定](../guides/python-reference-api.md#安全写出示例)：父目录须已存在，目标须不存在或为可复用的已有目录（不含同名产物或非空结果目录）；文件和链接拒绝。
 
 CP932 ACT/DAT/SPT 工作区通过 [systemc_extract.pack](../python/engines/systemc_extract.py) 回注时有两种输出编码：默认 `--output-encoding cp932`，优先使用 [公共 JIS 替换](../guides/jis-substitution.md) 处理无法编码的中文，`--jis-mode off` 保留严格 CP932；`--output-encoding gbk` 用于剧本按系统 ANSI 码页解码的 EXE，整体转码为 GBK、不用 JIS，见下文[运行时码页与 GBK 路线](#运行时码页与-gbk-路线)。先判定码页再选路线。替换会话覆盖整个输出包，结果目录包含 `uif_config.json`、`jis-mapping.json` 和 `JIS-部署说明.txt`（没有实际替换则不生成）；hook 按公共策略选择：`pack --exe <游戏EXE>` 时按位数附带 CialloHook `version.dll`/`version.ini`，并在探针未确认固定 CP932 时强制 ACP 932（附 LE/LEP 依赖），`--hook`、`--force-cp932` 与 [JIS 公共流程](../guides/jis-substitution.md) 相同，UIF 仅以 `--hook uif-x86` 手动兜底；不给 `--exe` 时不附 hook 并在 `jis_delivery.warnings` 提示。最终提醒用户按说明部署 hook 或匹配映射的替换字体，并实测加载和显示。低层 `inject_act(..., text_codec=codec)` 支持显式接入；UTF-8 TXD/PTR 不走此方案。

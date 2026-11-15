@@ -1,5 +1,13 @@
 # YU-RIS：YPF 解包、YBN 分区 XOR 与 ysc.ybn
 
+## 快速路径
+
+识别为本格式后先直接运行提取命令：按实际路径替换占位符，多条命令对应不同方言或来源，按下文的识别条件选一条。提取器自行校验格式并用原文走真实的解析与回写，结构不符时拒绝并指出失败位置。命令成功就不必读实现源码或研究资料；失败时再按报错读本页对应章节和 `python/` 中的实现。
+
+```text
+python -m python.engines.yuris_extract extract "<游戏目录>" "<输出目录>" --archive <剧本包相对路径>.ypf [--loose <原始松散YBN目录>] [--reference-archive <其他包相对路径>.ypf] --smoke-test
+```
+
 ## 能力边界
 - 引擎 ID：`yuris`。
 - 参考模块：[python/engines/yuris.py](../python/engines/yuris.py)。

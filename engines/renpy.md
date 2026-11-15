@@ -1,5 +1,15 @@
 # Ren’Py：RPA/ARC3 归档与 RPYC2 编译脚本回填
 
+## 快速路径
+
+识别为本格式后先直接运行提取命令：按实际路径替换占位符，多条命令对应不同方言或来源，按下文的识别条件选一条。提取器自行校验格式并用原文走真实的解析与回写，结构不符时拒绝并指出失败位置。命令成功就不必读实现源码或研究资料；失败时再按报错读本页对应章节和 `python/` 中的实现。
+
+```text
+python -m python.engines.renpy_extract extract "游戏目录/game" "<输出>/ws" --archives scripts.rpa tl.rpa --loose --smoke-test
+python -m python.engines.renpy_extract extract "游戏目录/game" "<输出>/ws_tl" --archives scripts.rpa --loose --tl-language schinese
+python -m python.engines.renpy_extract extract "游戏目录/game" "<输出>/ws_rpy" --rpy [--speakers 角色变量 ...]
+```
+
 覆盖归档与松散 RPYC2 原位回填、新建 `tl/<语言>` 翻译语言及松散 `.rpy` 源码回填。目录输出遵循 [公共安全写出约定](../guides/python-reference-api.md#安全写出示例)：父目录须已存在，目标须不存在或为可复用的已有目录（不含同名产物或非空结果目录）；文件和链接拒绝。
 
 ## 识别与入口

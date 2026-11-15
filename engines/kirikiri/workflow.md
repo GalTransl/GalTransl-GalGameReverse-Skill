@@ -1,5 +1,13 @@
 # Kirikiri 通用工作流
 
+## 快速路径
+
+识别为本格式后先直接运行提取命令：按实际路径替换占位符，多条命令对应不同方言或来源，按下文的识别条件选一条。提取器自行校验格式并用原文走真实的解析与回写，结构不符时拒绝并指出失败位置。命令成功就不必读实现源码或研究资料；失败时再按报错读本页对应章节和 `python/` 中的实现。
+
+```text
+python -m python.engines.kirikiri_extract extract "游戏目录" "新的提取目录" --archives data.xp3 --filter-spec filter.json --verify-edits
+```
+
 格式分流和批处理入口见 [引擎页](../kirikiri.md)。本页用于定位失败层、适配新方言和制作补丁。
 
 ## 从证据选择下一步

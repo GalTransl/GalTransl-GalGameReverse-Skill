@@ -1,5 +1,13 @@
 # Kaguya：message.dat 与 LINK6
 
+## 快速路径
+
+识别为本格式后先直接运行提取命令：按实际路径替换占位符，多条命令对应不同方言或来源，按下文的识别条件选一条。提取器自行校验格式并用原文走真实的解析与回写，结构不符时拒绝并指出失败位置。命令成功就不必读实现源码或研究资料；失败时再按报错读本页对应章节和 `python/` 中的实现。
+
+```text
+python -m python.engines.kaguya_extract extract /path/to/game --output /path/to/game/game_extract --verify-edits
+```
+
 ## 识别与选择
 
 先检查独立的 `message.dat`，不要因存在 `scr.arc` 就认定对白在归档中。同名备份、汉化文件与原始文本表分开识别，不按遍历顺序混用。

@@ -1,5 +1,13 @@
 # KAG 文本：nm / np / exlink 方言
 
+## 快速路径
+
+识别为本格式后先直接运行提取命令：按实际路径替换占位符，多条命令对应不同方言或来源，按下文的识别条件选一条。提取器自行校验格式并用原文走真实的解析与回写，结构不符时拒绝并指出失败位置。命令成功就不必读实现源码或研究资料；失败时再按报错读本页对应章节和 `python/` 中的实现。
+
+```text
+python -m python.engines.kirikiri_kag_extract extract "游戏目录" "新的提取目录" --archives data.bin arc/extra.xp3 --members "scenario/*.ks" "01*.ks" --filter-spec "过滤器.json"
+```
+
 入口：[kirikiri_kag_extract.py](../../python/engines/kirikiri_kag_extract.py)；语义层：[kirikiri_kag_text.py](../../python/engines/kirikiri_kag_text.py)。仅用于符合下述宏语义的 KAG 文本，PSB/SCN 走 [引擎页](../kirikiri.md) 的对应入口。
 
 ## 适用条件

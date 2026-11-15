@@ -789,6 +789,9 @@ def _duplicate_archives(archives, patch_hint, started, max_seconds) -> None:
 
 
 MERGED_FILES_SHOWN = 4
+HOW_TO_PROCEED = ("Read the quick-path section at the top of engine_page, then run an extract command with real "
+                  "paths. The extractor validates the format and fails closed with the failing location, so do "
+                  "not read python sources or research notes first; read them only if the command fails.")
 
 
 def _merge_hits(hits: list) -> list:
@@ -871,6 +874,7 @@ def main() -> None:
         if not args.full:
             # What to do next comes first; fields with nothing to report are dropped.
             result = {"kind": result.pop("kind"), "next_steps": next_steps(result),
+                      "how_to_proceed": HOW_TO_PROCEED,
                       **{key: value for key, value in result.items()
                          if value not in (None, [], {}) or key == "candidates"}}
     except (OSError, ValueError) as exc:

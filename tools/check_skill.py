@@ -163,6 +163,9 @@ def check() -> tuple[list[str], dict]:
                         errors.append(f"{engine['id']}: missing Python reference {reference}")
         except (ValueError, KeyError, TypeError) as exc:
             errors.append(f"invalid engine index: {exc}")
+    from update_quick_paths import stale_pages
+    for page in stale_pages(ROOT):
+        errors.append(f"{page}: quick-path section is stale; run tools/update_quick_paths.py")
     for required in ("catalog/formats.json", "catalog/source-registries.json", "provenance/sources.json",
                      "provenance/NOTICE.md", "LICENSE"):
         if not (ROOT / required).is_file():
