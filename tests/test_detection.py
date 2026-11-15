@@ -481,6 +481,48 @@ class DetectionAdditionsTests(unittest.TestCase):
             report = detect_directory(root)
             self.assertIsNone(report["unity"])
 
+    def test_cli_leads_with_next_steps_and_merges_same_evidence(self):
+        """Dozens of same-extension archives used to fill the output, so it was
+        cut off before the stats and never named the engine page or command."""
+        script = Path(__file__).resolve().parents[1] / "python" / "detect.py"
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            for number in range(24):
+                (root / f"{number:02}.fpk").write_bytes(bytes(40))
+            (root / "SystemC.ini").write_bytes(b"[x]\n")
+            run = lambda *extra: subprocess.run([sys.executable, "-I", str(script), str(root), *extra],
+                                                capture_output=True, check=True).stdout.decode("utf-8")
+            text = run()
+            report = json.loads(text)
+            self.assertEqual(list(report)[:2], ["kind", "next_steps"])
+            step = report["next_steps"][0]
+            self.assertEqual((step["engine"], step["strongest_evidence"], step["engine_page"]),
+                             ("systemc", "filename", "engines/systemc.md"))
+            self.assertTrue(all(c.startswith("python -m python.engines.systemc") and " extract " in c
+                                for c in step["extract_commands"]))
+            hits = report["candidates"]["systemc"]
+            self.assertEqual([(hit["file"], hit.get("files")) for hit in hits],
+                             [("SystemC.ini", None), ("00.fpk", 24)])
+            self.assertEqual(len(hits[1]["more_files"]), 4)
+            self.assertEqual(report["candidate_stats"]["systemc"]["shown_hits"], 25)
+            self.assertNotIn("unity", report)
+            self.assertLess(len(text.splitlines()), 70)
+            full = json.loads(run("--full"))
+            self.assertNotIn("next_steps", full)
+            self.assertEqual(len(full["candidates"]["systemc"]), 12)
+            self.assertIn("unity", full)
+
+    def test_next_steps_omit_what_the_skill_does_not_document(self):
+        from python.detect import next_steps
+        stats = {"candidate_stats": {"nosuch": {"by_strength": {"extension": 1}, "matched_files": 3},
+                                     "kaguya": {"by_strength": {"probe": 1, "extension": 2}, "matched_files": 1}}}
+        steps = next_steps(stats)
+        self.assertEqual([step["engine"] for step in steps], ["kaguya", "nosuch"])
+        self.assertEqual(steps[0]["engine_page"], "engines/kaguya.md")
+        self.assertIn("kaguya_extract extract", steps[0]["extract_commands"][0])
+        self.assertEqual(steps[1], {"engine": "nosuch", "strongest_evidence": "extension",
+                                    "matched_files": 3, "engine_page": None})
+
 
 if __name__ == "__main__":
     unittest.main()

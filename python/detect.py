@@ -414,7 +414,8 @@ def _select_evidence(hits: list, limit: int) -> list:
 
 def detect_directory(root: Path, *, max_files: int = 2000, max_depth: int = 5,
                      max_seconds: float = 15.0, max_evidence: int = 12,
-                     include_derived: bool = False) -> dict:
+                     include_derived: bool = False, merge_similar: bool = False) -> dict:
+    """``merge_similar`` folds hits that differ only by file into one entry."""
     root = Path(os.path.abspath(root))
     if max_files < 1 or max_depth < 0 or max_seconds <= 0:
         raise ValueError("invalid scan limits")
@@ -683,13 +684,14 @@ def detect_directory(root: Path, *, max_files: int = 2000, max_depth: int = 5,
 
     for engine in sorted(all_hits):
         hits = all_hits[engine]
-        shown = _select_evidence(hits, max_evidence)
+        shown = _select_evidence(_merge_hits(hits) if merge_similar else hits, max_evidence)
+        shown_hits = sum(hit.get("files", 1) for hit in shown)
         by_strength = {strength: sum(1 for hit in hits if hit["strength"] == strength)
                        for strength in STRENGTH_ORDER}
         result["candidates"][engine] = shown
         result["candidate_stats"][engine] = {
-            "total_hits": len(hits), "shown_hits": len(shown),
-            "matched_files": len(matched_files[engine]), "capped": len(hits) > len(shown),
+            "total_hits": len(hits), "shown_hits": shown_hits,
+            "matched_files": len(matched_files[engine]), "capped": len(hits) > shown_hits,
             "by_strength": {key: value for key, value in by_strength.items() if value},
         }
     result["evidence_capped"] = any(stats["capped"] for stats in result["candidate_stats"].values())
@@ -786,6 +788,56 @@ def _duplicate_archives(archives, patch_hint, started, max_seconds) -> None:
                             "scan time budget")
 
 
+MERGED_FILES_SHOWN = 4
+
+
+def _merge_hits(hits: list) -> list:
+    """One entry per (kind, strength, evidence): dozens of same-extension files say one thing."""
+    merged: dict[tuple, dict] = {}
+    for hit in hits:
+        entry = merged.setdefault((hit["kind"], hit["strength"], hit["evidence"]), dict(hit, files=0, more_files=[]))
+        entry["files"] += 1
+        if 1 < entry["files"] <= MERGED_FILES_SHOWN + 1:
+            entry["more_files"].append(hit["file"])
+    return [entry if entry["files"] > 1 else {k: v for k, v in entry.items() if k not in ("files", "more_files")}
+            for entry in merged.values()]
+
+
+def next_steps(result: dict, skill_root: Path | None = None) -> list:
+    """Per candidate, strongest first: the engine page to read and the extract commands it documents.
+
+    Commands are quoted from the engine page, placeholders included, so they
+    cannot drift from it; a candidate is still only a lead until that page's
+    identification checks pass.
+    """
+    skill_root = skill_root or Path(__file__).resolve().parents[1]
+    documents = {}
+    try:
+        index = json.loads((skill_root / "catalog/engines.json").read_text(encoding="utf-8"))
+        for engine in index["engines"]:
+            for name in (engine["id"], *engine.get("aliases", [])):
+                documents.setdefault(name.casefold(), engine["document"])
+    except (OSError, ValueError, KeyError, TypeError):
+        pass
+    steps = []
+    for engine, stats in result["candidate_stats"].items():
+        strongest = min(stats["by_strength"], key=STRENGTH_RANK.__getitem__)
+        step = {"engine": engine, "strongest_evidence": strongest, "matched_files": stats["matched_files"]}
+        page = documents.get(engine.casefold(), f"engines/{engine}.md")
+        try:
+            text = (skill_root / page).read_text(encoding="utf-8")
+        except OSError:
+            step["engine_page"] = None
+        else:
+            step["engine_page"] = page
+            commands = re.findall(r"^python -m python\.engines\.\w+ extract [^\n]*$", text, re.M)
+            if commands:
+                step["extract_commands"] = list(dict.fromkeys(commands))[:4]
+        steps.append(step)
+    steps.sort(key=lambda step: (STRENGTH_RANK[step["strongest_evidence"]], -step["matched_files"]))
+    return steps
+
+
 def _emit(stream, text: str) -> None:
     """Write UTF-8 regardless of the console code page or -I/-X utf8 mode."""
     data = text.encode("utf-8")
@@ -809,11 +861,18 @@ def main() -> None:
                         help="display cap per engine; counts are still collected (0: counts only)")
     parser.add_argument("--include-derived", action="store_true",
                         help="also scan *_extract workspaces and *_Output dump folders")
+    parser.add_argument("--full", action="store_true",
+                        help="one entry per hit and every empty field, instead of the merged summary")
     args = parser.parse_args()
     try:
         result = detect_directory(args.directory, max_files=args.max_files, max_depth=args.max_depth,
                                   max_seconds=args.max_seconds, max_evidence=args.max_evidence,
-                                  include_derived=args.include_derived)
+                                  include_derived=args.include_derived, merge_similar=not args.full)
+        if not args.full:
+            # What to do next comes first; fields with nothing to report are dropped.
+            result = {"kind": result.pop("kind"), "next_steps": next_steps(result),
+                      **{key: value for key, value in result.items()
+                         if value not in (None, [], {}) or key == "candidates"}}
     except (OSError, ValueError) as exc:
         _emit(sys.stderr, f"scan refused: {exc}\n")
         sys.exit(2)

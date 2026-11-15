@@ -732,6 +732,22 @@ def finalize(prepared, rebuilt, readback, output):
     return result
 
 
+_CONCLUSION_KEYS = ("ok", "schema", "file", "architecture", "verdict", "confidence", "verdict_source", "reasons",
+                    "byte_verdict", "byte_confidence", "summary", "packing", "embedded_sjis_table", "note", "error")
+
+
+def _codepage_conclusion(result):
+    """Verdict first and without the site lists, which bury it under hundreds of lines."""
+    brief = {key: result[key] for key in _CONCLUSION_KEYS if key in result}
+    deep = result.get("rizin")
+    if deep:
+        brief["rizin"] = {key: deep[key] for key in ("verdict", "confidence", "reasons", "error", "note")
+                          if key in deep}
+    if result.get("ok"):
+        brief["details"] = "rerun with --details for sections, imports and every call/compare site"
+    return brief
+
+
 def _emit(value):
     """Machine-readable UTF-8 JSON on stdout (not ASCII-escaped)."""
     sys.stdout.flush()
@@ -783,6 +799,8 @@ def main():
                          help="auto (default): bundled rizin deep probe on Windows, else $GALTRANSL_RIZIN; "
                               "off: byte probe only; or a rizin.exe path")
     command.add_argument("--rizin-timeout", type=int, default=None, help="seconds (default 180)")
+    command.add_argument("--details", action="store_true",
+                         help="also list sections, imports and every call/compare site (hundreds of lines)")
     args = vars(parser.parse_args())
     action = args.pop("command")
     if action == "codepage":
@@ -794,6 +812,8 @@ def main():
             except (FormatError, OSError) as error:
                 failed = True
                 results.append({"ok": False, "file": exe, "error": f"{type(error).__name__}: {error}"})
+        if not args["details"]:
+            results = [_codepage_conclusion(result) for result in results]
         _emit(results[0] if len(results) == 1 else {"ok": not failed, "results": results})
         if failed:
             raise SystemExit(1)

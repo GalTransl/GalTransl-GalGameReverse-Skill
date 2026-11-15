@@ -45,6 +45,7 @@ def query(document, *, tag=None, extension=None, magic=None, text=None,
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("words", nargs="*", help="Bare words are searched like --text")
     parser.add_argument("--tag", help="Exact format Tag (case insensitive)")
     parser.add_argument("--extension", help="Exact extension, with or without leading dot")
     parser.add_argument("--magic", help="Four header bytes in file order, e.g. 5850330d")
@@ -52,9 +53,14 @@ def main(argv=None):
     parser.add_argument("--offset", type=int, default=0)
     parser.add_argument("--limit", type=int, default=20, help="Records per page, 1..100")
     parser.add_argument("--details", action="store_true", help="Include full source evidence and unknown fields")
-    args = parser.parse_args(argv)
+    args = vars(parser.parse_args(argv))
+    words = args.pop("words")
+    if words:
+        if args["text"] is not None:
+            parser.error("give the search text either as bare words or with --text, not both")
+        args["text"] = " ".join(words)
     try:
-        result = query(load_formats(ROOT / "catalog/formats.json"), **vars(args))
+        result = query(load_formats(ROOT / "catalog/formats.json"), **args)
     except (ValueError, KeyError, TypeError, OSError) as exc:
         parser.exit(2, f"catalog query failed: {exc}\n")
     print(json.dumps(result, ensure_ascii=False, indent=2))

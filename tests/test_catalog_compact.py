@@ -122,6 +122,25 @@ class CatalogQueryTests(unittest.TestCase):
                 query(self.catalog, **args)
 
 
+class CatalogCliTests(unittest.TestCase):
+    def test_bare_words_search_like_text(self):
+        """A query typed without an option name used to be a usage error."""
+        import contextlib
+        import io
+        import query_catalog
+
+        def run(*argv):
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                query_catalog.main(list(argv))
+            return json.loads(out.getvalue())
+
+        self.assertGreater(run("--text", "xp3")["total"], 0)
+        self.assertEqual(run("xp3", "--limit", "5"), run("--text", "xp3", "--limit", "5"))
+        with self.assertRaises(SystemExit), contextlib.redirect_stderr(io.StringIO()):
+            run("xp3", "--text", "arc")
+
+
 class NoticeGroupingTests(unittest.TestCase):
     def test_complete_notices_and_per_file_mapping_are_preserved(self):
         first = "// Copyright A\n// Complete license A"

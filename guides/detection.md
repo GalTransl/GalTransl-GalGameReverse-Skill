@@ -40,6 +40,8 @@
 - 默认跳过派生目录：名字以 `_extract` 结尾或带 `_extract_…` 后缀（如 `_extract_2`、`_extract_pack_…`）的目录，`…Extract…_Output` 形式的解包输出，同时含 `gt_input` 与 `metadata`/`reports` 的工作区，以及根下有 `verification.json` 的封包输出。仅以 `_output` 结尾的普通目录（如媒体插件的 `audio_output`）照常扫描。被跳过的目录列在 `skipped_directories`（展示有上限，总数见 `skipped_directory_count`）。这些是旧提取结果或第三方解包输出，不是游戏原件；确需检查时加 `--include-derived`。被扫描的根目录本身不受此规则影响。
 - 文件头未命中任何内置规则时，用前 4 字节查 [formats.json](../catalog/formats.json)，命中写入 `catalog_hints`（标签最多 5 个、总数有上限，统计见 `catalog_hint_stats`）。常见通用头（PNG、Ogg、RIFF、MZ、ZIP、CAB 等）和小于 `0x10000` 的版本/计数字不参与。它只是资料线索：用 `tools/query_catalog.py --magic` 继续查来源，不代表存在对应引擎页或已支持。
 - CLI 固定以 UTF-8 输出 JSON，不受控制台代码页影响。
+- CLI 输出以 `next_steps` 开头：每个候选按最强证据排序，给出 `engine_page`（要读的引擎页）和 `extract_commands`（该页记载的提取命令，占位符照原样，没有工作区 CLI 的引擎不带此项）。候选仍只是线索，先按引擎页核对识别条件再运行命令。
+- 只有文件名不同的同类证据合并为一条，`files` 是文件数，`more_files` 列出另外几个文件名；没有内容的字段不输出。`--full` 恢复逐条列出并保留全部字段；`detect_directory()` 默认不合并，传 `merge_similar=True` 才合并。
 
 ```text
 python /path/to/GalTransl-GalGameReverse-Skill/python/detect.py /path/to/game --max-evidence 24
@@ -55,7 +57,7 @@ python /path/to/GalTransl-GalGameReverse-Skill/python/detect.py /path/to/game --
 
 [formats.json](../catalog/formats.json) 保存上游有效编译/注册来源。目录行数不是支持引擎数：它包含同引擎变体、归档资源集合和某些只读格式。`CanWrite`、`Create` 的源声明不等于所有读取版本都可重封包。
 
-用随包[查询器](../tools/query_catalog.py)筛选，默认每页 20 项；`--details` 展开当前页的原始表达式、继承和来源证据。条件同时使用时取交集；`--text` 可搜索别名、源路径和描述。返回 `total`、`returned` 和 `next_offset`，用 `--offset` 接续；不要把一页结果当完整目录。
+用随包[查询器](../tools/query_catalog.py)筛选，默认每页 20 项；不带选项名的词等同于 `--text`；`--details` 展开当前页的原始表达式、继承和来源证据。条件同时使用时取交集；`--text` 可搜索别名、源路径和描述。返回 `total`、`returned` 和 `next_offset`，用 `--offset` 接续；不要把一页结果当完整目录。
 
 ```text
 python /path/to/skill/tools/query_catalog.py --tag XP3 --details

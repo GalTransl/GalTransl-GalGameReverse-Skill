@@ -45,10 +45,10 @@ assets/rizin/bin/rizin.exe -N -q -e cfg.sandbox=true -e scr.color=0 -c "iI; ii~M
 先用公共入口，它在 Windows 上会自动调用 rizin：
 
 ```text
-python -m python.common.jis_workflow codepage "游戏目录/game.exe"
+python -m python.common.jis_workflow codepage "游戏目录/game.exe" --details
 ```
 
-看 `rizin.conversion_calls`：`purpose: path` 的调用是路径转换，与剧本无关；`codepage_source: caller-argument`/`unresolved` 的调用需要往上追：
+不加 `--details` 只输出结论；要追调用点时才加。看 `rizin.conversion_calls`：`purpose: path` 的调用是路径转换，与剧本无关；`codepage_source: caller-argument`/`unresolved` 的调用需要往上追：
 
 ```text
 aaa; pdf @ <conversion_calls[].function>      # 看 CodePage 来自哪个参数/寄存器

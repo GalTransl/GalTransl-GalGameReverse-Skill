@@ -378,6 +378,16 @@ class CliTests(unittest.TestCase):
             self.assertEqual((report["ok"], report["schema"], report["verdict"]),
                              (True, "codepage-probe/1", "acp-following"))
             self.assertIn("note", report)
+            # Conclusion only by default: site lists used to bury the verdict
+            # in the middle of several hundred lines.
+            self.assertEqual(list(report)[:5], ["ok", "schema", "file", "architecture", "verdict"])
+            self.assertTrue(report["reasons"])
+            self.assertNotIn("conversion_calls", report)
+            self.assertNotIn("sections", report)
+            detailed = json.loads(self.run_cli(exe, "--details").stdout)
+            self.assertTrue(detailed["conversion_calls"])
+            self.assertIn("sections", detailed)
+            self.assertEqual(detailed["verdict"], report["verdict"])
             both = self.run_cli(exe, root / "bad.exe", "--max-sites", "0")
             self.assertEqual(both.returncode, 1)
             self.assertNotIn(b"Traceback", both.stderr)
