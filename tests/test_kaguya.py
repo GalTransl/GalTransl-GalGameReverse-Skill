@@ -45,6 +45,34 @@ class KaguyaMessageTests(unittest.TestCase):
         self.assertEqual(len(rows), 5)
         self.assertEqual(manifest["records"][3]["name_policy"], "context")
 
+    def test_suffix_left_by_longer_overwritten_file_is_recognized(self):
+        """An in-place rewrite without truncation leaves old records after the
+        group table; the scan must explain them instead of leaving the question
+        of hidden text open. Regression: the suffix used to be reported only as
+        opaque, which invited reverse-engineering megabytes of dead records."""
+        header = kaguya.MAGIC + b"\x01\xff"
+        old = kaguya.write_message_dat(kaguya.Document(
+            header, ("名前",), (),
+            tuple(kaguya.Message(f"旧い本文{i}\n", (f"v{i:04d}",) if i % 2 else ()) for i in range(40)),
+            tuple(kaguya.Group(0, (i,)) for i in range(40))))
+        new = kaguya.write_message_dat(replace(document(), trailer=b""))
+        data = new + old[len(new):]
+        parsed = kaguya.read_message_dat(data, allow_trailer=True)
+        self.assertEqual(parsed.messages, document().messages)
+        stale = kaguya.stale_records(parsed.trailer, header)
+        self.assertEqual(stale["groups"], 40)
+        self.assertGreater(stale["message_blocks"], 30)
+        self.assertLess(stale["unexplained_bytes"], 64)
+        # A cut inside the old group table leaves no count field, only entries.
+        tail = kaguya.stale_records(old[-40 * 9 + 3:], header)
+        self.assertEqual((tail["message_blocks"], tail["groups"], tail["unexplained_bytes"]), (0, 39, 6))
+
+    def test_unstructured_suffix_is_not_counted_as_records(self):
+        header = kaguya.MAGIC + b"\x01\xff"
+        for trailer in (document().trailer, bytes(4096), bytes(range(256)) * 16, b"\xff" * 4096):
+            stale = kaguya.stale_records(trailer, header)
+            self.assertEqual((stale["runs"], stale["unexplained_bytes"]), (0, len(trailer)))
+
     def test_alias_bytes_are_preserved_for_unchanged_text(self):
         doc = replace(document(), raw_names=(b"\xfa\x40",), names=("ⅰ", "％"))
         data = kaguya.write_message_dat(doc)
@@ -167,6 +195,8 @@ class KaguyaWorkflowTests(unittest.TestCase):
             self.assertEqual(report["json_rows"], 5)
             self.assertEqual(report["unused_message_indexes"], [2])
             self.assertEqual(report["link6"]["members"], 1)
+            self.assertEqual(report["suffix"]["interpretation"], "opaque")
+            self.assertIsNone(report["suffix"]["coverage_complete"])
             self.assertEqual((out / "roundtrip/message.dat").read_bytes(), original)
             (out / 'empty-pack').mkdir()
             result = pack(out, out / "empty-pack")
@@ -183,6 +213,31 @@ class KaguyaWorkflowTests(unittest.TestCase):
                 pack(out, out / "packed")
             with self.assertRaises(FileExistsError):
                 extract(root, out)
+
+
+    def test_report_classifies_stale_suffix_without_changing_the_manifest(self):
+        """The report answers the coverage question; the manifest wording stays
+        as it was so workspaces extracted earlier still pack."""
+        header = kaguya.MAGIC + b"\x01\xff"
+        old = kaguya.write_message_dat(kaguya.Document(
+            header, ("名前",), (), tuple(kaguya.Message(f"旧い本文{i}\n") for i in range(400)),
+            tuple(kaguya.Group(0, (i,)) for i in range(400))))
+        new = kaguya.write_message_dat(replace(document(), trailer=b""))
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            (root / "message.dat").write_bytes(new + old[len(new):])
+            (root / "out").mkdir()
+            suffix = extract(root, root / "out")["suffix"]
+            self.assertEqual(suffix["interpretation"], "stale-ver4-records")
+            self.assertTrue(suffix["coverage_complete"])
+            self.assertFalse(suffix["exported"])
+            self.assertEqual(suffix["stale_records"]["groups"], 400)
+            manifest = json.loads((root / "out/metadata/message.json").read_text(encoding="utf-8"))
+            self.assertEqual(manifest["settings"]["suffix"], "preserve-exactly; not-interpreted")
+            self.assertEqual((root / "out/roundtrip/message.dat").read_bytes(), new + old[len(new):])
+            (root / "none").mkdir()
+            (root / "message.dat").write_bytes(new)
+            self.assertEqual(extract(root, root / "none")["suffix"]["interpretation"], "none")
 
 
 class KaguyaJisWorkflowTests(unittest.TestCase):

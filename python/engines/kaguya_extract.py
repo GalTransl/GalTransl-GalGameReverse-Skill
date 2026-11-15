@@ -162,6 +162,33 @@ def inject(data: bytes, original_rows: list[dict], manifest: dict, translated_ro
     return result
 
 
+def _suffix_report(doc):
+    """Say what the bytes after the group table are, so nobody re-derives it.
+
+    The suffix is preserved byte-for-byte either way; classification only
+    answers whether it can hide live text. Leftover records of an earlier,
+    longer file cannot: every live index is validated against the declared
+    tables, which end before the suffix starts.
+    """
+    report = {"size": len(doc.trailer), "sha256": sha256(doc.trailer), "interpretation": "none",
+              "preserved_byte_identical": True, "exported": False}
+    if not doc.trailer:
+        return report
+    stale = kaguya.stale_records(doc.trailer, doc.header)
+    # Each stale run may start mid-record; allow that remainder, not more.
+    if stale["runs"] and stale["unexplained_bytes"] * 100 <= len(doc.trailer):
+        report.update(interpretation="stale-ver4-records", stale_records=stale, coverage_complete=True,
+                      note="Leftover records of an earlier, longer message.dat that was overwritten "
+                           "without truncation. They lie outside the declared tables and no live group "
+                           "or message index reaches them, so the exported rows are complete. Do not "
+                           "analyze, export or translate the suffix.")
+    else:
+        report.update(interpretation="opaque", stale_records=stale, coverage_complete=None,
+                      note="Not recognized as leftover ver4 records. Preserved byte-for-byte; whether "
+                           "it holds displayed text is unverified.")
+    return report
+
+
 def extract(game: Path, destination: Path, *, verify_edits: bool = False) -> dict:
     validate_new_tree_destination(destination)
     data = _read(game / "message.dat")
@@ -177,7 +204,7 @@ def extract(game: Path, destination: Path, *, verify_edits: bool = False) -> dic
               "json_rows": len(rows), "json": "message.json" if rows else None,
               "unused_message_indexes": [i for i in range(len(doc.messages)) if i not in refs],
               "shared_message_slots": sum(n > 1 for n in refs.values()),
-              "suffix": {"size": len(doc.trailer), "sha256": sha256(doc.trailer), "interpretation": "opaque"},
+              "suffix": _suffix_report(doc),
               "source_files": {"message.dat": sha256(data)}, "message_roundtrip_byte_identical": True,
               "runtime_verified": False, "alternate_message_files": []}
     outputs = [("original/message.dat", data), ("roundtrip/message.dat", rebuilt)]

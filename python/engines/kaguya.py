@@ -91,6 +91,24 @@ def _key(header):
     return header[0x14] if header[0x13] else 0
 
 
+def _message_block(r, key):
+    """One ``i32 size + xor(i32 text size + text + u8 voices + voice names)`` block."""
+    body = _Reader(_xor(r.take(r.integer()), key))
+    raw = body.take(body.integer())
+    voices = []
+    for _ in range(body.integer("<B")):
+        name = bytearray()
+        while True:
+            unit = body.take(2)
+            if unit == b"\0\0":
+                break
+            name.extend(unit)
+        voices.append(bytes(name).decode("utf-16-le", "strict"))
+    if body.pos != len(body.data):
+        raise ValueError("unconsumed message bytes")
+    return raw, tuple(voices)
+
+
 def read_message_dat(data: bytes, *, allow_trailer: bool = False,
                      max_bytes: int = 64 << 20) -> Document:
     """Validate ver4 tables; opt in to retaining an uninterpreted suffix.
@@ -115,22 +133,9 @@ def read_message_dat(data: bytes, *, allow_trailer: bool = False,
     messages = []
     raw_messages = []
     for _ in range(r.count(9)):
-        body = _Reader(_xor(r.take(r.integer()), key))
-        raw = body.take(body.integer())
+        raw, voices = _message_block(r, key)
         raw_messages.append(raw)
-        text = _decode(raw)
-        voices = []
-        for _ in range(body.integer("<B")):
-            raw = bytearray()
-            while True:
-                unit = body.take(2)
-                if unit == b"\0\0":
-                    break
-                raw.extend(unit)
-            voices.append(bytes(raw).decode("utf-16-le", "strict"))
-        if body.pos != len(body.data):
-            raise ValueError("unconsumed message bytes")
-        messages.append(Message(text, tuple(voices)))
+        messages.append(Message(_decode(raw), voices))
     groups = []
     for _ in range(r.count(5)):
         name = r.integer()
@@ -144,6 +149,59 @@ def read_message_dat(data: bytes, *, allow_trailer: bool = False,
         raise ValueError("unconsumed ver4 trailing bytes")
     return Document(header, names, choices, tuple(messages), tuple(groups), data[r.pos:],
                     raw_names, raw_choices, tuple(raw_messages))
+
+
+def _stale_record(r, key):
+    """Consume one stale message block or group entry; ValueError if neither fits."""
+    mark = r.pos
+    try:
+        _decode(_message_block(r, key)[0])
+        return "message_blocks"
+    except ValueError:
+        r.pos = mark
+    name = r.integer()
+    indexes = [r.integer() for _ in range(r.integer("<B"))]
+    # Bounded, non-empty groups only: zero padding must not count as records.
+    if not indexes or not -1 <= name < 1 << 16 or any(not 0 <= i < 1 << 24 for i in indexes):
+        raise ValueError("not a stale group")
+    return "groups"
+
+
+def stale_records(trailer: bytes, header: bytes) -> dict:
+    """Measure how much of a suffix is leftover ver4 records.
+
+    A message.dat rewritten in place without truncation keeps the tail of the
+    longer file it replaced: the end of one record, whole message blocks and/or
+    group entries, possibly from several earlier files in a row. Those bytes
+    lie outside every declared table, so no group or message index reaches
+    them. Records are only counted in runs of four (or up to EOF) so stray
+    bytes cannot pass as one; everything else is reported as unexplained.
+    """
+    key = _key(header)
+    r = _Reader(trailer)
+    result = {"message_blocks": 0, "groups": 0, "runs": 0, "unexplained_bytes": 0}
+    synced = False
+    while r.pos < len(trailer):
+        mark = r.pos
+        if synced:
+            try:
+                result[_stale_record(r, key)] += 1
+                continue
+            except ValueError:
+                r.pos, synced = mark, False
+        run = []
+        try:
+            while len(run) < 4 and r.pos < len(trailer):
+                run.append(_stale_record(r, key))
+        except ValueError:
+            r.pos = mark + 1
+            result["unexplained_bytes"] += 1
+            continue
+        for kind in run:
+            result[kind] += 1
+        result["runs"] += 1
+        synced = True
+    return result
 
 
 def write_message_dat(doc: Document, *, max_bytes: int = 64 << 20) -> bytes:
