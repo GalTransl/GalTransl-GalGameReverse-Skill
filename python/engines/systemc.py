@@ -22,6 +22,38 @@ KNOWN_OPCODES = frozenset({1, 2, 3, 4, 6, 7, 8, 9, 10, 11, 13, 14, 15, 18,
 LABEL = re.compile(r"^\*\*\*(SC|SS)_([A-Z])(\d+)_(\d+)(?:_|\s|$)")
 NAME = re.compile(r"^(.+?)　（([０-９]+)）(.*)$")
 CONTROL = re.compile(r"\$[A-Za-z]+|&[A-Za-z]+;")
+# Inline furigana: reading in the tag, base text between the tags, one line.
+RUBY = re.compile(r"\[ruby:([^\[\]\n]+)\]([^\[\]\n]+)\[/ruby\]")
+RUBY_POLICY = "[ruby:reading]base[/ruby] pairs may be kept (reading and base are translatable) or removed whole; never added"
+
+
+def _unknown_syntax(line):
+    """Fail closed on control syntax outside known tokens and well-formed ruby pairs."""
+    plain = CONTROL.sub("", RUBY.sub(lambda m: m[1] + m[2], line))
+    return any(c in plain for c in "$&\\<>[]{}@#%^|~")
+
+
+def _ruby_pairs(message):
+    return len(RUBY.findall(message))
+
+
+def character_table(lines):
+    """Names by SPT character ID: the 0-based physical line of charaid.tbl.
+
+    Blank and comment lines occupy an ID too (None here). Dropping them shifts
+    every later speaker, which only stays invisible when the table happens to
+    start with exactly one comment line and has no gaps.
+    """
+    table = []
+    for line in lines:
+        if not line or line.startswith("//"):
+            table.append(None)
+            continue
+        m = re.fullmatch(r"(.+) ([01])", line)
+        if not m:
+            raise FormatError("unsupported SystemC character table")
+        table.append(m[1])
+    return table
 
 
 def systemc_name_header(line):
@@ -91,15 +123,7 @@ def _parse(act_name, members, encoding="cp932"):
             raise FormatError(f"missing SystemC source: {name}")
     raw, lines = _lines(members[act_name], act_name, encoding)
     sources = {name: members[name] for name in (act_name, dat_name, "charaid.tbl")}
-    char_lines = _lines(members["charaid.tbl"], "charaid.tbl", encoding)[1]
-    characters = []
-    for line in char_lines:
-        if not line or line.startswith("//"):
-            continue
-        m = re.fullmatch(r"(.+) ([01])", line)
-        if not m:
-            raise FormatError("unsupported SystemC character table")
-        characters.append(m[1])
+    characters = character_table(_lines(members["charaid.tbl"], "charaid.tbl", encoding)[1])
     rows, locators, sections, used = [], [], [], set()
     labels = [i for i, line in enumerate(lines) if line.startswith("***")]
     dat_records = _records(members[dat_name], 156)
@@ -128,8 +152,12 @@ def _parse(act_name, members, encoding="cp932"):
                 raise FormatError(f"unknown SystemC opcode {opcode} in {spt_name}")
             if opcode != 1:
                 continue
-            if (reserved, category, arg) != (-1, 7, 0) or not 0 < char_id <= len(characters):
-                raise FormatError("unsupported SystemC text instruction shape")
+            where = f"{spt_name} record {ri}, {act_name}:{first + 1}"
+            if (reserved, category, arg) != (-1, 7, 0):
+                raise FormatError(f"unsupported SystemC text instruction shape: {where}")
+            if not 0 <= char_id < len(characters) or characters[char_id] is None:
+                raise FormatError(f"SystemC character ID {char_id} is not a charaid.tbl entry "
+                                  f"(0-based physical line): {where}")
             if count < 1 or first < last_stop or first + count > end:
                 raise FormatError("SystemC text range outside section or out of order")
             last_stop = first + count
@@ -147,8 +175,9 @@ def _parse(act_name, members, encoding="cp932"):
                 row["name"] = header[1]
                 part = part[1:]
                 message_line += 1
-            elif voice != 0 or characters[char_id - 1] != "ナレーション":
-                raise FormatError("SystemC non-narrator text lacks a name header")
+            elif voice != 0 or characters[char_id] != "ナレーション":
+                raise FormatError(f"SystemC non-narrator text lacks a name header: {where}, "
+                                  f"character {char_id} {characters[char_id]!r}, voice {voice}")
             message_lines = len(part)
             # Empty trailing slots preserve SPT counts without display text.
             # Internal/whitespace-only lines are still not accepted as prose.
@@ -161,9 +190,8 @@ def _parse(act_name, members, encoding="cp932"):
                 if any(ord(c) < 32 for c in line):
                     raise FormatError("unsupported SystemC control character")
                 # Fail closed on unknown control syntax, including incomplete tokens.
-                stripped = CONTROL.sub("", line)
-                if any(c in stripped for c in "$&\\<>[]{}@#%^|~"):
-                    raise FormatError("unknown SystemC text control syntax")
+                if _unknown_syntax(line):
+                    raise FormatError(f"unknown SystemC text control syntax: {where}: {line!r}")
             tokens = CONTROL.findall(message)
             if set(tokens) - {"$S", "$L", "&heart;"}:
                 raise FormatError("unknown SystemC text control token")
@@ -187,12 +215,15 @@ def export_act(act_name, members, *, encoding="cp932"):
     rows, locators, sources, sections, _ = _parse(act_name, members, encoding)
     tokens = [list(dict.fromkeys(CONTROL.findall(row["message"])))
               for row in rows]
+    settings = {"act": act_name, "sections": sections, "line_endings": "CRLF",
+                "name": "context-only; preserve header and compiled character/voice IDs",
+                "newline_policy": "pad fewer message lines with empty trailing slots; preserve DAT/SPT and font-control groups"}
+    # Only present when used, so workspaces exported before ruby support still match.
+    if any(_ruby_pairs(row["message"]) for row in rows):
+        settings["ruby"] = RUBY_POLICY
     manifest = make_manifest(engine="systemc", variant=VARIANT,
         reference="python/engines/systemc.py", sources=sources, rows=rows, locators=locators,
-        encoding=encoding, protected_tokens=tokens,
-        settings={"act": act_name, "sections": sections, "line_endings": "CRLF",
-                  "name": "context-only; preserve header and compiled character/voice IDs",
-                  "newline_policy": "pad fewer message lines with empty trailing slots; preserve DAT/SPT and font-control groups"})
+        encoding=encoding, protected_tokens=tokens, settings=settings)
     return rows, manifest
 
 
@@ -224,6 +255,8 @@ def inject_act(act_name, members, original_rows, manifest, translated_rows, *, t
             raise FormatError("SystemC translation exceeds original message line slots")
         if CONTROL.findall(before["message"]) != CONTROL.findall(after["message"]):
             raise FormatError("SystemC ordered control tokens changed")
+        if _ruby_pairs(after["message"]) > _ruby_pairs(before["message"]):
+            raise FormatError("translation adds SystemC ruby annotations")
         # Font controls apply to the whole physical line, not a character span.
         # Unstyled lines may be added/removed, but separate styled lines must
         # not be merged into a line whose last style overrides an earlier one.
@@ -236,7 +269,7 @@ def inject_act(act_name, members, original_rows, manifest, translated_rows, *, t
                 raise FormatError("blank line or new SystemC control character")
             if NAME.match(new) or new.startswith(("//", "***")) or re.match(r"[A-Za-z]+_", new):
                 raise FormatError("translation introduces SystemC command/name syntax")
-            if any(c in CONTROL.sub("", new) for c in "$&\\<>[]{}@#%^|~"):
+            if _unknown_syntax(new):
                 raise FormatError("translation introduces unknown SystemC text controls")
             unchanged = i < len(old_lines) and old_lines[i] == new
             encoded = raw[rec["locator"]["message_line"] + i] if unchanged else (

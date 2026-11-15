@@ -12,7 +12,7 @@ def fixture():
     act=' ***SC_A0000_00\r\n花子　（０００１）[17]\r\n「こんにちは」\r\n次の行\r\n'
     dat=bytes(80)+struct.pack('<19i',1,4,0,0,0,*([0]*14))
     return {'ACT_A_JA.TXD':text,'ACT_A_JA.PTR':ptr,'ACT_A.txt':act.encode('utf-8'),
-            'ACT_A.DAT':struct.pack('<I',1)+dat,'charaid.tbl':'花子 1\r\nナレーション 0\r\n'.encode('utf-8'),
+            'ACT_A.DAT':struct.pack('<I',1)+dat,'charaid.tbl':'//キャラID\r\n花子 1\r\nナレーション 0\r\n'.encode('utf-8'),
             'A0000_00.spt':struct.pack('<I8i',1,1,1,1,-1,1,3,7,17)}
 
 
@@ -22,7 +22,7 @@ def styled_fixture(first='$S一行', second='$L二行'):
     act=(' ***SC_A0000_00\r\n花子　（０００１）[17]\r\n'+first+'\r\n'+second+'\r\n').encode('utf-8')
     dat=bytes(80)+struct.pack('<19i',1,4,0,0,0,*([0]*14))
     return {'ACT_A_JA.TXD':text,'ACT_A_JA.PTR':ptr,'ACT_A.txt':act,
-            'ACT_A.DAT':struct.pack('<I',1)+dat,'charaid.tbl':'花子 1\r\nナレーション 0\r\n'.encode('utf-8'),
+            'ACT_A.DAT':struct.pack('<I',1)+dat,'charaid.tbl':'//キャラID\r\n花子 1\r\nナレーション 0\r\n'.encode('utf-8'),
             'A0000_00.spt':struct.pack('<I8i',1,1,1,1,-1,1,3,7,17)}
 
 

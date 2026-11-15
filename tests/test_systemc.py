@@ -255,6 +255,64 @@ class ScriptTests(unittest.TestCase):
         with self.assertRaises(FormatError):
             export_act("ACT_A.txt", members)
 
+    def test_character_id_is_physical_line_of_character_table(self):
+        """Blank/comment lines keep their ID slot; a table without a leading comment starts at ID 0.
+
+        Regression: IDs were resolved 1-based against the table with blank and
+        comment lines dropped, which only agrees with the engine when the table
+        starts with exactly one comment and has no gaps.
+        """
+        members = fixture()
+        members["charaid.tbl"] = "仮名 1\r\n\r\n//区切り\r\nナレーション 0\r\n".encode("cp932")
+        spt = bytearray(members["A0000_00.spt"])
+        struct.pack_into("<i", spt, 4 + 32 + 4, 0)
+        struct.pack_into("<i", spt, 4 + 64 + 4, 3)
+        members["A0000_00.spt"] = bytes(spt)
+        rows, meta = export_act("ACT_A.txt", members)
+        self.assertEqual(rows, export_act("ACT_A.txt", fixture())[0])
+        self.assertEqual([r["locator"]["character_id"] for r in meta["records"]], [0, 3])
+        self.assertEqual(inject_act("ACT_A.txt", members, rows, meta, rows), members["ACT_A.txt"])
+        # Narration must point at the narrator entry itself, not a neighbour or a placeholder line.
+        for narrator_id, expected in ((0, "name header"), (1, "charaid.tbl entry"), (4, "charaid.tbl entry")):
+            bad = bytearray(spt)
+            struct.pack_into("<i", bad, 4 + 64 + 4, narrator_id)
+            with self.subTest(narrator_id=narrator_id), self.assertRaisesRegex(FormatError, expected) as caught:
+                export_act("ACT_A.txt", dict(members, **{"A0000_00.spt": bytes(bad)}))
+            self.assertIn("A0000_00.spt record 2, ACT_A.txt:8", str(caught.exception))
+
+    def test_ruby_pairs_can_be_kept_retranslated_or_removed_but_not_added(self):
+        members = fixture()
+        members["ACT_A.txt"] = members["ACT_A.txt"].replace(
+            "地の文。".encode("cp932"), "[ruby:ちゅうちょ]躊躇[/ruby]なく進む。".encode("cp932"))
+        rows, meta = export_act("ACT_A.txt", members)
+        self.assertEqual(rows[1], {"message": "[ruby:ちゅうちょ]躊躇[/ruby]なく進む。"})
+        self.assertEqual(meta["records"][1]["message_tokens"], [])
+        self.assertIn("ruby", meta["settings"])
+        self.assertNotIn("ruby", export_act("ACT_A.txt", fixture())[1]["settings"])
+        self.assertEqual(inject_act("ACT_A.txt", members, rows, meta, rows), members["ACT_A.txt"])
+        for message in ("[ruby:よみ]別語[/ruby]で進む。", "迷わず進む。"):
+            changed = deepcopy(rows)
+            changed[1]["message"] = message
+            out = inject_act("ACT_A.txt", members, rows, meta, changed)
+            with self.subTest(message=message):
+                self.assertEqual(out.split(b"\r\n")[7], message.encode("cp932"))
+                self.assertEqual(export_act("ACT_A.txt", dict(members, **{"ACT_A.txt": out}))[0], changed)
+        for bad in ("[ruby:よみ]別語で進む。", "別語[/ruby]で進む。", "[ruby:]別語[/ruby]", "[ruby:よ$Sみ]別語[/ruby]",
+                    "[ruby:外[ruby:内]語[/ruby]]語[/ruby]", "[ruby:あ]一[/ruby][ruby:い]二[/ruby]", "[rb:よみ]別語[/rb]"):
+            changed = deepcopy(rows)
+            changed[1]["message"] = bad
+            with self.subTest(bad=bad), self.assertRaises(FormatError):
+                inject_act("ACT_A.txt", members, rows, meta, changed)
+        changed = deepcopy(rows)
+        changed[0]["message"] = "「[ruby:かくにん]確認[/ruby]$Sです。\n続き$Lです」"
+        with self.assertRaisesRegex(FormatError, "adds SystemC ruby"):
+            inject_act("ACT_A.txt", members, rows, meta, changed)
+        for source in ("[ruby:よみ]躊躇", "[ruby:よみ]躊", "躇[/ruby]"):
+            lines = fixture()["ACT_A.txt"].decode("cp932").split("\r\n")
+            lines[7] = source
+            with self.subTest(source=source), self.assertRaisesRegex(FormatError, "ACT_A.txt:8"):
+                export_act("ACT_A.txt", dict(members, **{"ACT_A.txt": "\r\n".join(lines).encode("cp932")}))
+
     def test_selection_and_no_dialogue(self):
         members = fixture()
         members["ACT_A.txt"] = members["ACT_A.txt"].replace(b"***SC_", b"***SS_")

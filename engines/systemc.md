@@ -29,6 +29,7 @@ CP932 ACT/DAT/SPT 工作区通过 [systemc_extract.pack](../python/engines/syste
 
 - 方言标识 `act-dat156-spt32-cp932` 描述 ACT 文本编码、DAT/SPT 记录宽度与行引用布局。输入需要完整 ACT、DAT、SPT 和 `charaid.tbl`；不适用于带 TXD/PTR 文本 ID 的 UTF-8 方言 `utf8-txd-ptr12`。
 - ACT 是严格 CP932、CRLF 文本。DAT 为 `u32 count + count × 156`，每条第 80、84 字节分别保存场景起始行、结束边界。SPT 为 `u32 count + count × 32`；opcode 1 的第 16、20 字节是 ACT 起始行与行数，范围包含可选姓名头。
+- `charaid.tbl` 每行是 `姓名 0|1`。opcode 1 的人物 ID 是该表的 **0 基物理行号**：空行和 `//` 注释行同样占号，且不能被文本指令引用；表首有无注释行都按此计数，不能先滤掉空行/注释再编号。无姓名头的文本须语音号为 0 且人物 ID 指向 `ナレーション` 条目；姓名头里的显示名可以与表内姓名不同，只作上下文。相关报错附带 `<SPT> record <序号>, <ACT>:<行号>`。
 - **译文允许比原文少换行。** `inject_act` 将正文写入原始行槽，末尾自动补齐空行，保留 ACT 总行数和后续行号，因此无需改写 DAT/SPT。译文不得超过 SPT 原始正文行槽数量；不用样本的固定显示行数作为通用上限。
 - 提取时仅去掉正文范围末尾的空槽，JSON 不含补齐的换行；locator 的 `message_lines` 仍记录完整物理行槽数量。再次回注或原文往返可恢复相同布局，不能按 JSON 的可见行数推断原始容量。
 - 人工示例：原文占三行，译文为 `第一行\n第二行`，ACT 写入两行译文加一个空行；JSON 回读仍为两行译文，SPT 的起始行与行数不变。
@@ -37,6 +38,7 @@ CP932 ACT/DAT/SPT 工作区通过 [systemc_extract.pack](../python/engines/syste
 ### 控制码与空槽边界
 
 - `$S/$L` 按整条物理行选择字号。保持全文控制码顺序和数量，并保留非空字号控制分组：可合并普通文本行或移动分组所在的行号，但不能将不同原始字号行的控制码合并到同一行，或拆散同一行的分组。`&heart;` 保持全文顺序/数量。
+- `[ruby:读音]基字[/ruby]` 是行内注音：读音与基字均非空、不含方括号，起止标签在同一物理行内成对出现且不嵌套。译文可以保留整对（读音和基字都可翻译），也可以整对删除改成普通文字；不能新增注音对，也不能只留半边标签。含注音的脚本在 metadata 的 `settings.ruby` 记录这条规则，注音标签不进入 `message_tokens`。其他方括号写法仍按未知控制语法拒绝；译文注音的实际显示需游戏内验证。
 - 自动补齐只生成正文末尾的空行。继续拒绝用户译文中的空行、仅空白字符的行、完全空正文、未知控制语法、命令/姓名头注入、超长行及有损编码；不把段落间的空白或未知数据当成补齐槽。
 - CP932 输出时中文使用公共 JIS 替换，GBK 输出时直接按 GBK 编码；原始行布局保持不变，但空槽的运行时排版、中文字体覆盖和实际加载仍需游戏内验证。
 
@@ -112,7 +114,7 @@ python -m python.engines.systemc_extract pack "<工作区>" --output-encoding gb
 - TXD 没有分行/记录分隔符；只按 PTR 的 UTF-8 **字节**范围读取。每条内部以第一个 ASCII 逗号分开 `name,message`，姓名可以为空；正文中的后续逗号属于正文。
 - 字面量 `\n` 是正文换行，JSON 导出为真实换行，回填反向恢复；不能对整个 TXD 用 CSV 或逗号切分。PTR 必须覆盖整个 TXD，拒绝重复 ID、重叠、空隙、越界和残留字节。
 - ACT 源脚本通过行末 `[text_id]` 标记文本；DAT 是 `u32 count + count × 156`，第 80 字节起有场景/行范围；SPT 是 `u32 count + count × 32`。
-- SPT opcode=1 的八个 i32 是 `opcode, character_id, voice, -1, ACT_first_line, ACT_line_count, 7, text_id`。本方言最后一项为 TXD ID，**不是旧方言的固定 0**。
+- SPT opcode=1 的八个 i32 是 `opcode, character_id, voice, -1, ACT_first_line, ACT_line_count, 7, text_id`。本方言最后一项为 TXD ID，**不是旧方言的固定 0**。`character_id` 与 CP932 方言相同，是 `charaid.tbl` 的 0 基物理行号，空行和注释行占号。
 - 导出先核对 DAT 场景身份、SPT ID、ACT 行尾 ID、姓名/语音及 TXD 原文；不把 ACT 的命令、备注或整表任意字符串当对白。
 - 场景标签允许行首 ASCII 空格，按 DAT 指向的行识别。ACT 与 TXD 的缩进差异记入报告，导出以实际 TXD 为准，不统一清理其他空格。
 - 无 DAT/SPT 调用的文本条目保持原样并报告为未引用，不补造 JSON。

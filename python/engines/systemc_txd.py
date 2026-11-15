@@ -60,7 +60,8 @@ def export_table(stem,members):
     lines=sources[act+'.txt'].decode('utf-8').split('\r\n')
     if any('\r' in line or '\n' in line for line in lines):raise FormatError('mixed ACT line endings')
     charlines=sources['charaid.tbl'].decode('utf-8').splitlines()
-    chars=[line.rsplit(' ',1)[0] for line in charlines if line and not line.startswith('//')]
+    # SPT character IDs are 0-based physical lines; blank/comment lines keep their slot.
+    chars=[None if not line or line.startswith('//') else line.rsplit(' ',1)[0] for line in charlines]
     labels=[i for i,line in enumerate(lines) if line.lstrip(' \t').startswith('***')]
     dat=records(sources[act+'.DAT'],156)
     if len(labels)!=len(dat):raise FormatError('ACT/DAT section count mismatch')
@@ -79,7 +80,7 @@ def export_table(stem,members):
             op,char,voice,res,first,count,category,identity=struct.unpack('<8i',raw)
             if op not in OPCODES:raise FormatError(f'unknown SPT opcode {op}')
             if op!=1:continue
-            if res!=-1 or category!=7 or not 0<char<=len(chars) or count<1 or first<start or first+count>end:
+            if res!=-1 or category!=7 or not 0<=char<len(chars) or chars[char] is None or count<1 or first<start or first+count>end:
                 raise FormatError('invalid text instruction range/shape')
             if identity not in by_id or identity in refs:raise FormatError('missing or multiply referenced text ID')
             position,row=by_id[identity];part=lines[first:first+count]
@@ -91,7 +92,7 @@ def export_table(stem,members):
             if header:
                 if int(header[2])!=voice:raise FormatError('ACT voice identity mismatch')
                 expected['name']=header[1];part=part[1:]
-            elif voice or chars[char-1]!='ナレーション':raise FormatError('missing speaker header')
+            elif voice or chars[char]!='ナレーション':raise FormatError('missing speaker header')
             expected['message']='\n'.join(part)
             if expected!=row:
                 # Source text may have a leading ideographic indent omitted
