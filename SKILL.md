@@ -97,6 +97,17 @@ JSON 中姓名在正文前；偏移、原字节和控制码映射放入 metadata
 
 JIS 交付默认将随包 [CialloHook x86/x64 version.dll](assets/ciallohook/README.md) 与配置（需要时含强制 932 的 LE/LEP 依赖）一并写入新结果目录，无需另问复制许可；[UIF x86 winmm.dll](assets/uif/README.md) 只作 CialloHook 无法加载时的兜底。两者读取同一 `uif_config.json`，只选其一；位数以游戏 EXE 的 PE Machine 为准。最终说明配置路径及用法：将匹配位数的 DLL、其配置、`uif_config.json` 及 LE/LEP 依赖放到实际游戏 EXE 目录，强制 932 时转告转区重启风险，或选用同批映射对应的专用替换字体。普通日文/繁体字体不能代替它；已有 DLL/配置须先检查合并。交付结果不等于已授权安装或验证显示。
 
+## 游戏无法启动或乱码时转区
+
+用户反馈游戏打不开、闪退、黑屏，或原版/补丁版在非日文系统上乱码时，先按[启动与区域排查](guides/startup-and-locale.md)排除缺运行库、路径、补丁本身等因素。
+
+**先查路径。** 游戏路径（含 Windows 用户名所在的存档目录）有中文、全角符号、emoji 等非 ASCII 字符时，用 A 接口或固定码页处理路径的老游戏常会找不到文件、报错或闪退；转区到 932 后，CP932 表示不了的字符（如简体中文）同样会出错。路径含这类字符时，协助用户把整个游戏目录复制到纯英文路径（如 `D:\Games\Title`）再测试；能运行就说明是路径问题，建议长期放在英文路径。存档目录取决于用户名时如实告知，不擅自改系统或用户目录。
+
+怀疑区域/代码页时（存档目录名乱码、原版要靠 Locale Emulator 才正常、`jis_workflow codepage` 判为 `acp-following`/`mixed`），可用随包 CialloHook 的 `[LocaleEmulator]` 让游戏以日文区域（ACP 932）重启，用户无需另装 LE，x86/x64 都可用：
+
+- 在新结果目录放入与 EXE 位数一致的 `version.dll`（`python -m python.common.jis_workflow arch "game.exe"` 判断）、只含 `[LoadMode] Mode = proxy` 与 `[LocaleEmulator]` 段的 `version.ini`（取值照抄 [CialloHook 说明](assets/ciallohook/README.md#强制-932转区重启)），以及该位数的 LE/LEP 依赖 DLL。JIS 回注已由 `prepare --force-cp932` 自动带上，不重复制作。
+- 由用户放到实际游戏 EXE 目录后启动；已有同名 DLL/配置先检查合并。转告首次启动会闪一下再重开，以及启动器/DRM、安全软件拦截、中文路径下读写失败（先换纯英文路径再测）等风险；无效或出问题时把 `[LocaleEmulator] Enable` 改为 `false` 或移除这些文件。转区只是候选手段，不保证解决启动问题。
+
 ## 通用指南与资料
 
 - [引擎识别与档案安全](guides/detection.md)
