@@ -10,6 +10,7 @@ import sys
 from ..archives.systemc import read_fpk_index_stream, read_fpk_member, unpack_fpk, rebuild_fpk
 from ..common.binary import FormatError
 from ..common.contract import dump_rows, load_json, sha256
+from ..common.handoff import STATE_FILE, handoff
 from ..common.jis_workflow import add_hook_arguments, hook_artifacts, preflight_translations
 from ..common.safety import write_new_tree, validate_new_tree_destination
 from . import systemc_codepage as codepage
@@ -136,7 +137,7 @@ def extract(game, destination, *, verify_edits=False):
     index, members = unpack_fpk(raw)
     outputs = [("original/data.fpk", raw)]
     outputs.extend((f"original/members/{n}", data) for n, data in members.items())
-    rewritten, edited, used_spt = dict(members), dict(members), set()
+    rewritten, edited, used_spt, manifests = dict(members), dict(members), set(), []
     report = {"schema": "systemc-workspace/1", "variant": VARIANT,
               "source": {"path": "data.fpk", "size": len(raw), "sha256": sha256(raw)},
               "members": len(members), "decoded_bytes": sum(map(len, members.values())),
@@ -159,6 +160,7 @@ def extract(game, destination, *, verify_edits=False):
         print(f"WARNING: {warning}", file=sys.stderr, flush=True)
     for name in _acts(members):
         rows, manifest = export_act(name, members)
+        manifests.append(manifest)
         rebuilt = inject_act(name, members, rows, manifest, rows)
         if rebuilt != members[name]:
             raise FormatError(f"SystemC original-text roundtrip changed {name}")
@@ -207,7 +209,25 @@ def extract(game, destination, *, verify_edits=False):
             "runtime_verified": False}
     if _read(game / "data.fpk") != raw:
         raise FormatError("SystemC source archive changed during extraction")
-    outputs.append(("reports/extraction.json", _json(report)))
+    exported = [s["outputs"]["json"] for s in report["scripts"] if s["outputs"]["json"]]
+    notes = ["每条正文的行数不得超过原文，可以更少",
+             "保持 $S/$L 字号控制码和 &heart; 等符号的顺序与数量",
+             "姓名仅作上下文，不回写"]
+    if any(m.get("settings", {}).get("ruby") for m in manifests):
+        notes.append("[ruby:读音]基字[/ruby] 可整对保留或整对删除，不能新增")
+    empty = len(report["scripts"]) - len(exported)
+    if empty:
+        notes.append(f"{empty} 个脚本没有对白，未生成 JSON")
+    if report["overridden_script_members"]:
+        notes.append("同目录其他 FPK 含内容不同的同名剧本，实际生效的剧本可能不是 data.fpk，见 reports/extraction.json 的 warnings")
+    report["delivery"], state = handoff(
+        workspace=destination, engine="SystemC（FPK 内 CP932 ACT 剧本）", json_files=report["json_files"],
+        rows=report["json_rows"], notes=notes, verified="全部 ACT 与整包 data.fpk 经 writer 重建后字节一致",
+        edit_checked=verify_edits, first_json=exported[0] if exported else None,
+        first_json_basis="按名称排序的第一个剧本，未确认是否为开场",
+        command="extract --verify-edits" if verify_edits else "extract",
+        open_items="运行时解码码页未判定，回填前用 codepage 探测决定 JIS 或 GBK 路线")
+    outputs.extend([("reports/extraction.json", _json(report)), (STATE_FILE, state)])
     write_new_tree(destination, outputs)
     (destination / "gt_output").mkdir()
     return report

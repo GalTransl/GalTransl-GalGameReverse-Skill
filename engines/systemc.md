@@ -52,6 +52,11 @@ CP932 ACT/DAT/SPT 工作区通过 [systemc_extract.pack](../python/engines/syste
 
 ```text
 python -m python.engines.systemc_extract extract "<游戏目录>" --output "<新输出目录>" --verify-edits
+```
+
+提取只需这一条：它已完成原文往返、试编辑回写和整包重封包比对，并在输出的 `delivery` 与 `reports/translation-state.md` 中给出交付表格的内容。下面两条属于回填，`gt_output` 中有译文后才运行：
+
+```text
 python -m python.engines.systemc_extract pack "<新输出目录>" --jis-preflight
 python -m python.engines.systemc_extract pack "<新输出目录>" --output "<新输出目录>/rebuilt/translated-01"
 ```
@@ -140,7 +145,7 @@ python -m python.engines.systemc_txd_extract extract "<游戏目录>" --output "
 - `original/data.fpk` 与 `original/members/`：原包、全部解码成员，均为回填基准；`metadata/`：配套来源和文本 ID/场景绑定。
 - `rebuilt/roundtrip/data.fpk`：文本表经过 parser/writer 后重新封包的原文往返结果。
 - `rebuilt/smoke-test/data.fpk`：可选的中文变长测试包，须重新解包并确认只有目标 TXD/PTR 变化，不能当作正式译文补丁。
-- `reports/extraction.json`：源哈希、表状态、未引用 ID、原文缩进差异、参考包比较及测试结果。
+- `reports/extraction.json`：源哈希、表状态、未引用 ID、原文缩进差异、参考包比较及测试结果；`delivery` 与 `reports/translation-state.md` 给出交付表格的内容，提取到此为止。
 
 译文按同名文件放回 `gt_output` 后告诉 agent，由 agent 回填到另一个新目录：
 

@@ -4,6 +4,7 @@ import argparse
 from pathlib import Path
 from ..archives.systemc import unpack_fpk,rebuild_fpk,read_fpk_index
 from ..common.contract import dump_rows,load_json,sha256
+from ..common.handoff import STATE_FILE,handoff
 from ..common.safety import write_new_tree, logical_path, validate_new_tree_destination
 from .systemc_extract import _read,_json,_verify_archive
 from .systemc_txd import VARIANT,export_table,inject_table
@@ -57,7 +58,16 @@ def extract(game,output,*,verify_edits=False,references=()):
         report['references'].append({'path':name,'sha256':sha256(data),'same_as_data_fpk':data==raw,
             'member_count':len(idx.entries),'text_table_members':[e.name for e in idx.entries if e.name.endswith(('.TXD','.PTR','.spt','.DAT'))]})
     if _read(game/'data.fpk')!=raw:raise ValueError('input changed during extraction')
-    files.append(('reports/extraction.json',_json(report)))
+    exported=[t['stem']+'.json' for t in report['tables'] if t['rows']]
+    notes=['每条正文的换行可以比原文少，不能新增','保持 $S/$L/$M 字号控制码和 &heart; 等符号的顺序与数量',
+           '姓名可翻译，不能含半角逗号']
+    if len(report['tables'])>len(exported):notes.append(f"{len(report['tables'])-len(exported)} 个文本表没有对白，未生成 JSON")
+    report['delivery'],state=handoff(
+        workspace=output,engine='SystemC（FPK 内 UTF-8 TXD/PTR 文本表）',json_files=len(exported),rows=report['rows'],
+        notes=notes,verified='全部 TXD/PTR 与整包 data.fpk 经 writer 重建后字节一致',edit_checked=verify_edits,
+        first_json=exported[0] if exported else None,first_json_basis='按名称排序的第一个文本表，未确认是否为开场',
+        command='extract --verify-edits' if verify_edits else 'extract')
+    files.extend([('reports/extraction.json',_json(report)),(STATE_FILE,state)])
     write_new_tree(output,files)
     return report
 

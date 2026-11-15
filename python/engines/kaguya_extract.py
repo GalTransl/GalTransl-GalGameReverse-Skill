@@ -15,6 +15,7 @@ import stat
 from ..archives import kaguya_link as link
 from ..common.binary import FormatError
 from ..common.contract import dump_rows, load_json, make_manifest, sha256, validate_translation
+from ..common.handoff import STATE_FILE, handoff
 from ..common.safety import write_new_tree, validate_new_tree_destination
 from . import kaguya
 
@@ -253,7 +254,16 @@ def extract(game: Path, destination: Path, *, verify_edits: bool = False) -> dic
     for name, digest in report["source_files"].items():
         if sha256(_read(game / name)) != digest:
             raise FormatError("game input changed during extraction")
-    outputs.append(("reports/extraction.json", _json(report)))
+    notes = ["每条正文的换行可以比原文少，不能新增", "全角 ％ 的数量保持不变；姓名为单独的 ％ 时不可改",
+             "同一组对白的姓名须一致", "对白在前、选项在后，按原顺序导出为一个文件"]
+    if report["suffix"]["interpretation"] == "opaque":
+        notes.append("文本表之后有未识别的数据，是否含显示文本未验证")
+    report["delivery"], state = handoff(
+        workspace=destination, engine="Kaguya（message.dat ver4 文本表）", json_files=1 if rows else 0,
+        rows=len(rows), notes=notes, verified="message.dat 经 writer 重建后字节一致", edit_checked=verify_edits,
+        first_json="message.json" if rows else None, first_json_basis="唯一的文本表",
+        command="extract --verify-edits" if verify_edits else "extract")
+    outputs.extend([("reports/extraction.json", _json(report)), (STATE_FILE, state)])
     write_new_tree(destination, outputs)
     (destination / "gt_output").mkdir()
     return report

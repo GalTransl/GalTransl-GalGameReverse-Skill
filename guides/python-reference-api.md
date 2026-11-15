@@ -15,6 +15,7 @@
 | [binary.py](../python/common/binary.py) | `Reader`, `checked_slice`, `bounded_zlib`, `Edit`, `apply_edits`, `OffsetMap`, `relocate_u32` | 引擎识别、opcode推断、完整重定位、校验/外壳重建 |
 | [contract.py](../python/common/contract.py) | `load_json`, `validate_rows`, `dump_rows`, `make_manifest`, `validate_translation` | 从脚本寻找对白、检测等长译文重排、全部控制语法/混合编码 |
 | [safety.py](../python/common/safety.py) | `Limits`, `logical_path`, `validate_names`, `validate_new_tree_destination`, `write_new_tree` | 约束调用前已经发生的内存分配、抵抗能并发替换可信目录的恶意进程 |
+| [handoff.py](../python/common/handoff.py) | `handoff`, `STATE_FILE`：提取结束时生成报告的 `delivery` 与已填好的 `reports/translation-state.md` | 测量事实本身（由提取器传入）、回填阶段的状态更新 |
 | [detect.py](../python/detect.py) | `detect_directory` / CLI；`candidates` 与 `candidate_stats` | 完整解析器、全格式识别、密钥匹配、自动选择writer |
 
 不强制让每个已独立化的叶子模块依赖公共层；这样单个算法也能阅读和试验。但写出前仍必须套用统一契约和安全规则，不能因叶子函数没有文件 IO 就跳过验证。

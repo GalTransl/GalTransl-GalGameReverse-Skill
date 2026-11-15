@@ -19,6 +19,11 @@
 
 ```text
 python -m python.engines.kaguya_extract extract /path/to/game --output /path/to/game/game_extract --verify-edits
+```
+
+提取只需这一条，输出的 `delivery` 与 `reports/translation-state.md` 已给出交付表格的内容。`gt_output` 中有译文后再回填：
+
+```text
 python -m python.engines.kaguya_extract pack /path/to/game/game_extract --output /path/to/game/game_extract/rebuilt
 ```
 
