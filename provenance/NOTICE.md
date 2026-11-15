@@ -43,7 +43,7 @@ GARbro 的根 MIT **不代表所有内嵌代码**。必须区分已经明确的�
 
 ### rizin 静态分析工具
 
-`assets/rizin/` 为 rizin 0.10.0 的 Windows x86/x64 精简版可执行程序，源码见 <https://github.com/xd2333/rizin>（提交 `47cc7c6e26`，基于上游 rizinorg/rizin），按 LGPL-3.0-only 分发并随包附上游 `COPYING`、`COPYING.LESSER` 及全部 SPDX 许可文本，构建参数见 [rizin 说明](../assets/rizin/README.md)。`python/common/rizin_probe.py` 只以子进程方式调用它做只读分析，不链接、不复制其源码，本项目代码许可不受影响。
+`assets/rizin/` 为 rizin 0.10.0 的 Windows x86/x64 精简版可执行程序，源码见 <https://github.com/xd2333/rizin>（提交 `47cc7c6e26`，基于上游 rizinorg/rizin），按 LGPL-3.0-only 分发并随包附上游 `COPYING`、`COPYING.LESSER` 及全部 SPDX 许可文本，构建参数见 [rizin 说明](../assets/rizin/README.md)。`assets/rizin/lib/rizin/plugins/core_pdd.dll` 为 [rizinorg/jsdec](https://github.com/rizinorg/jsdec)（提交 `4f17096fea`）编译的伪代码插件，按 BSD-3-Clause 分发，静态链接的 QuickJS-ng 按 MIT 分发，许可文本见 `assets/rizin/LICENSES/`。`python/common/rizin_probe.py` 只以子进程方式调用它做只读分析，不链接、不复制其源码，本项目代码许可不受影响。
 
 ### Entis NOA 与 ERISA-N
 

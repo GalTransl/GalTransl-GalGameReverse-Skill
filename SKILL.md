@@ -19,6 +19,11 @@ description: 识别 galgame/visual novel 引擎与资源格式，解包并提取
 3. 探测输出开头的 `next_steps` 已给出每个候选的引擎页路径和该页记载的提取命令，直接加载该页及必要指南；没有候选时按扩展名或魔数搜索 `engines/`；无需通读[引擎页目录](catalog/engines.md)。未识别格式用 [目录查询器](tools/query_catalog.py) 按 Tag、扩展名或魔数筛选，见[查询方法](guides/detection.md#搜索资料目录)，不要整份读取目录 JSON；`source_only` 仅表示来源注册状态，能力以随包实现与测试为准。
    **有提取命令就先运行它。** 引擎页开头的“快速路径”与 `next_steps` 给出同一条命令：填入实际路径直接执行，提取器自行校验格式、拒绝不认识的结构并做原文往返。运行前不通读 `python/` 实现源码，也不读 `engines/garbro/`、`catalog/` 下的研究资料；命令失败时再按报错读引擎页的对应章节，仍不够才读实现。研究资料只在格式没有随包实现时使用。
 4. 证据冲突或算法缺失时，保留诊断，继续有界分析，按[增补指南](guides/extending-engines.md)补齐实现与合成测试后重试。没有真实样本时只报告合成验证；移植保留许可，GPL 来源本身不是阻塞理由。
+5. **需要看 EXE 时优先用随包 rizin**（`assets/rizin/bin/rizin.exe`，Windows x86/x64）：查字符串、导入表、交叉引用、机器码和伪 C 代码都用它，不另装工具，先 `aaa` 再分析：
+   ```text
+   assets/rizin/bin/rizin.exe -N -q -e cfg.sandbox=true -e scr.color=0 -c "aaa; iz~关键字; axt @ <地址>; pdd @ <函数>" "游戏目录/game.exe"
+   ```
+   `iz` 搜字符串，`axt` 找引用，`pdf` 反编，`pdd` 输出 jsdec 伪 C 代码（便于读流程，常量与分支以 `pdf` 为准）。有壳 EXE 先说明情况。码页、补丁包规则、密钥等配方及完整命令见 [rizin 简易指南](guides/rizin.md)。
 
 ## 输出目录与 GalTransl 交接
 

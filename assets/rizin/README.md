@@ -10,7 +10,8 @@
 | 上游 | [rizinorg/rizin](https://github.com/rizinorg/rizin)，版本 0.10.0；精简改动之前的上游提交为 `4162458dc4fc61c6e78c90fd80cbc31e03641444` |
 | 精简内容 | `-Dwindows_only=true`：只保留 x86 架构、PE/COFF/PDB 格式与 Windows 调试器相关插件，去掉其他架构、非 Windows 格式、远程/归档 IO 插件和无关工具 |
 | 构建 | MSVC 19.44 x64，meson 1.12.1；`--buildtype=release -Dportable=true -Dwindows_only=true -Denable_tests=false -Denable_rz_test=false -Denable_benchmarks=false -Denable_doc=false -Duse_gpl=false` |
-| 压缩 | `bin/` 下全部 EXE/DLL 用 UPX 5.2.1 `--best --lzma` 压缩（约 11 MB → 3.4 MB），分析结果与未压缩版一致，每次调用多约 0.3 秒解压开销。若安全软件拦截，可用 `upx -d` 还原后同步更新 `SHA256SUMS` |
+| 伪代码插件 | [rizinorg/jsdec](https://github.com/rizinorg/jsdec) 提交 `4f17096feadf8088b36a996a6a8cf382f0597134`（静态链接 QuickJS-ng v0.8.0），提供 `pdd` 系列命令。针对上面同一份 rizin 构建：`meson setup -Dbuild_type=rizin -Drizin_plugdir=lib/rizin/plugins --buildtype=release`，MSVC 19.44 x64 |
+| 压缩 | `bin/` 下全部 EXE/DLL 及 `lib/rizin/plugins/core_pdd.dll` 用 UPX 5.2.1 `--best --lzma` 压缩（约 12.7 MB → 3.9 MB），分析结果与未压缩版一致，每次调用多约 0.3 秒解压开销。若安全软件拦截，可用 `upx -d` 还原后同步更新 `SHA256SUMS` |
 
 必须用 `-Dportable=true` 构建：否则安装前缀会写死在 DLL 中，换目录后找不到 `share/` 数据（类型库、调用约定、格式定义），`aaa` 的参数和导入函数签名会缺失。
 
@@ -18,8 +19,9 @@
 
 ```text
 bin/       rizin.exe、rz-bin.exe、rz-asm.exe 及 rz_*-0.10.dll（x64 进程，可分析 x86 与 x64 PE）
+lib/rizin/plugins/core_pdd.dll  jsdec 伪代码插件，rizin 启动时从可执行文件同级前缀自动加载（目录随包整体移动即可）
 share/     运行时数据，只保留 arch、flag、format、magic、opcodes、reg、syscall、types 中 Windows/x86 相关部分
-SHA256SUMS bin/ 下各文件的哈希，测试据此校验，替换二进制时同步更新
+SHA256SUMS bin/ 与 lib/ 下各文件的哈希，测试据此校验，替换二进制时同步更新
 LICENSES/  上游 COPYING、COPYING.LESSER 及源码树中引用的全部 SPDX 许可文本
 ```
 
@@ -27,4 +29,4 @@ LICENSES/  上游 COPYING、COPYING.LESSER 及源码树中引用的全部 SPDX �
 
 ## 许可
 
-rizin 整体按 LGPL-3.0-only 分发（`LICENSES/COPYING.LESSER` 与 `COPYING`），部分组件另有 `LICENSES/` 中列出的许可；构建关闭了 GPL 组件（`-Duse_gpl=false`）。本包只把它作为独立可执行程序调用，不链接进 Python 代码；对应源码见上方仓库与提交。替换为自行构建的同版本 rizin 时保持相同目录结构即可。
+rizin 整体按 LGPL-3.0-only 分发（`LICENSES/COPYING.LESSER` 与 `COPYING`），部分组件另有 `LICENSES/` 中列出的许可；构建关闭了 GPL 组件（`-Duse_gpl=false`）。jsdec 插件按 BSD-3-Clause（`LICENSES/jsdec-BSD-3-Clause.txt`）分发，其中静态链接的 QuickJS-ng 按 MIT（`LICENSES/QuickJS-ng-MIT.txt`）分发。本包只把它作为独立可执行程序调用，不链接进 Python 代码；对应源码见上方仓库与提交。替换为自行构建的同版本 rizin 时保持相同目录结构即可。

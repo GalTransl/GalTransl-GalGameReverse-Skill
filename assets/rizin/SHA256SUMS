@@ -27,3 +27,4 @@ d0a285ee9a61b940339d04674fd44972b58b85e2ac8223e97f03d2ae0658f50f  bin/rz_socket-
 5351d8f8584f3b0b9a8440a4c469c78314024f1f686d7bcf7dba2e0754714c3b  bin/rz_syscall-0.10.dll
 cbf79560716628760d1c6f5fbafa236d24a7b1c487af8fea58f88ed9f3b71a54  bin/rz_type-0.10.dll
 f3c9bf1d9fee880df1cf296775489f92ec715bbcd2f629db5fbce27799ad5fb6  bin/rz_util-0.10.dll
+13cf7aafc5f7fa71491420cd3983751c9e6047d3bbad323cc63ccb36aadf22a0  lib/rizin/plugins/core_pdd.dll

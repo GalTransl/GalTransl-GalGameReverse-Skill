@@ -33,6 +33,7 @@ assets/rizin/bin/rizin.exe -N -q -e cfg.sandbox=true -e scr.color=0 -c "iI; ii~M
 | `axt @ 地址` / `axtj` / `axtq` | 谁引用了该地址（导入、字符串、函数） |
 | `afl` / `afl~关键字` | 函数列表 |
 | `pdf @ 函数` / `pdfj` | 反汇编整个函数，跳转表会标注 `case` |
+| `pdd @ 函数` / `pdda` / `pddj` | jsdec 伪代码（类 C）/ 左侧附汇编 / JSON；需先 `aaa`。读控制流和调用关系快，但条件跳转可能残留为 `__asm ("jnz ...")`，常量与分支以 `pdf` 为准 |
 | `pd N @ 地址` / `pd -N @ 地址` | 向后 / 向前反汇编 N 条 |
 | `pdj` | 指令 JSON；立即数以 `disasm` 文本为准，`val` 字段对 `0xffffffff` 等值不可靠 |
 | `/z 文本` / `/x 十六进制` | 搜字符串 / 原始字节，命中地址可再接 `axt` |
