@@ -12,7 +12,7 @@
 
 ### 证据强度、展示上限与扫描中断
 
-- 每条证据带 `strength`：`probe`（魔数、包尾、内容或布局探测）> `filename`（特征文件名）> `extension`（扩展名）。`candidates[engine]` 按强度排序，同强度按发现顺序；`max_evidence` 默认 12（CLI `--max-evidence N`），只限制**展示**。每个候选中出现过的每种强度至少保留 1 条，因此上限小于强度种类数时展示条数可略超上限；为 0 时只给计数。
+- 每条证据带 `strength`：`probe`（魔数、包尾、内容或布局探测）> `filename`（特征文件名）> `extension`（扩展名）。`candidates[engine]` 按强度排序，同强度在合并模式下按代表文件名排序，未合并时按发现顺序；`max_evidence` 默认 12（CLI `--max-evidence N`），只限制**展示**。每个候选中出现过的每种强度至少保留 1 条，因此上限小于强度种类数时展示条数可略超上限；为 0 时只给计数。
 - `candidate_stats[engine]` 提供 `total_hits`、`shown_hits`、`matched_files`、`capped` 与 `by_strength`（各强度的命中数）。hit 是证据条数：同一文件可贡献多个 hit，不能把 `total_hits` 当文件数。
 - `evidence_capped` 表示有候选证据被展示上限裁剪。只显示 12 条不等于只发现 12 个成员/文件，更不证明覆盖全部脚本。
 - `truncated` 表示扫描中断，`truncated_reason` 列出原因：`max_files`、`max_depth`、`max_seconds`（CLI `--max-files`、`--max-depth`、`--max-seconds`）。统计只覆盖实际扫描范围，与展示裁剪不同，两者都不是解析成功率。
@@ -41,7 +41,7 @@
 - 文件头未命中任何内置规则时，用前 4 字节查 [formats.json](../catalog/formats.json)，命中写入 `catalog_hints`（标签最多 5 个、总数有上限，统计见 `catalog_hint_stats`）。常见通用头（PNG、Ogg、RIFF、MZ、ZIP、CAB 等）和小于 `0x10000` 的版本/计数字不参与。它只是资料线索：用 `tools/query_catalog.py --magic` 继续查来源，不代表存在对应引擎页或已支持。
 - CLI 固定以 UTF-8 输出 JSON，不受控制台代码页影响。
 - CLI 输出以 `next_steps` 开头：每个候选按最强证据排序，给出 `engine_page`（要读的引擎页）和 `extract_commands`（该页记载的提取命令，占位符照原样，没有工作区 CLI 的引擎不带此项）。候选仍只是线索；引擎页开头的“快速路径”列出同样的命令，直接运行即可，提取器会自行校验格式，失败时再读该页其余部分和实现。
-- 只有文件名不同的同类证据合并为一条，`files` 是文件数，`more_files` 列出另外几个文件名；没有内容的字段不输出。`--full` 恢复逐条列出并保留全部字段；`detect_directory()` 默认不合并，传 `merge_similar=True` 才合并。
+- 只有文件名不同的同类证据合并为一条，按已扫描到的相对路径字典序选择代表文件和其余示例，不依赖文件系统的枚举顺序；`files` 是文件数，`more_files` 列出另外几个文件名；没有内容的字段不输出。`--full` 恢复逐条列出并保留全部字段；`detect_directory()` 默认不合并，传 `merge_similar=True` 才合并。
 
 ```text
 python /path/to/GalTransl-GalGameReverse-Skill/python/detect.py /path/to/game --max-evidence 24

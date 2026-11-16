@@ -512,6 +512,20 @@ class DetectionAdditionsTests(unittest.TestCase):
             self.assertEqual(len(full["candidates"]["systemc"]), 12)
             self.assertIn("unity", full)
 
+    def test_merged_evidence_is_independent_of_discovery_order(self):
+        """Linux scandir order must not change the representative or capped filename list."""
+        from python.detect import _merge_hits
+        hits = [{"file": f"{number:02}.fpk", "kind": "weak-extension",
+                 "strength": "extension", "evidence": ".fpk"} for number in range(6)]
+        single = {"file": "SystemC.ini", "kind": "weak-layout",
+                  "strength": "filename", "evidence": "SystemC.ini"}
+        hits.append(single)
+        expected = [dict(hits[0], files=6, more_files=[f"{number:02}.fpk" for number in range(1, 5)]),
+                    single]
+        for order in (hits, hits[::-1], hits[3:] + hits[:3]):
+            with self.subTest(files=[hit["file"] for hit in order]):
+                self.assertEqual(_merge_hits(order), expected)
+
     def test_next_steps_omit_what_the_skill_does_not_document(self):
         from python.detect import next_steps
         stats = {"candidate_stats": {"nosuch": {"by_strength": {"extension": 1}, "matched_files": 3},

@@ -797,7 +797,8 @@ HOW_TO_PROCEED = ("Read the quick-path section at the top of engine_page, then r
 def _merge_hits(hits: list) -> list:
     """One entry per (kind, strength, evidence): dozens of same-extension files say one thing."""
     merged: dict[tuple, dict] = {}
-    for hit in hits:
+    # scandir order varies by filesystem; choose stable representatives before capping.
+    for hit in sorted(hits, key=lambda hit: hit["file"]):
         entry = merged.setdefault((hit["kind"], hit["strength"], hit["evidence"]), dict(hit, files=0, more_files=[]))
         entry["files"] += 1
         if 1 < entry["files"] <= MERGED_FILES_SHOWN + 1:
