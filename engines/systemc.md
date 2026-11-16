@@ -90,8 +90,18 @@ python -m python.engines.systemc_extract pack "<新输出目录>" --output "<新
 
 - `ACT_*.txt` 全文：正文、姓名头、`***` 场景标签、`//` 注释与命令行。标签注释会被编译进 DAT 的场景标题，注释也按严格规则转码，不保留 CP932。
 - `ACT_*.DAT` 每条记录前 80 字节的 NUL 结尾场景标题（运行时可见文本）；其余编译字段逐字节保留，标题须仍能放入该字段。
-- 其他非 ASCII、无 NUL、可严格按 CP932 解码的文本成员：`charaid.tbl`、提示文本、配置/资源表等。纯 ASCII 成员在两种码页下相同，不改。
+- 其他非 ASCII、无 NUL、可严格按 CP932 解码的文本成员：提示文本、配置/资源表等。`charaid.tbl` 是例外，按下面规则保留原始字节。
 - SPT、媒体及含 NUL 的二进制成员逐字节保留。非 ASCII 但既非二进制也不能严格按 CP932 解码的成员拒绝；只有确认运行时不经 ACP 解码时才用 `--gbk-keep-member <成员>` 保留，报告 `kept_cp932_members` 列出并说明理由。
+
+**保留 `charaid.tbl`**：GBK 路线只转码 ACT、DAT 可见标题及其他经确认按 ACP 解码的文本成员；`charaid.tbl` 默认逐字节保留原始 CP932，不要随其他文本成员整体转码。它不仅提供姓名，还通过物理行号承载 SPT 人物 ID；运行时可能对该表使用与剧本不同的读取路径。把它转为 GBK 可能导致旁白（无姓名头、`voice=0`、人物 ID 指向 `ナレーション`）的正文首行被显示为姓名，即使普通角色对白和 GBK 脚本读回都正常。其他 SystemC 游戏在该表保持 CP932 时可正常显示，也不能据此推断人物表应跟随 ACT 转码。
+
+当前 `systemc_extract pack --output-encoding gbk` 会整体转码 `charaid.tbl`，没有专用保留选项。生成 GBK 包后，须在隔离的新输出中用原始归档成员替换打包结果里的 `charaid.tbl`，再用真实 FPK reader 解包复核：仅 `charaid.tbl` 与 GBK pack 输出不同，且与原始成员字节完全相同；其他 GBK 文本仍按 ACP 936 解码。最终报告注明该成员采用 CP932、其余相关文本为 GBK。不要用 `--gbk-keep-member charaid.tbl` 代替此步骤；该选项仅适用于已确认不经 ACP 解码的成员。
+
+**旁白误入姓名栏的隔离诊断**：
+
+1. 在 metadata 中核对异常记录的 SPT `character_id`、`voice`、`header_line` 和 `message_line`；与相邻、有姓名头的记录比较，确认写回没有移动物理行槽。
+2. 用只恢复 `charaid.tbl` 原始字节的诊断副本测试；确保 ACT、DAT、SPT 和其他成员不变，并在相同 ACP 与加载条件下复现。
+3. 若旁白恢复，正式 GBK 补丁也保留该表原始字节；若无变化，再检查 ACT 行解析及实际加载的包/成员。混合编码试包只有在上述读回核对通过后才能用于游戏诊断。
 
 `pack` 产出完整的 `data.fpk`，所有成员都在包内，未修改但含日文的成员同样已转码。同目录其他 FPK 若含同名文本成员（无论内容是否相同），可能以 CP932 版本覆盖，GBK 封包默认拒绝，确认 `data.fpk` 生效后才加 `--base-confirmed`，报告 `warnings` 仍列出这些成员；松散 `data/` 下的同名文件同样列入警告。
 
@@ -106,7 +116,7 @@ python -m python.engines.systemc_extract pack "<工作区>" --output-encoding gb
 - 替换表是 JSON 对象 `{"原字": "替换"}`，可与重复的 `--gbk-replace` 合用；原字须为单个非 ASCII 字符，替换须可 GBK 编码，且不得含控制字符、ASCII 字母或 `$&\<>[]{}@#%^|~/*_` 等会形成命令/控制码的符号。替换对全包（含译文）生效，每项的出现次数和成员分布写入报告。半角片假名可用 NFKC 对应的全角字形，浊点需单独映射。
 - `--output-encoding gbk` 隐含 `--jis-mode off`，与显式 `--jis-mode auto` 或 `--jis-preflight` 冲突时报错；GBK 选项在 CP932 输出下报错。
 
-**读回校验**：用真实 reader 按 GBK 重新解包、解析：成员列表不变；ACT 每行与“原文按替换表映射、译文槽替换并补空行”的期望逐行相同，行数、控制码与 SPT/DAT 绑定不变；其他文本成员按 Unicode 与原文（替换后）一致；DAT 仅标题字段变化；二进制与 ASCII 成员逐字节相同。`verification.json` 记录 `output_encoding: gbk`、`jis_mode: off`、`transcoded_members`、`unchanged_members`、`kept_cp932_members`、`replacements`、`readback` 与 `runtime_requirement`。DAT 标题改变，所以 `compiled_members_unchanged` 为 false，`compiled_fields_unchanged` 为 true。
+**读回校验**：用真实 reader 按 GBK 重新解包、解析：成员列表不变；ACT 每行与“原文按替换表映射、译文槽替换并补空行”的期望逐行相同，行数、控制码与 SPT/DAT 绑定不变；已转码文本成员按 Unicode 与原文（替换后）一致；`charaid.tbl` 字节与原始成员一致；DAT 仅标题字段变化；二进制与 ASCII 成员逐字节相同。`verification.json` 记录 `output_encoding: gbk`、`jis_mode: off`、转码/未改成员、`replacements`、`readback` 与 `runtime_requirement`。DAT 标题改变，所以 `compiled_members_unchanged` 为 false，`compiled_fields_unchanged` 为 true。
 
 **运行条件与交付**：
 
