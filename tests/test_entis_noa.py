@@ -312,6 +312,136 @@ class WorkflowTests(unittest.TestCase):
                 entis_extract.rebuild(work, tmp / "bad", name="x.noa")
             self.assertEqual((game / "script.noa").read_bytes(), base)
 
+    def _game(self, tmp, members, *, extra=()):
+        game = tmp / "game"
+        game.mkdir()
+        (game / "script.noa").write_bytes(noa.build_noa(
+            [noa.NoaMember.raw(name, text.encode("utf-8")) for name, text in members]))
+        for name, data in extra:
+            (game / name).write_bytes(data)
+        return game
+
+    def test_language_auto_detection_and_choices(self):
+        single = ('<xscript><code><msg name="アン" text="こんにちは"/>'
+                  '<select><menu text="はい"/></select></code></xscript>')
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            game = self._game(tmp, [("a.srcxml", single)])
+            summary = entis_extract.extract(game, tmp / "w1")
+            self.assertEqual((summary["language"], summary["language_source"], summary["rows"]),
+                             ("", "auto", 2))
+            rows = json.loads((tmp / "w1/gt_input/a.json").read_text("utf-8"))
+            self.assertEqual(rows[0], {"name": "アン", "message": "こんにちは"})
+            # Forcing a suffix the members lack fails every member: status failed, exit 2.
+            self.assertEqual(entis_extract.main(["extract", str(game), str(tmp / "w2"),
+                                                 "--language", "JA"]), 2)
+            failed = json.loads((tmp / "w2/reports/summary.json").read_text("utf-8"))
+            self.assertEqual((failed["status"], failed["scripts_exported"]), ("failed", 0))
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            game = self._game(tmp, [("scene.srcxml", SAMPLE)])
+            with self.assertRaisesRegex(FormatError, r"\['EN', 'JA'\].*--language"):
+                entis_extract.extract(game, tmp / "w")
+            self.assertEqual(entis_extract.main(["extract", str(game), str(tmp / "w")]), 2)
+            self.assertFalse((tmp / "w").exists())
+            self.assertEqual(entis_extract.extract(game, tmp / "ja", language="JA")["status"],
+                             "complete")
+
+    def test_unsigned_noa_is_skipped_in_listing_and_named_when_requested(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            game = self._game(tmp, [("scene.srcxml", SAMPLE)],
+                              extra=[("data.noa", b"\x1a~ opaque bytes, no Entis signature")])
+            summary = entis_extract.extract(game, tmp / "w", language="JA")
+            self.assertEqual(summary["status"], "complete")
+            self.assertEqual([s["archive"] for s in summary["skipped_archives"]], ["data.noa"])
+            self.assertIn("data.noa", summary["unlisted_archives"])
+            code = entis_extract.main(["extract", str(game), str(tmp / "w2"), "--language", "JA",
+                                       "--archive", "data.noa", "--archive", "script.noa"])
+            self.assertEqual(code, 1)
+            partial = json.loads((tmp / "w2/reports/summary.json").read_text("utf-8"))
+            self.assertIn("data.noa", partial["archive_failures"][0]["error"])
+            self.assertEqual(entis_extract.main(["extract", str(game), str(tmp / "w3"),
+                                                 "--archive", "data.noa"]), 2)
+
+    def test_several_cotomi_exes_require_exe(self):
+        from unittest import mock
+        configs = {
+            "orig.exe": '<script src="s.csx"><archive path="$(CURRENT)\\script.noa"/></script>',
+            "patched.exe": '<script src="s.csx"><archive path="$(CURRENT)\\patch1.noa"/>'
+                           '<archive path="$(CURRENT)\\script.noa"/></script>',
+        }
+
+        def fake(path, **_):
+            name = Path(path).name
+            if name not in configs:
+                raise FormatError("EXE has no IDR_COTOMI resource")
+            return configs[name]
+
+        with tempfile.TemporaryDirectory() as tmp, \
+                mock.patch.object(entis_extract, "read_cotomi_config", fake):
+            tmp = Path(tmp)
+            game = self._game(tmp, [("scene.srcxml", SAMPLE)],
+                              extra=[("orig.exe", b"MZ"), ("patched.exe", b"MZ"),
+                                     ("tool.exe", b"MZ")])
+            with self.assertRaisesRegex(FormatError, r"--exe.*orig\.exe.*patched\.exe.*"
+                                                     r"only this one: patch1\.noa"):
+                entis_extract.extract(game, tmp / "w", language="JA")
+            summary = entis_extract.extract(game, tmp / "w", language="JA",
+                                            exe=game / "orig.exe")
+            self.assertEqual((summary["exe"], summary["archive_order"]),
+                             ("orig.exe", ["script.noa"]))
+            configs["patched.exe"] = configs["orig.exe"]  # identical tables are not ambiguous
+            self.assertEqual(entis_extract.extract(game, tmp / "w2", language="JA")["exe"],
+                             "orig.exe")
+
+    def test_literal_spaces_tolerated_other_spellings_rejected(self):
+        spaced = '<xscript><code><msg name="A" text="Hi there"/><msg text="Two"/></code></xscript>'
+        tabbed = '<xscript><code><msg text="Hi\tthere"/></code></xscript>'
+        found = []
+        self.assertEqual(sx.escape_convention_mismatches(spaced, "", literal_spaces=found), [])
+        self.assertEqual(found, [(0, "text")])
+        self.assertEqual(sx.escape_convention_mismatches(spaced, ""), [(0, "text")])
+        self.assertEqual(sx.escape_convention_mismatches(tabbed, "", literal_spaces=[]),
+                         [(0, "text")])
+        self.assertEqual(sx.escape_convention_mismatches(
+            '<xscript><code><msg text="&#x41; b"/></code></xscript>', "", literal_spaces=[]),
+            [(0, "text")])
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            game = self._game(tmp, [("a.srcxml", spaced), ("b.srcxml", tabbed)])
+            summary = entis_extract.extract(game, tmp / "w")
+            self.assertEqual((summary["status"], summary["scripts_exported"],
+                              summary["literal_space_attributes"]), ("partial", 1, 1))
+            self.assertTrue(any("literal spaces" in w for w in summary["warnings"]))
+            failure = json.loads((tmp / "w/reports/outputs.json").read_text("utf-8"))["failures"][0]
+            self.assertIn("record 0 text", failure["error"])
+            # Unedited values keep their spelling; an edited one uses the engine's &#32;.
+            rows = json.loads((tmp / "w/gt_input/a.json").read_text("utf-8"))
+            rows[1]["message"] = "Two words"
+            (tmp / "w/gt_output/a.json").write_text(json.dumps(rows), "utf-8")
+            entis_extract.rebuild(tmp / "w", tmp / "out", name="patch9.noa")
+            stream, index = read((tmp / "out/patch9.noa").read_bytes())
+            text = noa.read_member(stream, index, index.entries[0]).decode("utf-8")
+            self.assertIn('text="Hi there"', text)
+            self.assertIn('text="Two&#32;words"', text)
+
+    def test_handoff_and_verify_edits(self):
+        from python.common.handoff import STATE_FILE
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            game = self._game(tmp, [("scene.srcxml", SAMPLE)])
+            self.assertEqual(entis_extract.main(["extract", str(game), str(tmp / "w"),
+                                                 "--language", "JA", "--verify-edits"]), 0)
+            summary = json.loads((tmp / "w/reports/summary.json").read_text("utf-8"))
+            self.assertEqual(summary["status"], "complete")
+            self.assertEqual(summary["edit_check"]["json"], "scene.json")
+            self.assertTrue(summary["edit_check"]["reparsed"])
+            delivery = summary["delivery"]
+            self.assertEqual((delivery["json_files"], delivery["rows"]), (1, 5))
+            self.assertIn("text_JA", delivery["translation_notes"][0])
+            self.assertTrue((tmp / "w" / STATE_FILE).is_file())
+
     def test_mount_order(self):
         text = ('<script src="main.csx">\r\n<archive path="$(CURRENT)\\patch2.noa"/>\r\n'
                 '<archive path="$(CURRENT)\\patch1.noa"/>\r\n<archive path="$(CURRENT)\\a.noa"/>'

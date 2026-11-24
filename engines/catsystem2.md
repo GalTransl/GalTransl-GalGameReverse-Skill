@@ -1,5 +1,16 @@
 # CatSystem2：KIF/INT、CST 对话与安全提取
 
+## 快速路径
+
+识别为本格式后先直接运行提取命令：按实际路径替换占位符，多条命令对应不同方言或来源，按下文的识别条件选一条。提取器自行校验格式并用原文走真实的解析与回写，结构不符时拒绝并指出失败位置。命令成功就不必读实现源码或研究资料；失败时再按报错读本页对应章节和 `python/` 中的实现。
+
+```text
+python -B -m python.engines.catsystem2_extract "D:\Games\title" --verify-edits
+python -B -m python.engines.catsystem2_extract "D:\Games\title" --output "D:\Work\title_extract" --verify-edits
+python -B -m python.engines.catsystem2_extract "D:\Games\title" --exe "D:\Games\title\cs2.exe" --verify-edits
+python -B -m python.engines.catsystem2_extract "D:\Games\title" --archive scene.int --verify-edits
+```
+
 默认输出可复用已存在的目录；遇到同名产物、非空结果目录、文件或链接时换名。显式指定输出目录时遵循 [公共安全写出约定](../guides/python-reference-api.md#安全写出示例)，父目录须已存在，目标须不存在或为可复用的已有目录（不含同名产物或非空结果目录）。
 
 ## 能力边界
@@ -8,7 +19,7 @@
 - INT 模块：[python/archives/catsystem2_int.py](../python/archives/catsystem2_int.py)。
 - 批量入口：[python/engines/catsystem2_extract.py](../python/engines/catsystem2_extract.py)（提取，及 `pack` / `readback` 子命令）。
 - 补丁包：[python/engines/catsystem2_pack.py](../python/engines/catsystem2_pack.py)。
-- 支持 KIF/INT 索引、加密成员解密、EXE 口令恢复、CatScene 解析、`name/message` 与选择文本导出、追加回填，以及明文/加密 INT 写出和只含改动 CST 的 `updateNN.int` 补丁包。
+- 支持 KIF/INT 索引、加密成员解密、EXE 口令恢复、CatScene 解析（字符串按成员严格判定为 CP932 或 UTF-8）、`name/message` 与选择文本导出、追加回填，以及明文/加密 INT 写出和只含改动 CST 的 `updateNN.int` 补丁包。
 - 0x30 只支持已识别选择命令的文字参数；不支持任意命令改写、CSTL、多语言表或已证明可用的松散 CST 部署。补丁包加载顺序尚未经游戏内验证，见[补丁包命名与加载顺序](#补丁包命名与加载顺序)。
 
 ## 识别证据
@@ -20,16 +31,31 @@
 
 ## 推荐提取入口
 ```text
-python -B -m python.engines.catsystem2_extract "D:\Games\title"
-python -B -m python.engines.catsystem2_extract "D:\Games\title" --exe "D:\Games\title\cs2.exe"
-python -B -m python.engines.catsystem2_extract "D:\Games\title" --archive scene.int --archive update01.int
+python -B -m python.engines.catsystem2_extract "D:\Games\title" --verify-edits
+python -B -m python.engines.catsystem2_extract "D:\Games\title" --output "D:\Work\title_extract" --verify-edits
+python -B -m python.engines.catsystem2_extract "D:\Games\title" --exe "D:\Games\title\cs2.exe" --verify-edits
+python -B -m python.engines.catsystem2_extract "D:\Games\title" --archive scene.int --verify-edits
 ```
-- 默认流式扫描游戏根目录的 `*.int`，不把多 GB 归档整体读入内存。
+- 默认流式扫描游戏根目录的 `*.int`，不把多 GB 归档整体读入内存。文件头不是 `KIF\0` 的 `.int`（如补丁附带的配置包）记为 `skipped_archives`，不算失败；用 `--archive` 点名的非 KIF 文件另给警告。
 - 默认从 `cs2.exe` 的 `V_CODE2/DATA` 资源恢复口令；只解析 PE 资源，不执行 EXE。
-- 按“普通包在前、数字 `updateNN.int` 在后”建立覆盖集；后包同名成员生效，并在报告中记录替换关系。
-- 输出到新的 `<游戏名>_extract/`；已存在时自动选择 `_2`、`_3`，绝不覆盖。
-- `gt_input/` 只写有对话的 UTF-8 JSON；`original/` 保存解密后的原 CST；`metadata/` 保存 manifest；`reports/` 保存归档、覆盖、空脚本和失败项。
+- 按“普通包在前、数字 `updateNN.int` 在后”建立覆盖集；后包同名成员生效，并在报告中记录替换关系。普通包之间没有加载顺序证据，见[输出与覆盖规则](#输出与覆盖规则)。
+- 默认输出到游戏目录下新的 `<游戏名>_extract/`；已存在时自动选择 `_2`、`_3`，绝不覆盖。`--output` 指定其他新目录（相对路径按游戏目录解析）。
+- `--archive` 可重复，只读取点名的包（仍按上述覆盖顺序）。已有汉化补丁包覆盖原包时，用 `--archive scene.int` 等只选原包即可导出原文。
+- `--verify-edits` 另取第一个有文本的脚本，改一条正文后经 `patch_dialogue` 与 INT writer（原包加密且有口令时写加密包，否则写明文包）写出、读回并重新解析，结果记入 `edit_check`。
+- `gt_input/` 只写有对话的 UTF-8 JSON；`original/` 保存解密后的原 CST；`metadata/` 保存 manifest；`reports/` 保存 `summary.json`、归档、覆盖、空脚本、跳过与失败项，以及预填的 `translation-state.md`。
 - `gt_output/` 是 GalTransl 译文回填目录。
+- 结果状态：`summary.json` 的 `status` 为 `complete`（全部成功）、`partial`（有成员或归档失败，其余已导出）或 `failed`（没有导出任何脚本）；退出码依次为 0、1、2，参数或格式错误也返回 2。失败计数按归档列在 `failures_by_archive`，明细在 `reports/outputs.json` 的 `failures`；`identity_roundtrip.not_reached` 是未进入往返的成员数。
+- 有导出时输出含 `delivery`（交付表格四项和建议先试的 JSON），同内容写入 `reports/translation-state.md`；警告会并入“翻译时注意”。
+
+## CST 文本编码
+- 原版 CST 字符串为 CP932。第三方汉化补丁包可能以 UTF-8 存储 CST 字符串，并由修改过的 EXE 加载。
+- 每个生效成员先按 latin-1 取出全部记录的原字节，再分别用严格 CP932 与严格 UTF-8 解码全部记录：
+  - 全部为 ASCII：两者结果相同，沿用该包已确定的编码，没有证据时记为 CP932；
+  - 只有一种能解码：采用该编码；
+  - 两种都能解码（短文本常见，如 UTF-8 的拉丁字母恰好是 CP932 半角片假名）：仅当同一归档的其他成员只能按一种编码解码、且没有成员只能按另一种解码时采用该编码，否则判失败，不猜；
+  - 都不能解码（同一 CST 混有两种编码的记录等）：判失败，失败项附 `shadowed_copies_in` 指出被覆盖的旧副本所在包。
+- 不尝试 GBK：CP932 原文同样能按 GBK 解码，字节层面无法区分。整体转成 GBK 的包会按 CP932 解出乱码，由假名比例检查提示“输入很可能不是日文原版”。
+- 采用的编码写入 manifest 的 `encoding` 与 `settings.encoding_basis`，`pack` / `readback` 按它回写和重新解析；`summary.json` 的 `script_encodings` 给出各编码的脚本数，`archives.json` 给出每包的 `script_encoding` 与证据计数。JIS 流程只适用于 CP932 脚本。
 
 ## INT/KIF 加密路线
 - 加密索引记录从 0x50 开始，每条 0x48 字节；0 号槽是 `__key__.dat`，真实成员从 1 开始。
@@ -102,10 +128,16 @@ assert patched == data
 
 ## 输出与覆盖规则
 - 有真实文件名时，以规范化成员名作为覆盖身份；数字 `updateNN.int` 中后出现的同名成员覆盖基础包。
+- 两个普通包（都不是 `updateNN.int`）含同名成员时没有加载顺序证据：提取器按文件名顺序取后者，并发出“order … is not proven”警告，用 `--archive` 选定要导出的包。补丁 EXE 可能以其他方式加载自带的包，原版 `cs2.exe` 的规则不能推广到它们。
+- 覆盖关系可疑时提取器给出警告并写进交付说明：
+  - 生效包未加密而被覆盖包加密：生效副本像现有汉化补丁，原文在被覆盖包中，提示 `--archive <原包>`；
+  - 被覆盖包未加密而生效包加密：被覆盖包像汉化补丁，导出的生效副本像原文；
+  - 两包文本编码不同（CP932 / UTF-8；被覆盖包的编码用不超过 64 个旧副本抽样判断）：其中之一可能是汉化补丁。
+- 导出的正文含假名的比例过低时另给“输入很可能不是日文原版”的警告。
 - 无法恢复文件名时，不跨归档猜测覆盖关系，输出序号名并在报告标记 `names_recovered=false`。
 - `gt_input/` 平铺并使用剧本真名；只有 basename 冲突时附加归档名和成员序号。
 - manifest 的 `sources[].path` 直接指向输出树中的 `original/.../*.cst`；原归档名、成员名和序号保存在 locator。
-- 单成员失败不冒充成功，记录到 `reports/outputs.json`；归档索引失败也记录后继续其他包。
+- 单成员失败不冒充成功，记录到 `reports/outputs.json`，并使 `status` 成为 `partial` 或 `failed`；归档索引失败也记录后继续其他包。
 
 ## 补丁包命名与加载顺序
 - **证据**：EXE 中有宽字符串 `update??.INT`，用于枚举更新包；`config/startup.xml` 的 `<INT>` 只列基础包，不列 update 包。真实更新包中大量 CST 与基础包同名且为新版内容，说明 update 包覆盖基础包同名成员（强证据）。多个 update 包之间“编号大者优先”是推断：`??` 为两位，按名称枚举时与数字顺序一致，但所查样本只有一个 update 包含剧本，**待游戏内验证**。
@@ -117,7 +149,7 @@ assert patched == data
 python -B -m python.engines.catsystem2_extract pack "工作区" "新的补丁目录" [--readback "新的回读目录"] [--number NN] [--game "游戏目录"] [--exe cs2.exe | --password 口令] [--translations 目录]
 python -B -m python.engines.catsystem2_extract readback "工作区" "补丁目录" "新的回读目录" [--game "游戏目录"]
 ```
-- `pack` 读取 `gt_output`（或 `--translations`）中的同名 JSON，未知文件名直接拒绝；经 `validate_translation` 与 `patch_dialogue` 全部校验后，只收录字节有变化的 CST，以成员真名按名称排序写入新的 `updateNN.int`。未改动的译文记入 `unchanged_translation_files`；没有任何改动时不生成空包。
+- `pack` 读取 `gt_output`（或 `--translations`）中的同名 JSON，未知文件名直接拒绝；按各 manifest 记录的编码，经 `validate_translation` 与 `patch_dialogue` 全部校验后，只收录字节有变化的 CST，以成员真名按名称排序写入新的 `updateNN.int`。未改动的译文记入 `unchanged_translation_files`；没有任何改动时不生成空包。
 - 游戏目录默认取工作区 `reports/summary.json` 的 `game_root`，只读：核对模板包 SHA-256 与提取时一致；口令默认从 `cs2.exe` 恢复，并用模板包的成员名验证。模板为改动成员来源包中加载顺序最后者；加密方式、布局、seed 和 0x48 字段均复制自模板。
 - 游戏中已登记 update 包的大小须与工作区一致；工作区未扫描的 update 包会读取索引，若含本次要替换的成员则拒绝（否则会用旧版内容覆盖新版），需重新提取。
 - 生成后用 `read_int` / `read_member` 读回，逐一比对名称和字节，并重新解析每个 CST 核对译文行。补丁目录只有 `updateNN.int`、`reports/verification.json` 和 `README.txt`；输出不得位于工作区或游戏目录内。
@@ -141,5 +173,5 @@ python -m python.common.jis_workflow finalize "JIS准备目录" "补丁目录" "
 
 ## 验证
 - 合成测试：`tests/test_engines_primary.py` 的 `CatSystemTests` 与 `tests/test_catsystem2.py`。
-- 覆盖压缩/未压缩 CST、追加重定向、动态姓名、`ID＠表示名`、续行换行、振假名语法、控制码、选择文字与命令前缀保留、PE32/PE32+ 三层资源、加密/明文 INT 读写（与独立构造的样例逐字节一致、两种布局、CP932 多字节名）、writer 反例、无密码内容探测、路径/流输入、更新包覆盖、`pack` 只收改动成员与真名、编号、错误口令、未扫描 update 包冲突、回读，以及 JIS `finalize` 交付 `updateNN.int`。文本字段来源见 [记录](../provenance/common-text-fields.json)。
+- 覆盖 CP932/UTF-8 严格判定（ASCII、单一编码、两者皆可时的归档证据与无证据拒绝、混合编码拒绝）、未加密 UTF-8 补丁包覆盖加密原包的警告与 `--archive` 选原包、UTF-8 成员按 manifest 编码封包、普通包顺序未证实警告、非 KIF `.int` 跳过、`complete`/`partial`/`failed` 与退出码、`delivery` 与状态文件、`--verify-edits`，以及压缩/未压缩 CST、追加重定向、动态姓名、`ID＠表示名`、续行换行、振假名语法、控制码、选择文字与命令前缀保留、PE32/PE32+ 三层资源、加密/明文 INT 读写（与独立构造的样例逐字节一致、两种布局、CP932 多字节名）、writer 反例、无密码内容探测、路径/流输入、更新包覆盖、`pack` 只收改动成员与真名、编号、错误口令、未扫描 update 包冲突、回读，以及 JIS `finalize` 交付 `updateNN.int`。文本字段来源见 [记录](../provenance/common-text-fields.json)。
 - 封包与回读通过不代表已验证游戏加载顺序、字体覆盖或显示。

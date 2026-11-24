@@ -12,13 +12,14 @@ from python.archives import catsystem2_int
 from python.engines.catsystem2_extract import extract_game
 
 
-def make_cst(items, compressed=True):
+def make_cst(items, compressed=True, encoding="cp932"):
     prefix = b"screen!!"
     pool = bytearray()
     offsets = []
     for kind, text in items:
         offsets.append(len(pool))
-        pool.extend(bytes((1, kind)) + text.encode("cp932") + b"\0")
+        raw = text if isinstance(text, bytes) else text.encode(encoding)
+        pool.extend(bytes((1, kind)) + raw + b"\0")
     table = b"".join(struct.pack("<I", offset) for offset in offsets)
     raw = struct.pack("<IIII", len(prefix + table + pool), 1, 8, 8 + len(table))
     raw += prefix + table + pool
@@ -296,7 +297,12 @@ class CatSystemDialogueTests(unittest.TestCase):
             self.assertEqual(output, destination)
             self.assertEqual(summary["overridden_cst_members"], 1)
             self.assertEqual(summary["scripts_exported"], 1)
-            self.assertEqual(summary["parse_failures"], 1)
+            # A non-KIF *.int is skipped, not counted as a failure.
+            self.assertEqual(summary["parse_failures"], 0)
+            self.assertEqual(summary["skipped_archives"],
+                             [{"archive": "broken.int",
+                               "reason": "no KIF header; not a CatSystem2 INT"}])
+            self.assertEqual(summary["status"], "complete")
             self.assertEqual(summary["identity_roundtrip"]["status"], "complete")
             rows = json.loads((output / "gt_input" / "scene.json").read_text("utf-8"))
             self.assertEqual(rows, [{"message": "update"}])
@@ -565,6 +571,132 @@ class CatSystemPackTests(unittest.TestCase):
             self.assertIn("update01.int", delivered)
             self.assertFalse(any(name.endswith(".cst") or name.startswith("gt_input/")
                                  for name in delivered))
+
+
+def _plain_int(members, encoding="cp932"):
+    return catsystem2_int.write_int(
+        [(name, make_cst(items, encoding=encoding)) for name, items in members], encrypted=False)
+
+
+class CatSystemEncodingAndStatusTests(unittest.TestCase):
+    """Strict per-member CP932/UTF-8 choice, overlay warnings, status and hand-off."""
+
+    scripts = [("01_a.cst", [(0x21, "アン"), (0x20, "こんにちは")]),
+               ("02_b.cst", [(0x20, "二つ目")])]
+
+    def test_encoding_classification(self):
+        self.assertIsNone(catsystem2.cst_text_encodings(make_cst([(0x20, "ascii")])))
+        self.assertEqual(catsystem2.cst_text_encodings(make_cst([(0x20, "あ")])), ("cp932",))
+        self.assertEqual(catsystem2.cst_text_encodings(
+            make_cst([(0x20, "あ")], encoding="utf-8")), ("utf-8",))
+        # UTF-8 "é" is also two CP932 half-width katakana: both decode.
+        self.assertEqual(catsystem2.cst_text_encodings(
+            make_cst([(0x20, "é")], encoding="utf-8")), ("cp932", "utf-8"))
+        mixed = make_cst([(0x20, "あ".encode("cp932")), (0x20, "あ".encode("utf-8"))])
+        self.assertEqual(catsystem2.cst_text_encodings(mixed), ())
+
+    def test_unencrypted_utf8_patch_overlay_is_exported_with_warning_and_packs(self):
+        from python.engines.catsystem2_pack import pack
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            game = _make_game(root / "game", self.scripts)
+            (game / "update01.int").write_bytes(_plain_int(
+                [("01_a.cst", [(0x21, "安"), (0x20, "你好")])], encoding="utf-8"))
+            summary = extract_game(game, output=root / "ws")
+            self.assertEqual(summary["status"], "complete")
+            self.assertEqual(summary["script_encodings"], {"utf-8": 1, "cp932": 1})
+            self.assertTrue(any("--archive scene.int" in w and "unencrypted" in w
+                                for w in summary["warnings"]), summary["warnings"])
+            self.assertIn("--archive scene.int", " ".join(summary["delivery"]["translation_notes"]))
+            rows = json.loads((root / "ws/gt_input/01_a.json").read_text("utf-8"))
+            self.assertEqual(rows, [{"name": "安", "message": "你好"}])
+            manifest = json.loads(next((root / "ws/metadata/update01").rglob("*.json"))
+                                  .read_text("utf-8"))
+            self.assertEqual(manifest["encoding"], "utf-8")
+            # Write-back uses the recorded encoding; the template update01 is plain.
+            (root / "ws/gt_output/01_a.json").write_text(json.dumps(
+                [{"name": "安", "message": "你好，世界"}], ensure_ascii=False), "utf-8")
+            result = pack(root / "ws", root / "rebuilt", readback=root / "readback")
+            self.assertEqual(result["script_encoding"], ["utf-8"])
+            self.assertFalse(result["encrypted"])
+            packed = (root / "rebuilt" / result["archive"]).read_bytes()
+            archive = catsystem2_int.read_int(packed)
+            data = catsystem2_int.read_member(packed, archive.entries[0])
+            self.assertEqual(catsystem2.read_cst(data, "utf-8").records[1].text, "你好，世界")
+            # The original copies are selected with --archive.
+            original = extract_game(game, output=root / "orig", archive_paths=["scene.int"])
+            self.assertEqual(original["script_encodings"], {"cp932": 2})
+            self.assertEqual(json.loads((root / "orig/gt_input/01_a.json").read_text("utf-8")),
+                             [{"name": "アン", "message": "こんにちは"}])
+
+    def test_ambiguous_and_mixed_members_are_not_guessed(self):
+        from python.engines.catsystem2_extract import main
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            game = root / "game"
+            game.mkdir()
+            ambiguous = ("amb.cst", [(0x20, "é")])
+            (game / "scene.int").write_bytes(_plain_int([ambiguous], encoding="utf-8"))
+            summary = extract_game(game, output=root / "alone")
+            self.assertEqual(summary["status"], "failed")
+            self.assertEqual(summary["member_failures"], 1)
+            failure = json.loads((root / "alone/reports/outputs.json").read_text("utf-8"))["failures"][0]
+            self.assertEqual(failure["phase"], "encoding")
+            self.assertIn("not guessed", failure["error"])
+            self.assertNotIn("delivery", summary)
+            # Another member that only decodes as UTF-8 is archive evidence.
+            (game / "scene.int").write_bytes(_plain_int(
+                [ambiguous, ("utf.cst", [(0x20, "あ")])], encoding="utf-8"))
+            summary = extract_game(game, output=root / "evidence")
+            self.assertEqual((summary["status"], summary["script_encodings"]),
+                             ("complete", {"utf-8": 2}))
+            self.assertEqual(json.loads((root / "evidence/gt_input/amb.json").read_text("utf-8")),
+                             [{"message": "é"}])
+            # Records in two encodings inside one CST: rejected, the rest exported.
+            mixed = make_cst([(0x20, "あ".encode("cp932")), (0x20, "あ".encode("utf-8"))])
+            (game / "scene.int").write_bytes(catsystem2_int.write_int(
+                [("good.cst", make_cst([(0x20, "あ")])), ("mixed.cst", mixed)], encrypted=False))
+            self.assertEqual(main([str(game), "--output", str(root / "mixed")]), 1)
+            summary = json.loads((root / "mixed/reports/summary.json").read_text("utf-8"))
+            self.assertEqual((summary["status"], summary["scripts_exported"]), ("partial", 1))
+            self.assertEqual(summary["identity_roundtrip"]["status"], "partial")
+            (game / "scene.int").write_bytes(catsystem2_int.write_int(
+                [("mixed.cst", mixed)], encrypted=False))
+            self.assertEqual(main([str(game), "--output", str(root / "failed")]), 2)
+            self.assertEqual(main([str(root / "missing")]), 2)
+
+    def test_unproven_order_between_base_packs_is_reported(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            game = _make_game(root / "game", self.scripts)
+            (game / "aaa.int").write_bytes(_plain_int([("02_b.cst", [(0x20, "第二")])],
+                                                      encoding="utf-8"))
+            summary = extract_game(game, output=root / "ws")
+            warning = next(w for w in summary["warnings"] if "aaa.int" in w)
+            self.assertIn("not proven", warning)
+            self.assertIn("aaa.int looks like a translation patch", warning)
+            self.assertEqual(json.loads((root / "ws/gt_input/02_b.json").read_text("utf-8")),
+                             [{"message": "二つ目"}])
+
+    def test_handoff_state_file_and_verify_edits(self):
+        from python.common.handoff import STATE_FILE
+        from python.engines.catsystem2_extract import main
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            game = _make_game(root / "game", self.scripts)
+            (game / "notes.int").write_bytes(b"plain text, not KIF")
+            self.assertEqual(main([str(game), "--output", str(root / "ws"), "--verify-edits",
+                                   "--archive", "scene.int", "--archive", "notes.int"]), 0)
+            summary = json.loads((root / "ws/reports/summary.json").read_text("utf-8"))
+            self.assertEqual(summary["edit_check"]["int_rewritten"], "encrypted")
+            self.assertTrue(summary["edit_check"]["reparsed"])
+            self.assertTrue(any("notes.int" in w and "not a KIF" in w for w in summary["warnings"]))
+            delivery = summary["delivery"]
+            self.assertEqual((delivery["json_files"], delivery["rows"]), (2, 2))
+            self.assertEqual(delivery["suggested_first_json"]["file"], "01_a.json")
+            self.assertNotIn("试编辑回写（提取时未加 --verify-edits）", delivery["not_verified"])
+            self.assertIn("ID＠表示名", "".join(delivery["translation_notes"]))
+            self.assertIn("01_a.json", (root / "ws" / STATE_FILE).read_text("utf-8"))
 
 
 if __name__ == "__main__":

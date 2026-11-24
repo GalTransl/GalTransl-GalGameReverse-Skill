@@ -307,20 +307,34 @@ def protected_tokens(message):
     return seen
 
 
-def escape_convention_mismatches(text, language=None):
-    """Record attributes whose original spelling differs from ``encode_value``."""
+def escape_convention_mismatches(text, language=None, *, literal_spaces=None):
+    """Record attributes whose original spelling differs from ``encode_value``.
+
+    With a list as ``literal_spaces``, an attribute whose only difference is a
+    literal U+0020 where the engine writes ``&#32;`` goes into that list instead
+    of the result. Its decoded value is unambiguous (attribute-value
+    normalization leaves U+0020 unchanged), the writer keeps unedited values
+    byte-for-byte and re-encodes an edited value in the engine's own spelling,
+    so such a file is still safe to patch. Any other difference is reported.
+    """
     bad = []
     for record, node in _records(parse_document(text), language):
         for key in (record.text_attribute, record.name_attribute):
             if key is None:
                 continue
             attr = node.attrs[key]
+            original = text[attr.start:attr.end]
             try:
-                same = encode_value(attr.value) == text[attr.start:attr.end]
+                canonical = encode_value(attr.value)
             except ValueError:
-                same = False
-            if not same:
-                bad.append((record.index, key))
+                canonical = None
+            if canonical == original:
+                continue
+            if literal_spaces is not None and canonical is not None \
+                    and " " in original and canonical == original.replace(" ", "&#32;"):
+                literal_spaces.append((record.index, key))
+                continue
+            bad.append((record.index, key))
     return bad
 
 

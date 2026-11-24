@@ -1,5 +1,15 @@
 # Entis GLS：NOA 归档、SRCXML 多语言消息与 CSX 容器
 
+## 快速路径
+
+识别为本格式后先直接运行提取命令：按实际路径替换占位符，多条命令对应不同方言或来源，按下文的识别条件选一条。提取器自行校验格式并用原文走真实的解析与回写，结构不符时拒绝并指出失败位置。命令成功就不必读实现源码或研究资料；失败时再按报错读本页对应章节和 `python/` 中的实现。
+
+```text
+python -X utf8 -m python.engines.entis_extract extract "游戏目录" "游戏目录/游戏名_extract" --verify-edits
+python -X utf8 -m python.engines.entis_extract extract "游戏目录" "游戏目录/游戏名_extract" --language JA --verify-edits
+python -X utf8 -m python.engines.entis_extract extract "游戏目录" "游戏目录/游戏名_extract" --exe "游戏目录/原版主程序.exe" --verify-edits
+```
+
 ## 能力边界
 - 引擎 ID：`entis-gls`，Python 模块名 `entis_gls`。
 - 模块：
@@ -52,7 +62,8 @@
   - `&`、`"` 分别写作 `&amp;`、`&quot;`。
 - 写回与校验：
   - 写回时沿用上述约定；`<`/`>` 写作 `&#60;`/`&#62;`（已有证据表明引擎接受数字引用）。
-  - 提取时逐个检查原值能否按此约定还原。有不符即判该成员失败，不猜写法。
+  - 提取时逐个检查导出槽位的原值能否按此约定还原。唯一放行的差异是值里的字面空格（引擎写作 `&#32;`）：属性值规范化不改变 U+0020，解码无歧义；未改动的值逐字节保留，改动的值按引擎约定重新写出。放行数记入 `literal_space_attributes`（manifest 记录具体槽位），并警告“文件不是引擎工具写出的，可能是现有汉化补丁”。
+  - 其他不符（字面制表符/换行、`&#x..;`、命名实体等）判该成员失败，报错列出记录序号与属性名，不猜写法。
 - 词法读取有界：
   - 拒绝 DTD/ENTITY/CDATA、未知实体、标签不配对、重复属性、未加引号的值、多个根元素和非 UTF-8 声明；
   - 限制 32 Mi 字符、100 万元素、256 层嵌套。
@@ -60,7 +71,8 @@
   - `xscript/code/msg`：`name_<语言>` 为姓名，`text_<语言>` 为正文；
   - `select/menu`：`text_<语言>` 为选项；无后缀的 `text` 不是翻译槽位，保持原样；
   - `open_line_msg`：`title_<语言>` 为聊天窗标题。
-  - 有多种语言时必须指定后缀；目标语言缺属性即报错。
+  - 单语言方言没有后缀，直接用 `name`/`text`/`title`；此时 `select/menu` 的无后缀 `text` 就是选项槽位。
+  - 语言选择：`extract` 不给 `--language` 时汇总全部生效成员的 `text_*`/`title_*` 后缀，只有一种就用它，一种都没有就用无后缀槽位（等同 `--language ""`）；有多种时报错并列出可选后缀，须指定其一。目标语言缺属性即报错。
 - 姓名策略：
   - 非空姓名可写；空姓名不导出 `name`。
   - `%name` 等引擎变量（`%fname`、`%fp`、`%name`、`%nck`、`%nick`）只作上下文，不可改。
@@ -124,12 +136,15 @@
   - 或让 `--base` 指向含剧本的原包，整包重封。
   - 部署时须先备份，并由用户授权替换。
 - CSX 也会自行打开挂载表之外的包（`conststr` 中可见 `.noa` 名称）。`extract` 报告中的 `unlisted_archives` 会列出未在挂载表中的 NOA。
-- 没有 `IDR_COTOMI` 时按文件名排序，不推断覆盖关系；可用 `--archive` 按优先级显式指定。
+- 目录中有多个带 `IDR_COTOMI` 的 EXE 且挂载表不同（常见为原版启动器与汉化补丁自带、先挂载补丁包的启动器）时，`extract` 报错并列出各 EXE 的挂载表及其独有的包，须用 `--exe` 选定；挂载表完全相同时直接使用。要导出原文就选原版启动器。
+- 没有 `IDR_COTOMI` 时按文件名排序，不推断覆盖关系；可用 `--archive` 按优先级显式指定。按目录列出时，没有 Entis 签名的 `.noa`（加密或其他格式的数据包）记入 `skipped_archives` 并出现在 `unlisted_archives`，不打开；挂载表或 `--archive` 点名的包读不出索引时记入 `archive_failures`（带文件名），其余包照常提取。
 
 ## 工作流命令
 ```text
 python -X utf8 -m python.engines.entis_extract mounts "游戏目录/主程序.exe"
-python -X utf8 -m python.engines.entis_extract extract "游戏目录" "游戏目录/游戏名_extract" --language JA
+python -X utf8 -m python.engines.entis_extract extract "游戏目录" "游戏目录/游戏名_extract" --verify-edits
+python -X utf8 -m python.engines.entis_extract extract "游戏目录" "游戏目录/游戏名_extract" --language JA --verify-edits
+python -X utf8 -m python.engines.entis_extract extract "游戏目录" "游戏目录/游戏名_extract" --exe "游戏目录/原版主程序.exe" --verify-edits
 python -X utf8 -m python.engines.entis_extract rebuild "游戏目录/游戏名_extract" "新输出目录" --base "游戏目录/patch2.noa" [--target-language ZHTW]
 python -X utf8 -m python.engines.entis_extract readback "游戏目录/游戏名_extract" "新输出目录/patch2.noa" "新回读目录"
 python -X utf8 -m python.archives.entis_noa ls "游戏目录/script.noa"
@@ -139,7 +154,10 @@ python -X utf8 -m python.archives.entis_noa verify "游戏目录/script.noa"
   - 按挂载顺序选出每个 `.srcxml` 的生效副本；
   - 写出 `gt_input/<脚本名>.json`、`original/<包名>/<成员>`、`metadata/<包名>/<成员>.json`（manifest）和 `reports/`；
   - 没有文本的成员只记入报告；
-  - 每个成员都做一次恒等回写，要求逐字节一致。
+  - 每个成员都做一次恒等回写，要求逐字节一致；
+  - `--verify-edits` 另取第一个有文本的成员，改一条正文后经 SRCXML writer 与 NOA writer 写出、读回并重新解析，结果记入 `edit_check`；
+  - `summary.json` 的 `status` 为 `complete`、`partial`（有成员或归档失败，其余已导出）或 `failed`（没有导出任何脚本），退出码依次为 0、1、2；参数、多 EXE 歧义、多语言未指定等错误输出一行 `error:` 并返回 2；
+  - 有导出时输出含 `delivery`，同内容写入 `reports/translation-state.md`；`warnings` 并入“翻译时注意”。
 - `rebuild`：
   - 用 manifest 校验 `gt_output` 中同名 JSON 的条数、字段、姓名策略和保护 token；
   - 写入 `--target-language` 槽位，默认与提取语言相同；
@@ -245,8 +263,8 @@ assert 'text_en="old"' in out
   - 容器：扁平与嵌套目录、raw 与 ERISA-N 成员、校验不符、截断与预算；
   - 加密：BSHF 置换互逆，无口令与未知编码时拒绝；
   - 结构反例：越界、计数、标签、路径穿越、名称编码、重名；
-  - 方言：转义、保字节回写、控制码与姓名策略；
-  - 工作流：extract → rebuild → readback 闭环。
+  - 方言：转义、保字节回写、控制码与姓名策略、字面空格放行与其他写法拒绝；
+  - 工作流：extract → rebuild → readback 闭环、语言自动识别与多语言报错、无签名 `.noa` 跳过或带文件名报错、多 EXE 挂载表歧义、`status` 与退出码、`delivery` 与 `--verify-edits`。
 - ERISA-N 合成向量只固定了解码结果。解码器的正确性由真实归档的异或校验全部吻合来佐证（只读回归，样本未收入仓库）。
 - CSX 来源为翻译肋手 v4.9D 的 `GameRes.EntisGLS.ArcCSX`（GARbro 派生）。本仓库独立改写为严格边界：未知操作码不重同步，整段必须精确走完。
 - 真实样本只读回归已覆盖：

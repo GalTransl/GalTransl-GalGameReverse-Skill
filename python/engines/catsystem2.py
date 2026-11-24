@@ -110,6 +110,34 @@ def read_cst(data: bytes, encoding: str = "cp932", *,
     return Scene(raw, bool(packed), index, pool, tuple(records))
 
 
+CST_TEXT_ENCODINGS = ("cp932", "utf-8")
+
+
+def cst_text_encodings(data: bytes, *, max_output: int = 64 * 1024 * 1024) -> tuple[str, ...] | None:
+    """Which of ``CST_TEXT_ENCODINGS`` strictly decode every record of a CST.
+
+    Returns ``None`` when every record is ASCII (any of them gives the same
+    text), otherwise the tuple of encodings that decode all records without
+    error; an empty tuple means none does (mixed or another encoding). Both
+    entries can be returned for short text, so the caller must settle that with
+    other evidence instead of picking one. GBK is not tried: CP932 originals
+    also decode as GBK, so that ambiguity cannot be settled from the bytes.
+    """
+    scene = read_cst(data, "latin-1", max_output=max_output)
+    raws = [record.text.encode("latin-1") for record in scene.records]
+    if all(raw.isascii() for raw in raws):
+        return None
+    found = []
+    for encoding in CST_TEXT_ENCODINGS:
+        try:
+            for raw in raws:
+                raw.decode(encoding, errors="strict")
+        except UnicodeDecodeError:
+            continue
+        found.append(encoding)
+    return tuple(found)
+
+
 def export_cst(value, encoding: str = "cp932") -> DialogueExport:
     """Map raw 0x21/0x20 records to ordered translation rows without merging slots.
 

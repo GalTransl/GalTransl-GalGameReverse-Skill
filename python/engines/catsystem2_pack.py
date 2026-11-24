@@ -124,7 +124,7 @@ class _Workspace:
         if len(manifest["sources"]) != 1 or source["path"] != record["original"] \
                 or source["sha256"] != sha256(raw):
             raise FormatError(f"workspace original CST changed: {record['original']}")
-        if list(export_cst(raw).rows) != rows:
+        if list(export_cst(raw, manifest["encoding"]).rows) != rows:
             raise FormatError(f"{record['output']}: gt_input differs from the current CatSystem2 "
                               "export (older extractor format); re-extract into a new workspace")
         return manifest, raw, rows
@@ -226,9 +226,10 @@ def pack(workspace, output, *, game_root=None, exe=None, password=None, number=N
         record = ws.outputs[filename]
         manifest, raw, rows = ws.source(record)
         translated = load_json(_read(available[filename]))
+        encoding = manifest["encoding"]
         try:
             checked = validate_translation(manifest, {record["original"]: raw}, rows, translated)
-            patched = patch_dialogue(raw, export_cst(raw), checked)
+            patched = patch_dialogue(raw, export_cst(raw, encoding), checked, encoding)
         except ValueError as error:
             raise FormatError(f"{filename}: {error}") from error
         if patched == raw:
@@ -236,7 +237,7 @@ def pack(workspace, output, *, game_root=None, exe=None, password=None, number=N
             continue
         if not manifest["settings"].get("effective_overlay", True):
             raise FormatError(f"{filename}: member name was not recovered; cannot overlay")
-        changed.append((record, patched, checked))
+        changed.append((dict(record, encoding=encoding), patched, checked))
     if not changed:
         raise FormatError("no CST changed; nothing to pack")
 
@@ -296,7 +297,7 @@ def pack(workspace, output, *, game_root=None, exe=None, password=None, number=N
     for entry in archive.entries:
         record, data, rows = expected[_identity(entry.name)]
         payload = read_member(stream, entry, archive.cipher, max_member=_MAX_CST)
-        if payload != data or list(export_cst(payload).rows) != list(rows):
+        if payload != data or list(export_cst(payload, record["encoding"]).rows) != list(rows):
             raise FormatError(f"packed CST readback differs: {entry.name}")
         verified.append({"member": entry.name, "json": record["output"].rsplit("/", 1)[-1],
                          "replaces_archive": record["archive"], "rows": len(rows),
@@ -314,7 +315,8 @@ def pack(workspace, output, *, game_root=None, exe=None, password=None, number=N
         "changed_members": verified, "translated_files": sorted(available),
         "unchanged_translation_files": unchanged,
         "int_readback_verified": True, "cst_reparse_verified": True,
-        "runtime_verified": False, "script_encoding": "cp932",
+        "runtime_verified": False,
+        "script_encoding": sorted({r["encoding"] for r, _, _ in changed}),
     }
     readme = ("CatSystem2 补丁包\n"
               f"{archive_name} 只含有改动的 CST，成员使用原名；放到游戏 EXE 同目录即可按 update 编号覆盖同名成员。\n"
@@ -382,10 +384,9 @@ def read_back(workspace, rebuilt, output, *, game_root=None, exe=None, password=
             replaced[identity] = read_member(stream, entry, archive.cipher, max_member=_MAX_CST)
     files, rows_total = {}, 0
     for filename, record in sorted(ws.outputs.items()):
-        raw = replaced.get(_identity(record["member"]))
-        if raw is None:
-            _, raw, _ = ws.source(record)
-        rows = list(export_cst(raw).rows)
+        manifest, raw, _ = ws.source(record)
+        raw = replaced.get(_identity(record["member"]), raw)
+        rows = list(export_cst(raw, manifest["encoding"]).rows)
         files["gt_input/" + filename] = dump_rows(rows)
         rows_total += len(rows)
     result = {"engine": "catsystem2", "mode": "readback", "archive": path.name,
