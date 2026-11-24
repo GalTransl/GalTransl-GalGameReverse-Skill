@@ -1,16 +1,19 @@
 # SPDX-License-Identifier: GPL-3.0-only
-"""Explicit loose-YBN workspace and matching v482 YPF template workflow."""
+"""Explicit loose-YBN workspace and matching YPF template workflow (YSTB v482/v488)."""
 import argparse
 import io
 import json
 from pathlib import Path
 import stat
 import struct
+import sys
 from ..archives.yuris_482 import read_index, decode_member, pack_archive
 from ..common.contract import load_json, dump_rows, sha256
 from ..common.safety import logical_path, validate_names, write_new_tree, _check_existing_ancestors, validate_new_tree_destination
-from .yuris_text import (PARSE_VERSIONS, WRITE_VERSION, Profile, Scenario, commands_from,
-                         export_script, rebuild_script, ystb_version)
+from ..common.handoff import STATE_FILE, handoff, source_language_note
+from .yuris_names import LIST_NAME, json_names, read_script_list
+from .yuris_text import (PARSE_VERSIONS, WRITE_VERSIONS, Profile, Scenario, commands_from,
+                         export_script, rebuild_script, select_key, ystb_version)
 
 
 def read_file(path, limit=64 << 20):
@@ -71,11 +74,16 @@ def baseline_from_archive(raw):
     return loose, data
 
 
-def extract(game, output, *, archive, loose=None, reference_archives=(), smoke_test=False):
+def _json_map(report):
+    """Scenario member -> JSON name as published at extraction (older workspaces: stem)."""
+    return {r["source"]: r.get("json", Path(r["source"]).stem + ".json") for r in report["members"]}
+
+
+def extract(game, output, *, archive, loose=None, reference_archives=(), smoke_test=False, key=None):
+    """``key`` overrides the YSTB section key; otherwise it is chosen by full parses."""
     game, output = Path(game), Path(output)
     validate_new_tree_destination(output)
     archive = logical_path(archive)
-    profile = Profile()
     if loose is None:
         # No trusted loose copy (absent or already patched): the template
         # archive itself is the original baseline.
@@ -98,6 +106,25 @@ def extract(game, output, *, archive, loose=None, reference_archives=(), smoke_t
             loose_data[f"{loose}/{path.name}"] = data
     ysc = loose_data[f"{loose}/ysc.ybn"]
     commands = commands_from(ysc)
+    writable = {name: raw for name, raw in loose_data.items()
+                if raw[:4] == b"YSTB" and ystb_version(raw) in WRITE_VERSIONS}
+    if writable:
+        key, key_evidence = select_key(writable, commands, explicit=key)
+    else:
+        key_evidence = {"source": "explicit" if key is not None else "profile-default", "parsed": 0, "members": 0}
+        key = Profile().key if key is None else key
+    profile = Profile(key=key)
+    # The compile list maps yst<NNNNN>.ybn back to the script's source path.
+    listed = [name for name in loose_data if name.rsplit("/", 1)[-1].lower() == LIST_NAME]
+    paths, list_status = None, "absent"
+    if len(listed) == 1:
+        try:
+            paths, list_status = read_script_list(loose_data[listed[0]]), "used"
+        except ValueError as exc:
+            list_status = f"unused: {exc}"
+    elif listed:
+        list_status = "unused: several script lists"
+    naming = json_names([name for name, raw in loose_data.items() if raw[:4] == b"YSTB"], paths)
     files, records, counts = {"gt_output/.keep": b""}, [], {"rows": 0, "named": 0, "exported": 0,
                                                               "empty": 0, "non_target": 0, "unsupported_version": 0,
                                                               "blocked": 0, "opaque_eval": 0}
@@ -105,7 +132,7 @@ def extract(game, output, *, archive, loose=None, reference_archives=(), smoke_t
     for name, data in loose_data.items():
         files[f"original/game/{name}"] = data
         source_hashes[name] = sha256(data)
-    smoke = None
+    smoke, texts = None, []
     versions = set()
     for name, raw in loose_data.items():
         if raw[:4] != b"YSTB":
@@ -116,13 +143,13 @@ def extract(game, output, *, archive, loose=None, reference_archives=(), smoke_t
             continue
         version = ystb_version(raw)
         versions.add(version)
-        if version != WRITE_VERSION:
-            # Text append is only verified for v482. Reading a wider range must
-            # not be reported as translatable: keep the member byte-identical
+        if version not in WRITE_VERSIONS:
+            # Text append is only verified for WRITE_VERSIONS. Reading a wider range
+            # must not be reported as translatable: keep the member byte-identical
             # and state the reason instead of silently emitting JSON.
             counts["unsupported_version"] += 1
             records.append({"source": name, "status": "unsupported_version", "version": version,
-                            "writer_versions": [WRITE_VERSION]})
+                            "writer_versions": list(WRITE_VERSIONS)})
             files[f"rebuilt/roundtrip/{name}"] = raw
             continue
         stats = {}
@@ -139,14 +166,18 @@ def extract(game, output, *, archive, loose=None, reference_archives=(), smoke_t
             files[f"rebuilt/roundtrip/{name}"] = raw
             continue
         files[f"rebuilt/roundtrip/{name}"] = restored
-        filename = Path(name).stem + ".json"
+        filename = naming[name]["json"]
         record = {"source": name, "status": "exported" if rows else "empty", "count": len(rows),
-                  "opaque_eval": stats["opaque_eval"]}
+                  "opaque_eval": stats["opaque_eval"], "naming": naming[name]["naming"],
+                  "dialogue": sum(r["locator"]["role"] == "dialogue" for r in manifest["records"])}
+        if naming[name]["original_path"]:
+            record["original_path"] = naming[name]["original_path"]
         counts["opaque_eval"] += stats["opaque_eval"]
         counts[record["status"]] += 1
         counts["rows"] += len(rows)
         counts["named"] += sum("name" in r for r in rows)
         if rows:
+            texts.extend(row["message"] for row in rows)
             files[f"gt_input/{filename}"] = dump_rows(rows)
             files[f"metadata/{filename}"] = json_bytes(manifest)
             record["json"] = filename
@@ -177,7 +208,7 @@ def extract(game, output, *, archive, loose=None, reference_archives=(), smoke_t
         differences, unparsed = [], []
         for member, data in members.items():
             if data[:4] == b"YSTB":
-                if ystb_version(data) != WRITE_VERSION:
+                if ystb_version(data) not in WRITE_VERSIONS:
                     rebuilt_members[member] = data
                     continue
                 try:
@@ -223,18 +254,43 @@ def extract(game, output, *, archive, loose=None, reference_archives=(), smoke_t
             raise ValueError("smoke archive extraction mismatch")
         files[f"rebuilt/smoke-test/{archive}"] = test
     report = {"engine": "yuris", "status": "partial" if counts["blocked"] else "complete",
-              "version": 482 if versions <= {482} else None,
-              "versions": sorted(versions), "writer_versions": [WRITE_VERSION],
+              "version": next(iter(versions)) if len(versions) == 1 else None,
+              "versions": sorted(versions), "writer_versions": list(WRITE_VERSIONS),
+              "key_selection": {**key_evidence, "key": f"0x{key:08X}"},
+              "script_list": list_status,
               "parse_versions": [PARSE_VERSIONS.start, PARSE_VERSIONS.stop - 1],
               "profile": profile.settings(), "archive": archive,
-              "loose": loose, "source_hashes": source_hashes,
+              # Directory of the baseline scripts (explicit --loose or the template's own).
+              "loose": loose, "loose_option_given": baseline_kind == "explicit-loose-files",
+              "source_hashes": source_hashes,
               "counts": counts, "members": records,
               "blocked": [{"source": r["source"], "reason": r["reason"]} for r in records if r["status"] == "blocked"],
               "archives": archive_reports,
               "selected_baseline": baseline_kind, "load_precedence_verified": False,
               "current_archive_matches_loose": True, "smoke_reextraction_verified": smoke is not None,
               "runtime_verified": False}
+    notes = ["\\p、\\c、\\u 等控制码的数量与顺序保持不变；换行可以比原文少，不能新增或跨控制码移动",
+             "姓名不要加【】，回填时自动恢复；同一角色的姓名定义行与对白姓名保持一致",
+             "只能写入 CP932 可表示的字符，简体中文需走 JIS 替换流程"]
+    warning = source_language_note(texts)
+    if warning:
+        notes.insert(0, warning)
+        report["warnings"] = [warning]
+    if counts["blocked"] or counts["unsupported_version"]:
+        notes.append(f"{counts['blocked'] + counts['unsupported_version']} 个场景未导出（受阻或版本不可写），"
+                     "见 reports/extraction.json")
+    exported = [r for r in records if r["status"] == "exported"]
+    # Name-definition tables come first in compile order; prefer a scene with dialogue.
+    scenes = [r for r in exported if r["dialogue"]] or exported
+    first = min(scenes, key=lambda r: r["source"])["json"] if scenes else None
+    report["delivery"], state = handoff(
+        workspace=output, engine=f"YU-RIS（YSTB v{'/'.join(map(str, sorted(versions)))}）",
+        json_files=len(exported), rows=counts["rows"], notes=notes,
+        verified="各场景经 writer 重建后与原字节一致，YPF 重封后逐成员一致", edit_checked=smoke is not None,
+        first_json=first, first_json_basis=("编译序号最小的含对白场景，未确认是否开场" if first else ""),
+        command="extract --verify-edits" if smoke_test else "extract")
     files["reports/extraction.json"] = json_bytes(report)
+    files[STATE_FILE] = state
     write_new_tree(output, list(files.items()))
     return report
 
@@ -259,12 +315,13 @@ def rebuild(workspace, output):
     # are copied byte-identically and any translation for them is unmatched.
     opaque = {r["source"] for r in report["members"] if r["status"] in ("blocked", "unsupported_version")}
     expected_json, changed, files = set(), [], []
+    published = _json_map(report)
     for source, member in canonical.items():
         raw = sources[source]
         if raw[:4] == b"YSTB" and source not in opaque:
             rows, manifest = export_script(raw, ysc, profile)
             if rows:
-                filename = Path(source).stem + ".json"
+                filename = published[source]
                 expected_json.add(filename)
                 if load_json(read_file(workspace / "gt_input" / filename)) != rows or load_json(read_file(workspace / "metadata" / filename)) != manifest:
                     raise ValueError("original JSON/manifest changed")
@@ -298,19 +355,28 @@ def main():
     p.add_argument("--archive", required=True)
     p.add_argument("--loose", help="original loose YBN directory; omit to use --archive members")
     p.add_argument("--reference-archive", action="append", default=[])
-    p.add_argument("--smoke-test", action="store_true")
+    p.add_argument("--verify-edits", "--smoke-test", dest="smoke_test", action="store_true",
+                   help="also write one edited row through the writer and re-extract the changed archive")
+    p.add_argument("--key", type=lambda value: int(value, 0),
+                   help="YSTB section key (e.g. 0x12345678); default: chosen by full parses of all scenarios")
     p = commands.add_parser("rebuild")
     p.add_argument("workspace")
     p.add_argument("output")
     args = parser.parse_args()
-    if args.command == "extract":
-        report = extract(args.game, args.output, archive=args.archive, loose=args.loose,
-                         reference_archives=args.reference_archive, smoke_test=args.smoke_test)
-        print(json.dumps({"status": report["status"], "counts": report["counts"],
-                          "blocked": report["blocked"]}, ensure_ascii=False))
-        raise SystemExit(report["status"] != "complete")
-    else:
-        print(json.dumps(rebuild(args.workspace, args.output), ensure_ascii=True))
+    try:
+        if args.command == "extract":
+            report = extract(args.game, args.output, archive=args.archive, loose=args.loose,
+                             reference_archives=args.reference_archive, smoke_test=args.smoke_test, key=args.key)
+            for warning in report.get("warnings", []):
+                print(f"warning: {warning}", file=sys.stderr)
+            print(json.dumps({"status": report["status"], "counts": report["counts"],
+                              "key_selection": report["key_selection"], "blocked": report["blocked"],
+                              "delivery": report["delivery"]}, ensure_ascii=False))
+            raise SystemExit(report["status"] != "complete")
+        print(json.dumps(rebuild(args.workspace, args.output), ensure_ascii=False))
+    except (ValueError, UnicodeError, OSError, struct.error) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        raise SystemExit(2)
 
 
 if __name__ == "__main__":

@@ -3,7 +3,8 @@
 
 Layout/hash algorithms adapted from msg-tool src/scripts/yuris/arc/ypf.rs
 and src/utils/murmur2.rs (GPLv3); name-length table from the MIT GARbro-based
-yuris module. Only the empirically verified 482 profile is accepted.
+yuris module. Header versions are an explicit whitelist of this one
+directory layout; any other version word is rejected by name, not coerced.
 """
 from dataclasses import dataclass
 import struct
@@ -11,6 +12,14 @@ import zlib
 from ..common.binary import bounded_zlib
 from ..common.safety import validate_names
 from .yuris import SWAP_TABLE_00
+
+
+# Header version words whose directory uses this exact layout (name XOR FF,
+# SWAP_TABLE_00, 64-bit offsets, Murmur2 name/stored hashes). Both were proven
+# on real archives: every row parsed to the directory end with all hashes
+# matching, and an unedited plus a variable-length repack re-extracted equal.
+# The writer copies the header, so a rebuilt archive keeps its source version.
+YPF_VERSIONS = (482, 487)
 
 
 def murmur2(data: bytes, seed: int = 0) -> int:
@@ -42,7 +51,10 @@ class Entry:
 
 
 def read_index(stream, *, max_index_size=16 << 20, max_entries=100000):
-    """Read only the directory; name XOR FF and SWAP_TABLE_00 are explicit profile."""
+    """Read only the directory; name XOR FF and SWAP_TABLE_00 are explicit profile.
+
+    Accepts the header versions in ``YPF_VERSIONS`` and names any other one.
+    """
     saved = stream.tell()
     try:
         stream.seek(0, 2)
@@ -52,8 +64,11 @@ def read_index(stream, *, max_index_size=16 << 20, max_entries=100000):
         if len(header) != 32 or header[:4] != b"YPF\0":
             raise ValueError("expected YPF")
         version, count, end = struct.unpack_from("<III", header, 4)
-        if version != 482 or not 0 < count <= max_entries or not 32 < end <= min(size, max_index_size):
-            raise ValueError("unsupported version/count/directory size")
+        if version not in YPF_VERSIONS:
+            raise ValueError(f"unsupported YPF version {version} (0x{version:X}); this reader/writer is verified "
+                             f"for {', '.join(map(str, YPF_VERSIONS))} only")
+        if not 0 < count <= max_entries or not 32 < end <= min(size, max_index_size):
+            raise ValueError(f"invalid YPF v{version} entry count/directory size")
         directory = header + stream.read(end - 32)
         if len(directory) != end:
             raise ValueError("short directory read")

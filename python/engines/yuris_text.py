@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-only
-"""YU-RIS v482 scenario attribute writer with append-only text replacement.
+"""YU-RIS v482/v488 scenario attribute writer with append-only text replacement.
 
 Descriptor layout: VNTextPatch-net8 YurisAttribute.cs (MIT, d9c0fab7b72fdcf87d674ef12a84d3829c9188be).
 Command/selection semantics cross-checked with SExtractor and msg-tool (GPLv3).
@@ -13,9 +13,12 @@ from ..common.contract import make_manifest, validate_translation
 from ..common.line_layout import drops_only_line_breaks
 
 
+DEFAULT_KEY = 0x96AC6FD3
+
+
 @dataclass(frozen=True)
 class Profile:
-    key: int = 0x96AC6FD3
+    key: int = DEFAULT_KEY
 
     def display(self, text):
         return text
@@ -34,9 +37,12 @@ class Profile:
 # with this descriptor layout, but the layout itself is only validated here by
 # structural invariants; nothing proves every version in that range shares it.
 # Reading is therefore opened to the range, while appending text stays pinned to
-# the one version whose round trip this repository actually tests.
+# the versions proven on real scenario sets: every member exported, an unedited
+# rebuild was byte-identical and a variable-length edit of every row re-parsed
+# equal with all non-target descriptors, instructions and line numbers intact.
 PARSE_VERSIONS = YSCM_PARSE_VERSIONS
-WRITE_VERSION = 482
+WRITE_VERSIONS = (482, 488)
+WRITE_VERSION = 482  # first proven writer version; kept for existing callers
 
 
 class Scenario:
@@ -85,8 +91,9 @@ class Scenario:
         return self.values[offset:offset + size]
 
     def serialize(self, changes):
-        if self.version != WRITE_VERSION:
-            raise ValueError(f"YSTB v{self.version} is read-only; text append is verified for v{WRITE_VERSION} only")
+        if self.version not in WRITE_VERSIONS:
+            raise ValueError(f"YSTB v{self.version} is read-only; text append is verified for "
+                             f"v{'/v'.join(map(str, WRITE_VERSIONS))} only")
         if set(changes) - set(range(len(self.attrs))) or set(changes) & self.control_targets:
             raise ValueError("unknown changed descriptor")
         prefix = bytearray(self.plain[:self.value_start])
@@ -117,6 +124,71 @@ def commands_from(ysc, version=None):
     if version is not None and found != version:
         raise ValueError("YSCM version mismatch")
     return commands
+
+
+def descriptor_key(raw):
+    """Key candidate implied by one YSTB, or None when it has no descriptor.
+
+    The first attribute descriptor of a compiled scenario points at value-pool
+    offset 0, and every section restarts the key phase, so the stored u32 at
+    descriptor +8 equals the key. This is only a candidate: ``select_key``
+    accepts it after complete structural parses.
+    """
+    if not isinstance(raw, bytes) or len(raw) < 32 or raw[:4] != b"YSTB":
+        raise ValueError("expected YSTB header")
+    count, commands, descriptors, values, lines = struct.unpack_from("<IIIII", raw, 8)
+    if commands != count * 4 or 32 + commands + descriptors + values + lines != len(raw):
+        raise ValueError("YSTB section/count mismatch")
+    if descriptors < 12:
+        return None
+    return struct.unpack_from("<I", raw, 32 + commands + 8)[0]
+
+
+def select_key(scenarios, commands, *, explicit=None, default=DEFAULT_KEY):
+    """Choose the section XOR key for a scenario set and report the evidence.
+
+    ``scenarios`` maps member name to raw YSTB. Candidates are the explicit
+    key alone, or the value every descriptor-bearing member implies plus the
+    profile default. A candidate counts only through full ``Scenario`` parses
+    (command codes, descriptor ranges, control targets, consumed descriptors):
+    it must parse a strict majority of the members and more than any other
+    candidate. XOR being its own inverse proves nothing and is not used.
+    """
+    if not scenarios:
+        raise ValueError("no YSTB scenario to validate a key against")
+
+    def parsed(key):
+        good = 0
+        for raw in scenarios.values():
+            try:
+                Scenario(raw, commands, key)
+                good += 1
+            except (ValueError, struct.error):
+                pass
+        return good
+
+    total = len(scenarios)
+    if explicit is not None:
+        if type(explicit) is not int or not 0 <= explicit <= 0xFFFFFFFF:
+            raise ValueError("YU-RIS key must be u32")
+        good = parsed(explicit)
+        if not good:
+            raise ValueError(f"explicit key 0x{explicit:08X} parses none of the {total} YSTB members")
+        return explicit, {"source": "explicit", "key": explicit, "parsed": good, "members": total}
+    implied = {descriptor_key(raw) for raw in scenarios.values()} - {None}
+    candidates = [("derived-first-descriptor", next(iter(implied)))] if len(implied) == 1 else []
+    if default not in [key for _, key in candidates]:
+        candidates.append(("profile-default", default))
+    scores = [(parsed(key), source, key) for source, key in candidates]
+    best = max(scores, key=lambda item: item[0])
+    if best[0] * 2 <= total or sum(score[0] == best[0] for score in scores) != 1:
+        tried = ", ".join(f"{source} 0x{key:08X} parses {good}/{total}" for good, source, key in scores)
+        raise ValueError(f"no YSTB key validated ({tried}; {len(implied)} distinct first-descriptor values); "
+                         "pass --key with independent evidence")
+    good, source, key = best
+    if source == "derived-first-descriptor" and key == default:
+        source = "derived-first-descriptor (equals profile default)"
+    return key, {"source": source, "key": key, "parsed": good, "members": total}
 
 
 def literal(value):
@@ -248,7 +320,7 @@ def export_script(raw, ysc, profile=Profile(), stats=None):
     version = ystb_version(raw)
     s = Scenario(raw, commands_from(ysc, version), profile.key)
     rows, locations = _rows(s, profile, stats)
-    variant = "482-word-raw" if version == WRITE_VERSION else f"{version}-word-raw-readonly"
+    variant = f"{version}-word-raw" if version in WRITE_VERSIONS else f"{version}-word-raw-readonly"
     manifest = make_manifest(engine="yuris", variant=variant, reference="yuris_text/2",
                              sources={"member.ybn": raw, "ysc.ybn": ysc}, rows=rows, locators=locations,
                              encoding="utf-8", settings=profile.settings(),
@@ -258,12 +330,12 @@ def export_script(raw, ysc, profile=Profile(), stats=None):
 
 def rebuild_script(raw, ysc, translated, manifest, profile=Profile()):
     version = ystb_version(raw)
-    if version != WRITE_VERSION:
-        raise ValueError(f"YSTB v{version} is read-only; rebuild requires v{WRITE_VERSION}")
+    if version not in WRITE_VERSIONS:
+        raise ValueError(f"YSTB v{version} is read-only; rebuild requires v{'/v'.join(map(str, WRITE_VERSIONS))}")
     if any(not isinstance(value, str) or not value for value in
            (manifest.get("engine", {}).get("variant"), manifest.get("engine", {}).get("reference"))):
         raise ValueError("manifest engine block is missing")
-    if manifest["engine"]["variant"] != "482-word-raw":
+    if manifest["engine"]["variant"] != f"{version}-word-raw":
         raise ValueError("manifest was produced by a read-only variant")
     commands = commands_from(ysc, version)
     scenario = Scenario(raw, commands, profile.key)

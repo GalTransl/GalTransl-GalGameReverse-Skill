@@ -5,7 +5,7 @@
 识别为本格式后先直接运行提取命令：按实际路径替换占位符，多条命令对应不同方言或来源，按下文的识别条件选一条。提取器自行校验格式并用原文走真实的解析与回写，结构不符时拒绝并指出失败位置。命令成功就不必读实现源码或研究资料；失败时再按报错读本页对应章节和 `python/` 中的实现。
 
 ```text
-python -m python.engines.yuris_extract extract "<游戏目录>" "<输出目录>" --archive <剧本包相对路径>.ypf [--loose <原始松散YBN目录>] [--reference-archive <其他包相对路径>.ypf] --smoke-test
+python -m python.engines.yuris_extract extract "<游戏目录>" "<输出目录>" --archive <剧本包相对路径>.ypf [--loose <原始松散YBN目录>] [--reference-archive <其他包相对路径>.ypf] --verify-edits
 ```
 
 ## 能力边界
@@ -13,27 +13,40 @@ python -m python.engines.yuris_extract extract "<游戏目录>" "<输出目录>"
 - 参考模块：[python/engines/yuris.py](../python/engines/yuris.py)。
 - 归档模块：[python/archives/yuris.py](../python/archives/yuris.py)，实现指定版本/方案的 YPF 索引、选中成员读取及 raw/zlib 解码。
 - 实现 YSTB 四分区 XOR、SJIS 感知的控制字节转换和 YSCM 命令表。
-- 通用模块没有完整表达式 VM 或自动密钥推断。
-- **v482（0x1E2）**支持下节列出的提取、回填及 YPF 模板重封；其他版本不能直接套用。
-- **版本字 234–490 只开放解析**：`Scenario`/`commands_from` 接受该范围的 YSTB/YSCM 并报告 `version`，但回填仍只对 v482 生效（`serialize` 与 `rebuild_script` 对其它版本直接拒绝）。放开范围的依据是第三方工具（翻译肋手 v4.9D 反编译）用同一套 `<HHII>` 描述符读取 234–490，**这只是解析边界，不是“布局已证实相同”**；工作区提取遇到非 482 脚本记录为 `unsupported_version`，成员按原字节保留，不出 JSON。
+- 通用模块没有完整表达式 VM。工作区提取按下文[分区密钥选择](#分区密钥选择)用完整结构解析确认 YSTB 密钥，不靠 XOR 自反性。
+- **可回填版本**：YPF 头版本 482（0x1E2）与 487（0x1E7）使用同一目录布局；YSTB/YSCM 版本 482 与 488 支持提取、回填及 YPF 模板重封。这些组合都经真实脚本集验证：全部成员导出、原文重建逐字节一致、变长译文重封后重新解析一致且非目标结构不变。其他 YPF 版本由 reader 按版本号拒绝（错误信息给出读到的版本），不强行套用。
+- **版本字 234–490 只开放解析**：`Scenario`/`commands_from` 接受该范围的 YSTB/YSCM 并报告 `version`，但回填只对上面列出的版本生效（`serialize` 与 `rebuild_script` 对其它版本直接拒绝）。放开范围的依据是第三方工具（翻译肋手 v4.9D 反编译）用同一套 `<HHII>` 描述符读取 234–490，**这只是解析边界，不是“布局已证实相同”**；工作区提取遇到不可回填版本的脚本记录为 `unsupported_version`，成员按原字节保留，不出 JSON。
 - **YDG 图片与 CP932 字库页面**：支持格式 100 的 QOI/WebP 分块、PNG 模板回封及显式网格字库重建，流程和依赖见 [YDG 与字库](yuris/ydg.md)。图片资源与 YBN 语义分开处理；字库映射复用公共 JIS 流程。
 
-## v482 工作流
+## v482/v488 工作流
 
 | 层 | 实现与范围 |
 |---|---|
-| v482 YPF | [yuris_482.py](../python/archives/yuris_482.py)：索引、Murmur2 校验、有界解压、模板重封 |
-| v482 YBN | [yuris_text.py](../python/engines/yuris_text.py)：WORD、单字符串 EVAL、纯变量 EVAL 透传、姓名定义与选项、独立 manifest、追加式回填 |
+| YPF 482/487 | [yuris_482.py](../python/archives/yuris_482.py)：索引、Murmur2 校验、有界解压、模板重封（重建包沿用原版本字） |
+| YBN 482/488 | [yuris_text.py](../python/engines/yuris_text.py)：WORD、单字符串 EVAL、纯变量 EVAL 透传、姓名定义与选项、独立 manifest、追加式回填、分区密钥选择 |
+| 编译清单 | [yuris_names.py](../python/engines/yuris_names.py)：`yst_list.ybn`（YSTL）读取与 JSON 命名 |
 | 工作区 | [yuris_extract.py](../python/engines/yuris_extract.py)：`extract` / `rebuild` CLI |
 | 验证 | [test_yuris_482.py](../tests/test_yuris_482.py)、[来源记录](../provenance/yuris-482.json) |
 
 ### 必须区分的格式细节
 
-- YPF header 的版本为 `0x1E2`，名字 XOR key 为 `FF`，长度置换为 `SWAP_TABLE_00`。记录为 `u32 name_hash / u8 name_length / name / u8 type / u8 packed / u32 raw_size / u32 stored_size / u64 offset / u32 data_hash`。名字及压缩流校验均为 **Murmur2(seed=0)**，不是 CRC32/Adler32。
+- YPF header 的版本为 `0x1E2` 或 `0x1E7`（两者目录布局相同），名字 XOR key 为 `FF`，长度置换为 `SWAP_TABLE_00`。记录为 `u32 name_hash / u8 name_length / name / u8 type / u8 packed / u32 raw_size / u32 stored_size / u64 offset / u32 data_hash`。名字及压缩流校验均为 **Murmur2(seed=0)**，不是 CRC32/Adler32。
 - **不要用通用 reader 的 `extra_header_size=4` 假装支持该布局**：那会把 offset 的高四字节误读成 checksum，把真正的 checksum 当 extra。v482 使用独立 reader，并逐成员核对两种 Murmur2。
 - 原归档索引顺序与物理存放顺序不同。writer 按原物理顺序重建，保留名字字段、目录顺序、间隙及尾部不透明数据，更新存储长度、原长度、64 位偏移、Murmur2。未改成员保留原压缩流；重压缩不作为原文往返的必要条件。
-- `ysc.ybn` 版本同为 482，命令数以头部声明为准。命令表后还有诊断 cstring 和最后 **256 字节不透明表**，不是损坏的尾部；`read_command_list(..., allow_message_tail=True)` 仅在此版本验证该布局。整个 YSCM 保持原字节，尾部不交给翻译器。
-- YSTB 分区 XOR key 为 `0x96AC6FD3`（小端字节 `D3 6F AC 96`）。这是当前 profile 的参数；其他输入须以完整命令、分区和属性结构确认，不能仅靠 XOR 自反性判断 key。
+- `ysc.ybn` 版本与场景相同（482 或 488），命令数以头部声明为准。命令表后还有诊断 cstring 和最后 **256 字节不透明表**，不是损坏的尾部；`read_command_list(..., allow_message_tail=True)` 仅在此版本验证该布局。整个 YSCM 保持原字节，尾部不交给翻译器。
+- YSTB 分区 XOR key 常见为 `0x96AC6FD3`（小端字节 `D3 6F AC 96`），但不是固定值，见下节。
+
+### 分区密钥选择
+
+- 每个分区都从密钥第 0 字节重新起算，而编译出的场景中第一个属性描述符的值偏移必为 0，所以密文描述符区偏移 `+8` 的 u32 就是密钥候选。
+- 提取器收集所有含描述符的可回填场景给出的候选（须全部一致），连同默认值一起，对每个候选做完整 `Scenario` 解析（命令码、描述符范围、流程目标、描述符消费）。只有能解析过半成员且严格多于其他候选的那个被采用；报告 `key_selection` 记录来源（`derived-first-descriptor`、`profile-default`、`explicit`）与解析成功数。
+- 候选不一致或都解析不过半时拒绝，提示用 `--key 0x…` 显式指定；显式密钥一个成员都解析不了时同样拒绝。不以 XOR 自反性或“能读出日文”判断密钥。
+
+### 原剧本名（YSTL）
+
+- `ysbin/yst_list.ybn`（魔数 `YSTL`，版本 482/488）是编译清单：头部 `YSTL / u32 版本 / u32 条数`，每条 `u32 序号 / u32 路径长度 / CP932 源路径 / 20 字节不透明数据`。序号须从 0 连续递增，记录须恰好用完文件；其他版本或布局拒绝读取（报告 `script_list` 写明原因），此时退回 `yst00012` 式内部名。
+- `yst<序号>.ybn` 的 JSON 取对应源路径的文件名（去扩展名）；不同目录下同名时追加 `__yst<序号>` 区分。逐成员的 `original_path` 与 `naming`（`original` / `original+sequence-suffix` / `internal`）写入报告，`rebuild` 按报告中的 JSON 名匹配译文。
+- 建议先试的 JSON 取编译序号最小、含对白的场景；姓名定义表不作首选。这只是编译顺序，不保证是开场。
 - 属性 ID 不是唯一键：LET、声明和流程控制重复使用 ID 0，类型高字节也有标志。IF/ELSE/LOOP 后续 type=0 的描述符是**指令目标和池位置**，不能把它当长度、偏移的字符串。这会制造“越界”假象，更不能用它去切分全文。
 - 原值区有共享和子串重叠。writer **保留原值区全部字节**，每个修改过的文本属性单独追加新值，只更新该描述符的长度/偏移和值区总长。指令、其他属性、流程目标和行号不变，避免移动整个字符串池后破坏未知表达式引用。重新解析检查全部目标文本及所有非目标属性。
 
@@ -54,17 +67,20 @@ python -m python.engines.yuris_extract extract "<游戏目录>" "<输出目录>"
 在技能根目录运行；`<…>` 均为占位，按实际游戏替换。`<输出目录>` 应是游戏内新建的 `<游戏名>_extract`，可复用已存在的目录（不含同名产物或非空结果目录），父目录须已存在；已有产物不能覆盖。
 
 ```text
-python -m python.engines.yuris_extract extract "<游戏目录>" "<输出目录>" --archive <剧本包相对路径>.ypf [--loose <原始松散YBN目录>] [--reference-archive <其他包相对路径>.ypf] --smoke-test
+python -m python.engines.yuris_extract extract "<游戏目录>" "<输出目录>" --archive <剧本包相对路径>.ypf [--loose <原始松散YBN目录>] [--reference-archive <其他包相对路径>.ypf] --verify-edits
 ```
 
-- `--archive`：游戏目录内的 v482 剧本包，作为重封模板；其成员集合与 YSCM 决定回填范围。
+- `--archive`：游戏目录内的剧本包（YPF 482/487），作为重封模板；其成员集合与 YSCM 决定回填范围。
 - `--loose`（可选）：与模板成员一一对应的**原始**松散 YBN 目录。省略时直接以 `--archive` 包内成员为文本基准（报告 `selected_baseline` 为 `template-archive-members`），成员须全部位于 `ysc.ybn` 所在目录。
 - **基准必须是未改动的原始脚本。** 游戏目录中的松散 `ysbin/` 或更新包可能已被汉化补丁、旧回填或其他工具覆盖；不能确认来源时不要传 `--loose`，改用原始包成员。`--reference-archive` 同样只用于对照原始包，不能把补丁产物当参考来源；报告的 `different_from_loose` 只说明差异，不判断哪一侧是原版。
+- 更新包（如 `update*.ypf`）若带着整套或部分 `ysbin` 成员，先用 `--reference-archive` 对照：报告 `different_from_loose` 列出与基准不同的成员。这些差异可能是官方修正，也可能是补丁覆盖；加载优先级未经验证，选哪个包作 `--archive` 须结合来源判断，并在交付中说明另一包中不同成员的情况。
+- `--verify-edits`（旧名 `--smoke-test`）额外改写一条对白，经 writer 回写、重封并重新提取核对。`--key 0x…` 只在自动选择失败且有独立证据时使用。
 - 不自动猜测加载优先级、合并冲突文件或回溯扫描旧提取目录。
+- CLI 出错时只打印一行 `error: …` 并以退出码 2 结束；标准输出含 `delivery`，同时写出 `reports/translation-state.md`，交付表直接取自它。报告的 `loose` 是基准脚本所在目录（未传 `--loose` 时即模板包内目录），`loose_option_given` 说明是否显式传入。
 
 逐成员处理：某个场景解析或往返失败时只阻断该成员，记录为 `blocked`（含成员名与原因），不生成 JSON，在所有重建包中按原字节保留；其余成员照常导出。存在阻断成员时报告 `status` 为 `partial`、CLI 以非零码退出，须先研究报告 `blocked` 列表中的原因再声称完整提取。
 
-- `gt_input/`：按场景名生成平铺 JSON，无目标文字的场景和配套文件不产生空 JSON。
+- `gt_input/`：按原剧本名（见上文 YSTL）生成平铺 JSON，无目标文字的场景和配套文件不产生空 JSON。
 - `gt_output/`：接收同名、同顺序译文；测试译文只放 `reports/smoke-translation/`，不混入这里。
 - `original/game/`：原始包、完整基准 YBN 和 YSCM；`metadata/` 保存重新解析可核对的描述符身份及哈希。
 - `rebuilt/roundtrip/`：场景经 parser/writer、原归档经容器 writer 重建后的原文往返结果，配套文件保留。
