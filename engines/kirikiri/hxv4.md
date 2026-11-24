@@ -39,13 +39,17 @@ python -m python.engines.kirikiri_hxv4_text extract "游戏/scn.xp3" "新的提�
 python -m python.engines.kirikiri_hxv4_text pack "提取目录" "新的打包目录"
 ```
 
-默认目录候选为根目录、`scn/`、`scenario/`；其他目录用 `--paths` 明确提供。`--language-index` 选择已有语言槽。当前文本入口只处理直接 PSB 的已知 SCN 方言，不自动把 MDF、TJS 或图像 PSB 当作对白。
+默认目录候选为根目录、`scn/`、`scenario/`；其他目录用 `--paths` 明确提供。`--language-index` 选择已有语言槽。文本入口处理直接 PSB 或 **MDF 外壳**（`mdf\0` + u32 LE 解压长度 + 单个 zlib 流）内的已知 SCN 方言；TJS、图像 PSB 和其他外壳不当作对白。
+
+- MDF 严格解包：声明长度不符、截断或尾随字节记为 `unsupported-mdf` 诊断。外壳类型按脚本记入 `reports/hxv4.json` 的 `wrappers`，`pack` 从源包重新核对；未修改的脚本沿用原始外壳字节，修改后的脚本重新压缩（压缩字节不保证与原包一致），写出后解包复核明文。
+- SCN 内部的 `name` 不能哈希到存储名、或目录哈希不在 `--paths` 候选中时，该脚本记为 `scn-name-unresolved` 诊断，其余脚本照常导出，`scan_complete=false`；不按内部名猜存储名。需要补齐时先用名称恢复流程找到真实存储名或目录。
+- 所选包没有可识别的 SCN 时，报错列出索引条目、未映射数、已解密数和解密后头部统计（`50534200` 为 PSB，`mdf>` 前缀表示 MDF 内部），据此判断是否选错归档。
 
 姓名回注默认开启：显式显示名为 null 时允许改写字符串说话者 `who`。内部 ID 方言或需要保持共享说话者不变的多语言脚本使用 `--no-speaker-name`；旧目录沿用提取时的策略，启用新默认需重新提取。详细规则见[姓名策略](../kirikiri.md#说话者字段作为显示名)。
 
 正文定位与回写沿用[统一 SCN 入口](../kirikiri.md#文本定位与回写规则)：已知方言按严格规则回写，未知形状自动退回类型化前缀定位，未验证的派生字段与不可写行在报告中单列。Hx 静态密钥、认证、名称核验和预算检查照常执行。
 
-单资源上限 32 MiB，超限成员在解密前跳过；累计实际读取/解密资源超过 384 MiB 时停止。**大文件不一定是媒体**：有超限、未映射成员或无法解析的 PSB 时，`scan_complete=false`，必须交代未检查范围，不能声称全剧情提取完整。诊断和预算在 `reports/hxv4.json`，回填报告沿用 `source_scan_complete`。
+单资源上限 32 MiB，超限成员在解密前跳过；累计实际读取/解密资源超过 384 MiB 时停止，报错给出已读成员数与已找到的 SCN 数。SCN 与大量媒体混装在同一包时，先确认没有单独的剧本包，再用 `--max-scan-mib`（32–2048）放宽累计预算。**大文件不一定是媒体**：有超限、未映射成员或无法解析的 PSB 时，`scan_complete=false`，必须交代未检查范围，不能声称全剧情提取完整。诊断和预算在 `reports/hxv4.json`，回填报告沿用 `source_scan_complete`。
 
 | 结果位置 | 用途 |
 |---|---|

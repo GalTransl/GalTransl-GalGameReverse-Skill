@@ -6,6 +6,7 @@
 
 ```text
 python -m python.engines.kirikiri_kag_extract extract "游戏目录" "新的提取目录" --archives data.bin arc/extra.xp3 --members "scenario/*.ks" "01*.ks" --filter-spec "过滤器.json"
+python -m python.engines.kirikiri_kag_extract extract "游戏目录" "新的提取目录" --archives data.xp3 --members "scenario/*.ks" --exclude-members "scenario/test*.ks" --inline-tags 已确认的标签 --filter-spec "过滤器.json"
 ```
 
 入口：[kirikiri_kag_extract.py](../../python/engines/kirikiri_kag_extract.py)；语义层：[kirikiri_kag_text.py](../../python/engines/kirikiri_kag_text.py)。仅用于符合下述宏语义的 KAG 文本，PSB/SCN 走 [引擎页](../kirikiri.md) 的对应入口。
@@ -22,6 +23,15 @@ python -m python.engines.kirikiri_kag_extract extract "游戏目录" "新的提�
 | 非目标内容 | 命令行、标签、脚本块、宏定义和注释不导出；对白注释按原物理行插回 |
 
 先核对宏定义，同名宏不保证同义。动态属性和未知行内语法拒绝；系统 UI、动态生成文本及其他方言需单独适配。
+
+### 额外行内标签（`--inline-tags`）
+
+正文里出现内置集合之外的行内标签时（报错 `unverified inline KAG command [名] (U+码位)`），先在宏定义、插件脚本或标签处理函数中确认它**只在原位插入/修饰文字**，不分页、不设姓名、不跳转。确认后用 `--inline-tags 名1 名2` 声明：该标签的原文拼写与 `[r]` 一样受保护，译文必须原样保留、不能增删或移动出控制码顺序。
+
+- 名称不能含空白、括号、引号、`=`、`@`、`*`、`;` 等语法字符，也不能是 `nm`、`np`、`exlink`、`macro`、`iscript`、`jump`、`if` 等结构命令；重复名拒绝。
+- 声明写入 `reports/extraction.json` 的 `inline_tags` 和每个 manifest 的 `settings`，`pack` 沿用；不能事后改报告增删标签，改动需重新提取。
+- 不知道标签作用时不要声明：会运行时展开成文字（如称呼替换）的标签可以保护，但会改变页面或姓名状态的必须扩展语义层。
+- `--exclude-members` 排除开发测试脚本等不属于正文、又不符合方言的成员；被排除的成员不进入工作区和补丁，报告只列实际选中的成员。
 
 ## 前置：先解包装层，再判断文件类型
 
@@ -60,6 +70,7 @@ KAG 的同名标签可能被宏重定义。沿启动脚本及 include 链查找�
 
 ```text
 python -m python.engines.kirikiri_kag_extract extract "游戏目录" "新的提取目录" --archives data.bin arc/extra.xp3 --members "scenario/*.ks" "01*.ks" --filter-spec "过滤器.json"
+python -m python.engines.kirikiri_kag_extract extract "游戏目录" "新的提取目录" --archives data.xp3 --members "scenario/*.ks" --exclude-members "scenario/test*.ks" --inline-tags 已确认的标签 --filter-spec "过滤器.json"
 python -m python.engines.kirikiri_kag_extract pack "提取目录" "新的补丁目录"
 python -m python.engines.kirikiri_kag_extract pack "提取目录" "新的验证目录" --no-patch
 ```

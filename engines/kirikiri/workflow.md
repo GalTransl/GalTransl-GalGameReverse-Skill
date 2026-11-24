@@ -15,6 +15,8 @@ python -m python.engines.kirikiri_extract extract "游戏目录" "新的提取�
 | 现象 | 下一步 |
 |---|---|
 | XP3 索引无法解析 | 检查索引版本、跳转块、名称表和段范围 |
+| `SCN selection empty` | 按报错改选列出的含 `.scn` 归档；只有 `.ks` 时转 KAG 入口；Hxv4 包转 `kirikiri_hxv4_text` |
+| 成员带 `0x80000000` 且校验失败 | 用探测的 `--try-filters` / `--recover-akabei-png` 找候选，核对后传 `--filter-spec`；都不通过则报告为未支持的加密 |
 | 索引可读，正文 Adler-32 不符 | 检查过滤器、参数、成员偏移与解压顺序 |
 | 校验通过，PSB/KAG 解析失败 | 研究内层封装或脚本方言，不继续盲换密钥；类型化定位不能绕过容器或 PSB 解析失败 |
 | SCN 正文位置明确，writer 布局/缓存校验失败 | 记录仍会导出，未验证的派生字段保留原字节并记入 `opaque`；回填前先补齐字段与派生规则，不据 `opaque`/`non_writable` 记录宣称完整支持 |
@@ -31,11 +33,13 @@ python -m python.engines.kirikiri_extract extract "游戏目录" "新的提取�
 
 ```text
 python -m python.engines.kirikiri_probe "游戏/data.xp3" --members "scenario/*.ks"
+python -m python.engines.kirikiri_probe "游戏/data.xp3" --members "scenario/*.ks" --try-filters --summary
 python -m python.engines.kirikiri_probe "游戏/data.xp3" --members "scenario/*.ks" --recover-akabei-png
 python -m python.engines.kirikiri_probe "游戏/data.xp3" --members "scenario/*.ks" --filter-spec "filter.json" --verify-repack
 ```
 
-- 默认最多检查 512 个成员、64 MiB 明文。超限时缩小成员范围，不无界载入媒体包。
+- 默认最多检查 512 个成员、64 MiB 明文。超限时缩小成员范围，不无界载入媒体包。`error_counts` 汇总相同错误；`--summary` 省略逐成员列表。
+- `--try-filters` 只在带加密标志的已选成员中取最多 8 个（各不超过 8 MiB），逐个试验已注册的无参数过滤器（`hash`、`haikuo`、`exa`、`yuzu`）；明文 Adler-32 与内层格式（PSB/KAG/BOM 文本/PNG/TJS）都通过、且至少两个不同明文成立才标 `candidate`。带参数的 `xor`/`stripe`/`akabei` 需要各自的已知明文证据，不做穷举。
 - `--recover-akabei-png` 最多取 8 个、各不超过 8 MiB 的 PNG，以完整 Adler-32 和 PNG CRC 验证种子；至少两个不同明文哈希通过才报告候选。候选不会自动启用，核对后写入过滤器配置。
 - `--verify-repack` 重建内存归档并逐成员读回，只验证容器/过滤器，不验证对白回填或游戏加载。
 - 配置只含算法名和参数，例如 `{"algorithm":"akabei","seed":798088789}`；示例 seed 不能直接用于其他归档。
@@ -47,7 +51,7 @@ python -m python.engines.kirikiri_extract extract "游戏目录" "新的提取�
 python -m python.engines.kirikiri_extract pack "提取目录" "新的补丁目录"
 ```
 
-一次调用使用同一配置，回填沿用报告中的配置。独立过滤器 writer 输出标准 File 索引；eliF 输入使用它时需明确 `--output-format plain`。`senren-cx` 适配器不能再叠加独立过滤器；Hxv4 走 [专用流程](hxv4.md)。
+一次调用使用同一配置，回填沿用报告中的配置。标准索引输入由独立过滤器 writer 输出标准 File 索引；eliF/Yuzu 名称映射输入默认保留映射块与 MD5 别名并用同一 spec 加密，只有确认加载器接受标准索引时才用 `--output-format plain`。`senren-cx` 适配器不能再叠加独立过滤器；Hxv4 走 [专用流程](hxv4.md)。
 
 ## SCN 常见语义差异
 

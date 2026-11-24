@@ -1,13 +1,18 @@
 """Kirikiri XP3 capability dispatch, independent of game directory names.
 
-Supports standard/eliF plaintext and the verified sen: Cx profile. Adding a
-filter belongs here or in a leaf adapter, not in another game's batch script.
+Supports standard/eliF/Yuzu-mapped indexes with plaintext or registered byte
+filters and the verified sen: Cx profile. Adding a filter belongs here or in a
+leaf adapter, not in another game's batch script.
 """
 import struct
 from . import xp3, kirikiri_elif, kirikiri_senren, kirikiri_filtered
 from .kirikiri_filters import validate
 
-FORMATS = ('plain', 'elif-plain', 'senren-cx')
+FORMATS = ('plain', 'elif-plain', 'yuzu-names', 'senren-cx')
+# Indexes that keep md5 aliases in File/info and real names in a mapping chunk.
+MAPPED = {'elif-plain': b'eliF', 'yuzu-names': b'Yuzu'}
+# Profiles whose payload filter is a separate, explicitly configured spec.
+FILTERABLE = ('plain',) + tuple(MAPPED)
 
 
 def detect(stream):
@@ -31,25 +36,32 @@ def detect(stream):
     if tags=={b'File',b'Hxv4'}:return 'hxv4'
     if tags=={b'File',b'sen:'}:return 'senren-cx'
     if tags=={b'File',b'eliF'}:return 'elif-plain'
+    if tags=={b'File',b'Yuzu'}:return 'yuzu-names'
     if tags=={b'File'}:return 'plain'
-    raise ValueError(f'unsupported XP3 metadata/filter tags: {tags!r}')
+    raise ValueError(f'unsupported XP3 metadata/filter tags: {sorted(tags)!r}; an unknown index chunk needs its '
+                     'layout and name/filter semantics established from evidence before an adapter is added')
+
+
+HXV4_HINT=('Hxv4 requires static key/identity context: run python -m python.engines.kirikiri_hxv4_text extract '
+           '"<this archive>" "<new output dir>" --exe "<game exe>" for supported PSB SCN (usually scn.xp3), or '
+           'python.archives.kirikiri_hxv4_archive for resources')
 
 
 def read_index(stream, profile='auto'):
     detected=detect(stream)
-    if detected=='hxv4':raise ValueError('Hxv4 requires static key/identity context: use python.engines.kirikiri_hxv4_text for supported PSB SCN, or python.archives.kirikiri_hxv4_archive for resources')
+    if detected=='hxv4':raise ValueError(HXV4_HINT)
     if profile!='auto' and profile!=detected:raise ValueError('XP3 profile conflicts with index evidence')
-    module=kirikiri_senren if detected=='senren-cx' else kirikiri_elif
-    return detected,module.read_index(stream)
+    if detected=='senren-cx':return detected,kirikiri_senren.read_index(stream)
+    return detected,kirikiri_elif.read_index(stream,mapping_tag=MAPPED.get(detected,b'eliF'))
 
 
 def read_member(stream, entry, profile, filter_spec=None):
     if filter_spec is not None:
         validate(filter_spec)
-        if profile not in ('plain','elif-plain'):raise ValueError('explicit byte filter conflicts with specialized archive adapter')
+        if profile not in FILTERABLE:raise ValueError('explicit byte filter conflicts with specialized archive adapter')
         return kirikiri_filtered.read_member(stream,entry,filter_spec)
     if profile=='senren-cx':return kirikiri_senren.read_member(stream,entry,kirikiri_senren.default_cipher())
-    if profile in ('plain','elif-plain'):
+    if profile in FILTERABLE:
         # Caller must also parse the selected member as PSB. Any actual cipher
         # causes the mandatory plaintext checksum or inner-format check to fail.
         return kirikiri_elif.read_member(stream,entry,marked_plaintext=True)
@@ -57,11 +69,11 @@ def read_member(stream, entry, profile, filter_spec=None):
 
 
 def build(files, profile, filter_spec=None):
+    if profile in MAPPED:return kirikiri_elif.build(files,mapping_tag=MAPPED[profile],filter_spec=filter_spec)
     if filter_spec is not None:
         validate(filter_spec)
-        if profile!='plain':raise ValueError('explicit filter writer requires standard File index output')
+        if profile!='plain':raise ValueError('explicit filter writer requires a standard or name-mapped File index output')
         return kirikiri_filtered.build(files,filter_spec)
     if profile=='senren-cx':return kirikiri_senren.build(files,kirikiri_senren.default_cipher())
-    if profile=='elif-plain':return kirikiri_elif.build(files)
     if profile=='plain':return xp3.build(files,filter_name='none',compress_contents=True)
     raise ValueError('unsupported XP3 writer profile')

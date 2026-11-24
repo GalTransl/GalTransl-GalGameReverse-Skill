@@ -12,6 +12,26 @@ PROFILE = 'kag-alter-nm-np/1'
 # Verified non-text inline commands. Their entire literal spelling is protected.
 INLINE = frozenset(('r', 'se', 'resetwait', 'bg', 'wait', 'fose', 'eff_all_delete',
     'q_small', 'extrans', 'dse', 'echr', 'font', 'resetfont', 'wse', 'sse', 'ev', 'eff'))
+# Commands that carry page/name/choice/macro structure; never configurable inline.
+STRUCTURAL = frozenset(('nm', 'np', 'exlink', 'macro', 'endmacro', 'iscript', 'endscript',
+    'if', 'elsif', 'else', 'endif', 'ignore', 'endignore', 'jump', 'call', 'return', 's', 'link', 'endlink'))
+
+
+def inline_tags(extra=()):
+    """Validated set of extra protected inline tags (explicit dialect config).
+
+    Each name must be confirmed from macro/plugin definitions to be an inline
+    tag that does not end a page, set a name or branch; its literal spelling is
+    then protected like the built-in INLINE set.
+    """
+    if isinstance(extra,str):raise ValueError('inline tags must be a list of names')
+    names=tuple(extra)
+    for name in names:
+        if (type(name) is not str or not name or len(name)>32
+                or re.search(r'[\s\[\]=\'"@*;&%\\/]',name) or name in STRUCTURAL):
+            raise ValueError(f'invalid/structural extra inline KAG tag: {name!r}')
+    if len(set(names))!=len(names):raise ValueError('duplicate extra inline KAG tag')
+    return frozenset(names)
 
 
 def prose(body):
@@ -57,9 +77,9 @@ def restore_comments(old, new):
     return ''.join(out)
 
 
-def signature(message):
+def signature(message,extra=frozenset()):
     """Protect command bytes and ruby readings while allowing ruby base edits."""
-    result=[]
+    result=[];allowed=INLINE|extra
     for token in tokenize(message):
         if token.kind == 'text':
             if ']' in token.raw or '\\' in token.raw:
@@ -74,7 +94,10 @@ def signature(message):
                 result.append(('tag',token.raw))
             else:
                 name,_=attributes(token.raw)
-                if name not in INLINE: raise ValueError('unverified inline KAG command: '+name)
+                if name not in allowed:
+                    raise ValueError(f'unverified inline KAG command [{name}] (U+{" U+".join(f"{ord(c):04X}" for c in name)}): '
+                                     'confirm from its macro/plugin definition that it is an inline, non-paging tag, '
+                                     'then pass it with --inline-tags')
                 result.append(('tag',token.raw))
         else:
             raise ValueError('KAG dialogue contains command/label/comment/script boundary')
@@ -82,7 +105,8 @@ def signature(message):
     return result
 
 
-def parse(raw):
+def parse(raw,extra=()):
+    extra=inline_tags(extra)
     text,encoding,bom=decode(raw)
     if '\r' in text.replace('\r\n',''):raise ValueError('bare CR in KAG')
     records=[]; start=None; speaker=None; macro=False
@@ -94,7 +118,9 @@ def parse(raw):
         if a == 0 or token.raw[a-1] not in "\"'" or token.raw[b] != token.raw[a-1]:
             raise ValueError('KAG display attribute must be quoted')
         return attrs[key]['value'],[token.start+a,token.start+b]
-    for token in tokenize(text):
+    token=None
+    try:
+      for token in tokenize(text):
         if token.kind == 'script':continue
         if token.kind in ('command','tag'):
             cmd=re.match(r'\s*[@\[]([\w!]+)',token.raw)
@@ -116,7 +142,7 @@ def parse(raw):
                 continue
             if command == 'np':
                 if token.raw != '[np]' or start is None:raise ValueError('KAG page terminator without dialogue')
-                value=prose(text[start:token.start]);signature(value)
+                value=prose(text[start:token.start]);signature(value,extra)
                 row={'name':speaker[0]} if speaker else {}
                 row['message']=value.replace('\r\n','\n')
                 records.append({'row':row,'message':[start,token.start],
@@ -134,16 +160,24 @@ def parse(raw):
         elif token.kind in ('label','command') and start is not None:
             raise ValueError('unterminated KAG page before '+token.kind)
         if token.kind == 'label' and speaker is not None:raise ValueError('speaker crosses label')
-    if macro or start is not None or speaker is not None:raise ValueError('incomplete KAG macro/page/name')
+      if macro or start is not None or speaker is not None:raise ValueError('incomplete KAG macro/page/name')
+    except ValueError as exc:
+        # Report the physical source line so the dialect mismatch can be inspected.
+        at=token.start if token is not None else 0
+        raise ValueError(f'line {text.count(chr(10),0,at)+1}: {exc}') from exc
     return text,encoding,bom,records
 
 
-def export_script(raw):
-    text,encoding,bom,recs=parse(raw);rows=[r['row'] for r in recs]
+def export_script(raw,extra=()):
+    """Rows and manifest. `extra` lists explicitly configured inline tags; a
+    non-empty set is recorded in manifest settings so rebuild uses the same."""
+    extra=inline_tags(extra)
+    text,encoding,bom,recs=parse(raw,extra);rows=[r['row'] for r in recs]
     meta=make_manifest(engine='kirikiri',variant=PROFILE,reference='kirikiri_kag_text/1',
         sources={'script.ks':raw},rows=rows,encoding=encoding,
         locators=[{k:r[k] for k in ('message','name','kind')} for r in recs],
-        name_policies=['writable' if r['name'] else 'absent' for r in recs])
+        name_policies=['writable' if r['name'] else 'absent' for r in recs],
+        settings={'inline_tags':sorted(extra)} if extra else None)
     return rows,meta
 
 
@@ -156,15 +190,16 @@ def skeleton(text,recs):
     out.append(text[pos:]);return out
 
 
-def rebuild_script(raw,translated,manifest):
-    original,expected=export_script(raw)
+def rebuild_script(raw,translated,manifest,extra=()):
+    extra=inline_tags(extra)
+    original,expected=export_script(raw,extra)
     if manifest!=expected:raise ValueError('KAG manifest differs from source')
     translated=validate_translation(manifest,{'script.ks':raw},original,translated)
-    text,encoding,bom,recs=parse(raw);edits=[]
+    text,encoding,bom,recs=parse(raw,extra);edits=[]
     for rec,before,after in zip(recs,original,translated):
         a,b=rec['message'];value=after['message']
         if rec['kind']=='message':
-            if not drops_only_line_breaks(signature(before['message']),signature(value),
+            if not drops_only_line_breaks(signature(before['message'],extra),signature(value,extra),
                                           lambda item:item[0]=='newline'):
                 raise ValueError('KAG controls/ruby changed or line breaks added/moved')
             old=text[a:b]
@@ -181,7 +216,7 @@ def rebuild_script(raw,translated,manifest):
             edits.append((*rec['name'],value))
     out=text
     for a,b,value in sorted(edits,reverse=True):out=out[:a]+value+out[b:]
-    rebuilt=bom+out.encode(encoding,'strict');new,_,_,check=parse(rebuilt)
+    rebuilt=bom+out.encode(encoding,'strict');new,_,_,check=parse(rebuilt,extra)
     if [r['row'] for r in check]!=translated or skeleton(text,recs)!=skeleton(new,check):
         raise ValueError('KAG reparse or non-text structure mismatch')
     return rebuilt

@@ -12,35 +12,41 @@ from python.archives import kirikiri_xp3 as xp3
 from python.common.contract import dump_rows, load_json, sha256
 from python.common.safety import Limits, validate_names, write_new_tree, validate_new_tree_destination
 from .kirikiri_extract import read_file, js, verify_archive, build_patch, PATCH_FILTERS
-from .kirikiri_kag_text import PROFILE, export_script, rebuild_script
+from .kirikiri_kag_text import PROFILE, export_script, rebuild_script, inline_tags as kag_inline_tags
 
 
-def extract(game,output,*,archives,patterns=('scenario/*.ks',),filter_spec=None):
+def extract(game,output,*,archives,patterns=('scenario/*.ks',),filter_spec=None,inline_tags=(),exclude=()):
+    """inline_tags: extra protected inline tags confirmed from macro/plugin
+    definitions (recorded in the report and reused by pack). exclude: member
+    patterns removed from the selection, e.g. developer test scripts."""
     game,output=Path(game),Path(output)
     validate_new_tree_destination(output)
     if filter_spec is not None:filter_spec=xp3.validate(filter_spec)
+    extra=sorted(kag_inline_tags(inline_tags))
     names=validate_names(list(archives)); selected={}; sources=[];total=0
     for name in names:
         with (game/name).open('rb') as f:
             profile,entries=xp3.read_index(f)
             for entry in entries:
                 if not any(fnmatch.fnmatchcase(entry.name,pattern) for pattern in patterns):continue
-                if not entry.name.lower().endswith('.ks'):raise ValueError('KAG selection includes non-KS member')
+                if any(fnmatch.fnmatchcase(entry.name,pattern) for pattern in exclude):continue
+                if not entry.name.lower().endswith('.ks'):raise ValueError(f'KAG selection includes non-KS member {entry.name}')
                 total+=entry.size
                 if total>128<<20:raise ValueError('KAG selection exceeds budget')
-                if entry.name in selected:raise ValueError('ambiguous archive overlay; select explicitly')
-                selected[entry.name]=(name,xp3.read_member(f,entry,profile,filter_spec))
+                if entry.name in selected:raise ValueError(f'ambiguous archive overlay for {entry.name}; select explicitly')
+                try:selected[entry.name]=(name,xp3.read_member(f,entry,profile,filter_spec))
+                except ValueError as exc:raise ValueError(f'{name}:{entry.name}: {exc}') from exc
             f.seek(0);sources.append({'name':name,'sha256':hashlib.file_digest(f,'sha256').hexdigest()})
     validate_names(list(selected))
     flats=validate_names([Path(n).stem+'.json' for n in selected])
-    if not selected:raise ValueError('no selected KAG scripts')
+    if not selected:raise ValueError(f'no selected KAG scripts: no member of {", ".join(names)} matches --members {" ".join(patterns)}')
     payloads=[('gt_output/.keep',b'')];exports=[];originals=[];smokes=[];counts={'files':0,'rows':0,'choices':0,'named':0}
     for (name,(archive,raw)),flat in zip(selected.items(),flats):
         try:
-            rows,meta=export_script(raw)
-            if rebuild_script(raw,rows,meta)!=raw:raise ValueError('KAG original roundtrip differs')
+            rows,meta=export_script(raw,extra)
+            if rebuild_script(raw,rows,meta,extra)!=raw:raise ValueError('KAG original roundtrip differs')
             changed=[dict(r,message='验证'+r['message']) for r in rows]
-            smoke=rebuild_script(raw,changed,meta)
+            smoke=rebuild_script(raw,changed,meta,extra)
         except ValueError as exc:raise ValueError(f'{archive}:{name}: {exc}') from exc
         payloads.append(('original/'+name,raw));originals.append((name,raw));smokes.append((name,smoke))
         exports.append({'member':name,'archive':archive,'json':flat if rows else None,'rows':len(rows),'sha256':sha256(raw)})
@@ -55,6 +61,7 @@ def extract(game,output,*,archives,patterns=('scenario/*.ks',),filter_spec=None)
         payloads.append(('rebuilt/'+stage+'/scenario.xp3',packed))
         reports[stage]={'sha256':sha256(packed),'bytes':len(packed),'all_members_readback_equal':True}
     report={'profile':PROFILE,'archives':sources,'filter_spec':filter_spec,'exports':exports,'counts':counts,
+            **({'inline_tags':extra} if extra else {}),
             'validation':reports,'original_scripts_byte_identical':True,'runtime_verified':False,
             'scope':'Only selected KAG scenario scripts. System macros/UI and preexisting loose translations are excluded.',
             'deployment':'Script-only archives; original full archives must not be replaced with these. Patch mounting/priority needs runtime verification.'}
@@ -71,6 +78,7 @@ def pack(workspace,output,*,incremental=True,patch_filter='same'):
     if type(incremental) is not bool or patch_filter not in PATCH_FILTERS:raise ValueError('invalid patch options')
     report=load_json(read_file(workspace/'reports/extraction.json'))
     if report['profile']!=PROFILE:raise ValueError('unsupported KAG workspace')
+    extra=sorted(kag_inline_tags(report.get('inline_tags',[])))
     exports=report['exports'];expected={e['json'] for e in exports if e['json']}
     validate_names([e['member'] for e in exports]);validate_names(list(expected))
     for folder in ('gt_input','metadata'):
@@ -80,14 +88,14 @@ def pack(workspace,output,*,incremental=True,patch_filter='same'):
     for e in exports:
         raw=read_file(workspace/'original'/e['member']);total+=len(raw)
         if total>128<<20 or sha256(raw)!=e['sha256']:raise ValueError('KAG source budget/hash mismatch')
-        rows,meta=export_script(raw);rewritten=raw
+        rows,meta=export_script(raw,extra);rewritten=raw
         if rows:
             name=e['json']
             if load_json(read_file(workspace/'gt_input'/name))!=rows or load_json(read_file(workspace/'metadata'/name))!=meta:
                 raise ValueError('KAG original JSON/manifest changed')
             path=workspace/'gt_output'/name
             after=load_json(read_file(path)) if path.exists() else rows
-            rewritten=rebuild_script(raw,after,meta)
+            rewritten=rebuild_script(raw,after,meta,extra)
         elif e['json'] is not None:raise ValueError('empty KAG source mapping changed')
         if rewritten!=raw:changed.append((e['member'],rewritten))
         files.append((e['member'],rewritten))
@@ -115,6 +123,9 @@ def main():
     ex=sub.add_parser('extract');ex.add_argument('game');ex.add_argument('output')
     ex.add_argument('--archives',nargs='+',required=True);ex.add_argument('--members',nargs='+',default=['scenario/*.ks'])
     ex.add_argument('--filter-spec',type=Path)
+    ex.add_argument('--inline-tags',nargs='+',default=[],
+                    help='extra inline tags confirmed from macro/plugin definitions; spelling is protected like [r]')
+    ex.add_argument('--exclude-members',nargs='+',default=[],help='member patterns to drop from the selection')
     pk=sub.add_parser('pack');pk.add_argument('workspace');pk.add_argument('output')
     pk.add_argument('--patch',action=argparse.BooleanOptionalAction,default=True,
                     help='default: flat patch.xp3 with changed scripts only; --no-patch writes the full verification scenario.xp3')
@@ -124,7 +135,8 @@ def main():
     a=parser.parse_args()
     if a.command=='extract':
         result=extract(a.game,a.output,archives=a.archives,patterns=a.members,
-                       filter_spec=load_json(read_file(a.filter_spec)) if a.filter_spec else None)
+                       filter_spec=load_json(read_file(a.filter_spec)) if a.filter_spec else None,
+                       inline_tags=a.inline_tags,exclude=a.exclude_members)
         print(js(result['counts']).decode('utf-8'))
     else:
         if a.flat and not a.patch:parser.error('--flat conflicts with --no-patch')

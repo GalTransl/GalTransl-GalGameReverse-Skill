@@ -76,8 +76,34 @@ def recover_akabei(stream,entries):
             for seed,names in evidence.items() if len(names)>=2]
 
 
+PARAMETERLESS_FILTERS=('hash','haikuo','exa','yuzu')
+
+
+def try_filters(stream,entries,*,max_members=8,max_size=8<<20):
+    """Test registered parameterless filters on flagged members.
+
+    A candidate needs the full plaintext Adler-32 and a bounded inner-format
+    classification (PSB/KAG/BOM text/PNG/TJS) on >=2 members with distinct
+    plaintext. Reports only; nothing is adopted automatically. Parameterized
+    filters (xor/stripe/akabei) need their own known-plaintext evidence.
+    """
+    sample=[e for e in entries if e.flags and 16<=e.size<=max_size][:max_members]
+    results=[]
+    for algorithm in PARAMETERLESS_FILTERS:
+        spec={'algorithm':algorithm};passed={};failed=0
+        for entry in sample:
+            try:
+                plain=xp3.read_member(stream,entry,'plain',spec);classify(plain)
+                passed.setdefault(hashlib.sha256(plain).hexdigest(),entry.name)
+            except (ValueError,UnicodeError,zlib.error):failed+=1
+        results.append({'filter_spec':spec,'verified_members':list(passed.values()),'failed_members':failed,
+                        'candidate':len(passed)>=2})
+    return {'sampled_members':[e.name for e in sample],'results':results,
+            'note':'candidates are evidence, not configuration: confirm on the whole selection before use'}
+
+
 def probe(archive, *, patterns=('*.scn','*.ks'), filter_spec=None, recover=False,
-          verify_repack=False, max_members=512, max_total=64<<20):
+          verify_repack=False, max_members=512, max_total=64<<20, filters=False):
     if filter_spec is not None:filter_spec=xp3.validate(filter_spec)
     with Path(archive).open('rb') as stream:
         profile,entries=xp3.read_index(stream)
@@ -87,8 +113,11 @@ def probe(archive, *, patterns=('*.scn','*.ks'), filter_spec=None, recover=False
                 'index_is_not_filter_evidence':True,'entries':len(entries),'selected':len(selected),
                 'filter_spec':filter_spec,'members':[]}
         if recover:
-            if profile!='plain':raise ValueError('Akabei recovery currently requires standard File index')
+            if profile not in xp3.FILTERABLE:raise ValueError('Akabei recovery requires a standard or name-mapped File index')
             report['candidates']=recover_akabei(stream,entries)
+        if filters:
+            if profile not in xp3.FILTERABLE:raise ValueError('filter trial needs a standard or name-mapped File index')
+            report['filter_trial']=try_filters(stream,selected)
         files=[]
         for entry in selected:
             item={'name':entry.name,'size':entry.size,'flags':entry.flags}
@@ -101,6 +130,7 @@ def probe(archive, *, patterns=('*.scn','*.ks'), filter_spec=None, recover=False
             except (ValueError,zlib.error) as ex:item['error']=str(ex)
             report['members'].append(item)
         report['checksum_passed']=len(files)
+        report['error_counts']=dict(Counter(m['error'] for m in report['members'] if 'error' in m))
         if verify_repack:
             if not files or len(files)!=len(selected):raise ValueError('cannot repack incomplete selection')
             packed=xp3.build(files,profile,filter_spec);test=io.BytesIO(packed);detected,rebuilt=xp3.read_index(test,profile)
@@ -118,12 +148,17 @@ def main():
     parser.add_argument('archive',type=Path);parser.add_argument('--members',nargs='+',default=['*.scn','*.ks'])
     parser.add_argument('--filter-spec',type=Path);parser.add_argument('--recover-akabei-png',action='store_true')
     parser.add_argument('--verify-repack',action='store_true')
+    parser.add_argument('--try-filters',action='store_true',
+                        help='test registered parameterless filters on flagged selected members (evidence only)')
+    parser.add_argument('--summary',action='store_true',help='omit the per-member list; keep counts and candidates')
     args=parser.parse_args()
     spec=None
     if args.filter_spec:
         if args.filter_spec.stat().st_size>4096:raise ValueError('filter spec budget')
         spec=json.loads(args.filter_spec.read_text(encoding='utf-8'))
-    result=probe(args.archive,patterns=args.members,filter_spec=spec,recover=args.recover_akabei_png,verify_repack=args.verify_repack)
+    result=probe(args.archive,patterns=args.members,filter_spec=spec,recover=args.recover_akabei_png,
+                 verify_repack=args.verify_repack,filters=args.try_filters)
+    if args.summary:result['members']=f'{len(result["members"])} omitted by --summary'
     print(json.dumps(result,ensure_ascii=True,indent=2))
 
 

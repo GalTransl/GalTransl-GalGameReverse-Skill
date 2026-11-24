@@ -117,6 +117,50 @@ def name_scan_archives(game,selected):
     return extra[:MAX_NAME_SCAN_ARCHIVES],extra[MAX_NAME_SCAN_ARCHIVES:]
 
 
+def _extension_counts(names):
+    counts=Counter()
+    for name in names:
+        base=name.replace('\\','/').rsplit('/',1)[-1].lower()
+        for ext in ('.scn','.ks','.tjs','.psb'):
+            if base.endswith(ext):counts[ext]+=1
+    return counts
+
+
+def empty_selection_hint(game,selected,member_names):
+    """Explain an empty SCN selection from index evidence only (no payload reads).
+
+    Lists script-like member counts of the selected archives, sibling top-level
+    archives whose index holds .scn members, and sibling indexes this adapter
+    cannot read (e.g. Hxv4), so the caller can pick the right entry point.
+    """
+    counts=_extension_counts(member_names)
+    found=' '.join(f'{ext} {n}' for ext,n in sorted(counts.items())) or 'no .scn/.ks/.tjs/.psb'
+    parts=[f'no .scn members in {", ".join(selected)} (index lists {found})']
+    extra,_=name_scan_archives(game,set(selected));with_scn=[];unreadable=[]
+    for archive in extra:
+        try:
+            with regular(Path(game)/archive).open('rb') as stream:profile,entries=xp3.read_index(stream)
+        except (ValueError,OSError) as exc:
+            unreadable.append(f'{archive} ({str(exc).split(":",1)[0][:60]})');continue
+        scn=_extension_counts(e.name for e in entries)['.scn']
+        if scn:with_scn.append(f'{archive} ({scn} .scn, {profile})')
+    if with_scn:parts.append('sibling archives with .scn: '+', '.join(with_scn)+
+                             '; rerun with --archives naming them in load order (base first, patches later)')
+    if counts['.ks'] and not with_scn:parts.append('.ks members present: KAG text scripts use python -m python.engines.kirikiri_kag_extract '
+                                  '(engines/kirikiri/kag-text.md) after the dialect check; encrypted members need a verified --filter-spec')
+    if unreadable:parts.append('sibling archives not readable by this adapter: '+', '.join(unreadable[:8]))
+    if not with_scn and not counts['.ks']:parts.append('no supported script members found from index evidence; see engines/kirikiri.md')
+    return 'SCN selection empty: '+'; '.join(parts)
+
+
+def read_selected_member(stream,item,filter_spec):
+    """Read one selected member; failures name the archive, member and flags."""
+    e=item['entry']
+    try:return xp3.read_member(stream,e,item['profile'],filter_spec)
+    except ValueError as exc:
+        raise ValueError(f"{item['archive']}:{e.name} (flags {getattr(e,'flags',0):#x}): {exc}") from exc
+
+
 def flat_patch_members(changed,known):
     """Map changed (member, data) to root basenames; reject collisions, incl. case.
 
@@ -191,7 +235,9 @@ def extract(game,output,*,archives=('data.xp3',),overlay='path',archive_profile=
             sources.append(dict(name=archive,size=path.stat().st_size,sha256=h,profile=profile,
                                 archive_entries=len(entries),scn_entries=len(candidates),
                                 diagnostics=[dict(member=e.name,issue=e.issue) for e in entries if getattr(e,'issue',None)]))
-    if not selected or sum(x['entry'].size for x in selected.values())>256<<20:raise ValueError('SCN selection empty/exceeds budget')
+    if not selected:raise ValueError(empty_selection_hint(game,archive_names,member_names))
+    if sum(x['entry'].size for x in selected.values())>256<<20:
+        raise ValueError('SCN selection exceeds the 256 MiB budget: select fewer archives with --archives')
     if output_format=='same':
         if len(profiles)!=1:raise ValueError('mixed archive profiles: select --output-format explicitly')
         output_format=next(iter(profiles))
@@ -260,8 +306,11 @@ def _scan_scn(game,selected,speaker_name,language_index,filter_spec,verify_edits
     payloads=[];files=[];smokes=[];exports=[];non_target=[];totals=Counter();versions=Counter();who=set()
     for i,item in enumerate(selected.values()):
         e=item['entry'];name=item['slot']
-        with (game/item['archive']).open('rb') as stream:data=xp3.read_member(stream,e,item['profile'],filter_spec)
-        psb=Psb(data);versions[psb.version]+=1;root=psb.object(psb.root)
+        with (game/item['archive']).open('rb') as stream:data=read_selected_member(stream,item,filter_spec)
+        try:psb=Psb(data);root=psb.object(psb.root)
+        except ValueError as exc:
+            raise ValueError(f"{item['archive']}:{e.name}: not a supported PSB SCN (head {data[:8].hex()}): {exc}") from exc
+        versions[psb.version]+=1
         if 'scenes' not in root:
             if set(root)!={'list','map'}:raise ValueError(f'unclassified SCN root: {e.name}')
             payloads.append(('original/system/'+name,data))

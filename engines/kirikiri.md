@@ -7,6 +7,7 @@
 ```text
 python -m python.engines.kirikiri_extract extract "游戏目录" "新的提取目录" --archives data.xp3 --verify-edits
 python -m python.engines.kirikiri_hxv4_text extract "游戏/scn.xp3" "新的提取目录" --exe "游戏/启动程序.exe"
+python -m python.engines.kirikiri_kag_extract extract "游戏目录" "新的提取目录" --archives data.xp3 --members "scenario/*.ks"
 ```
 
 ## 使用顺序
@@ -19,7 +20,7 @@ python -m python.engines.kirikiri_hxv4_text extract "游戏/scn.xp3" "新的提�
 
 | 已确认的证据 | 处理路线 |
 |---|---|
-| 带 BOM 的 KAG 文本，宏语义符合 `nm/np/exlink` 方言 | [KAG 文本工作流](kirikiri/kag-text.md)，使用 `kirikiri_kag_extract` |
+| 带 BOM 的 KAG 文本，宏语义符合 `nm/np/exlink` 方言 | [KAG 文本工作流](kirikiri/kag-text.md)，使用 `kirikiri_kag_extract`（命令见下） |
 | 成员头为 `fe fe <mode> ff fe` 或 `mdf\0` | 先解[脚本源码包装层](#脚本源码包装层simplecrypt-与-mdf)，再按内部内容分流 |
 | 成员头为 `TLG5.0\0raw\x1a`，3/4 通道 | [TLG5 图像转换](kirikiri/tlg.md)，使用 `kirikiri_tlg` 解码为 PNG；TLG6 与其它变体拒绝 |
 | 已解码的简单 KS 文本，使用 `#名字`、`[r]`、`[ns/nse]` 等有限语法 | 本页的 [有限 KS 接口](#有限-ks-接口)，需要调用层完成编码、分组和封包 |
@@ -60,14 +61,15 @@ python -m python.engines.kirikiri_hxv4_text extract "游戏/scn.xp3" "新的提�
 |---|---|
 | 标准 `File` / `plain` | `plain` 表示标准索引布局，不证明正文没有加密；独立过滤器用 `--filter-spec` 显式配置 |
 | `eliF` / `elif-plain` | 核对真实名称映射、段解压和明文 Adler-32；加密标志本身不能决定正文是否加密 |
+| `Yuzu` / `yuzu-names` | 名称映射块与 eliF 同布局（u32 校验、u16 长度、UTF-16LE 名、NUL），`info` 内为小写名的 MD5；正文过滤另由 `--filter-spec` 指定并以明文 Adler-32 验证。`adlr` 不是明文校验值的包无法验证，读取时拒绝 |
 | `sen:` / `senren-cx` | 使用随包固定配置和控制块的 Cx 适配器，适用条件必须匹配；不代表任意 Cx 都受支持 |
 | `Hxv4` | 需要静态配置、名称哈希核验和认证；走专用归档/文本流程，不叠加普通过滤器猜测 |
 
-[kirikiri_xp3.py](../python/archives/kirikiri_xp3.py) 统一索引适配；独立过滤器、参数来源和处理顺序见通用工作流。名称表中的真实名、内部 ID 和内容校验值是不同信息，同 Adler-32 的资源不能强行合并。已知特殊索引条目的处理只适用于精确识别的结构，不能放宽普通成员的长度或校验规则。
+[kirikiri_xp3.py](../python/archives/kirikiri_xp3.py) 统一索引适配；独立过滤器、参数来源和处理顺序见通用工作流。名称映射索引（eliF/Yuzu）配合过滤器时，writer 保留映射块与 MD5 别名并按同一 spec 加密，不再需要改成标准索引输出。未知索引块报错会列出全部块标签，需先研究布局与语义再加适配器。名称表中的真实名、内部 ID 和内容校验值是不同信息，同 Adler-32 的资源不能强行合并。已知特殊索引条目的处理只适用于精确识别的结构，不能放宽普通成员的长度或校验规则。
 
 索引位置由 [xp3.resolve_index_offset](../python/archives/xp3.py) 统一解析：标准偏移字段出现指针块标记 `0x17` 时，改读文件 `0x20` 处的真实偏移，候选越界则保留原字段值；`0x80` 开头的跳转块仍按原规则处理。这只定位索引，不证明正文未加密。
 
-Adler-32 不符时先检查过滤器、种子、段偏移与压缩顺序；校验正确但脚本解析失败时，转向内层格式研究，不继续盲换密码。候选参数应通过多个不同成员验证，再检查整个选中脚本集合。
+成员带 `0x80000000` 标志且明文 Adler-32 不符时，提取器报出归档、成员和标志，并提示先跑探测：`--try-filters` 对已注册的无参数过滤器逐个试验，至少两个不同明文同时通过 Adler-32 与内层格式检查才列为候选；有 PNG 成员时可再试 `--recover-akabei-png`。候选不会自动启用，都不通过即视为未支持的加密，不继续猜。Adler-32 不符时先检查过滤器、种子、段偏移与压缩顺序；校验正确但脚本解析失败时，转向内层格式研究，不继续盲换密码。候选参数应通过多个不同成员验证，再检查整个选中脚本集合。
 
 XP3 写入字段、补丁编号与编码选择见[通用工作流](kirikiri/workflow.md)。
 
@@ -85,7 +87,7 @@ python -m python.engines.kirikiri_extract pack "提取目录" "新的验证目�
 
 | 参数 | 用法 |
 |---|---|
-| `--archives` | 游戏目录下的归档相对路径；默认只读 `data.xp3`，参数顺序中后者覆盖前者。先核对实际加载顺序，不自动追加补丁 |
+| `--archives` | 游戏目录下的归档相对路径；默认只读 `data.xp3`，参数顺序中后者覆盖前者。先核对实际加载顺序，不自动追加补丁。SCN 常放在 `scn.xp3` 等独立包中：所选包没有 `.scn` 时，报错列出所选包的脚本类成员计数、根目录下含 `.scn` 的其他包及其索引类型、无法读取的包（如 Hxv4），按提示改选；只有 `.ks` 时转 KAG 入口 |
 | `--overlay path` | 默认按完整成员路径覆盖；只有确认根目录覆盖时才使用 `--overlay basename` |
 | `--archive-profile` | 显式约束索引识别结果；未知适配器不能靠修改标签绕过 |
 | `--filter-spec` | 已支持的独立过滤器 JSON 配置；一个调用使用同一份配置，不同配置的归档应分别处理 |
@@ -148,7 +150,7 @@ python -m python.engines.kirikiri_hxv4_text extract "游戏/scn.xp3" "新的提�
 python -m python.engines.kirikiri_hxv4_text pack "提取目录" "新的打包目录"
 ```
 
-该入口静态读取 EXE 配置，不执行游戏代码；复用共享 SCN 契约，同时维护 Hx 成员身份与加密封包。不能用普通 `kirikiri_extract pack` 的明文中间包代替。名称恢复、非 SCN 资源、预算与认证要求详见 [Hxv4 子页](kirikiri/hxv4.md)。
+该入口静态读取 EXE 配置，不执行游戏代码；复用共享 SCN 契约，同时维护 Hx 成员身份与加密封包。直接 PSB 与 MDF 外壳内的 SCN 都会识别，外壳按脚本记录并在回写时恢复；内部名无法核验到存储名的脚本单列诊断而不中断其余脚本。不能用普通 `kirikiri_extract pack` 的明文中间包代替。名称恢复、非 SCN 资源、预算与认证要求详见 [Hxv4 子页](kirikiri/hxv4.md)。
 
 ## TLG5 图像转换
 
@@ -182,7 +184,11 @@ patched = patch_kag(text, {1: '你好'})
 assert patched == '#Alice\r\n你好[r]world[l]\r\n'
 ```
 
-对于符合 `nm/np/exlink` 宏语义的文本，应直接使用 [KAG 批处理工作流](kirikiri/kag-text.md)，其中包含编码保留、页面分组、控制码和封包验证。其他宏先按定义适配，不因名称相同就套用既有方言。
+对于符合 `nm/np/exlink` 宏语义的文本，应直接使用 [KAG 批处理工作流](kirikiri/kag-text.md)，其中包含编码保留、页面分组、控制码和封包验证。其他宏先按定义适配，不因名称相同就套用既有方言。加密成员追加已验证的 `--filter-spec`；宏/插件定义确认过的额外行内标签用 `--inline-tags` 声明，测试脚本等用 `--exclude-members` 排除：
+
+```text
+python -m python.engines.kirikiri_kag_extract extract "游戏目录" "新的提取目录" --archives data.xp3 --members "scenario/*.ks"
+```
 
 ## 回填、补丁与交付
 
@@ -200,6 +206,6 @@ assert patched == '#Alice\r\n你好[r]world[l]\r\n'
 
 ## 验证与维护
 
-- 批处理回归：[test_kirikiri_extract.py](../tests/test_kirikiri_extract.py)、[多语言 SCN](../tests/test_kirikiri_multilang.py)、[类型化定位回写](../tests/test_kirikiri_structural.py)、[增量补丁与姓名键告警](../tests/test_kirikiri_patch.py)、[Hxv4 文本](../tests/test_kirikiri_hxv4_text.py)、[Hx 候选表](../tests/test_kirikiri_hxv4_candidates.py)、[TJS 反编译](../tests/test_kirikiri_tjs_decompile.py)、[TLG5 解码](../tests/test_kirikiri_tlg.py)。有限 KS 回归位于 `tests/test_engines_primary.py`。
+- 批处理回归：[test_kirikiri_extract.py](../tests/test_kirikiri_extract.py)、[多语言 SCN](../tests/test_kirikiri_multilang.py)、[类型化定位回写](../tests/test_kirikiri_structural.py)、[增量补丁与姓名键告警](../tests/test_kirikiri_patch.py)、[Hxv4 文本](../tests/test_kirikiri_hxv4_text.py)、[Hx MDF 外壳](../tests/test_kirikiri_hxv4_mdf.py)、[Yuzu 索引/过滤试验/选包提示/额外行内标签](../tests/test_kirikiri_field_paths.py)、[Hx 候选表](../tests/test_kirikiri_hxv4_candidates.py)、[TJS 反编译](../tests/test_kirikiri_tjs_decompile.py)、[TLG5 解码](../tests/test_kirikiri_tlg.py)。有限 KS 回归位于 `tests/test_engines_primary.py`。
 - 新索引变体放归档适配器，密码放过滤器，KAG 标签放语义方言，SCN tuple 放共享 parser/writer；复用 manifest、导出和回填流程，不按游戏名新建脚本。
 - 出处与许可见 [Kirikiri 算法来源](../provenance/kirikiri-sources.json)与 [TJS 来源记录](../provenance/kirikiri-tjs.json)；有限 KS 接口改编自 VNTextPatch-net8 的 MIT 实现，SCN 语义参考 msg-tool 的 GPL-3.0-or-later 实现，TJS 指令语义参考 krkrz 的日文 BSD 三条款式许可。使用本 Skill 不需要访问这些外部仓库。
