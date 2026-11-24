@@ -257,6 +257,33 @@ class KaguyaJisWorkflowTests(unittest.TestCase):
         (root / "work/gt_output/message.json").write_bytes(dump_rows(rows))
         return root / "work", rows
 
+    def test_private_use_placeholders_beyond_f040_are_reserved_and_kept(self):
+        """A second user-defined code (F041, U+E001) sat in messages next to the
+        name placeholder; translations could drop it and JIS could reuse it."""
+        doc = kaguya.Document(kaguya.MAGIC + b"\x01\xff", ("名前",), (),
+                              (kaguya.Message("％さん\n"), kaguya.Message("普通\n")),
+                              (kaguya.Group(0, (0, 1)),))
+        data = kaguya.write_message_dat(doc)
+        rows, manifest = export(data)
+        self.assertEqual(rows[0]["message"], "％さん\n")
+        self.assertEqual(manifest["settings"]["reserved_codepoints"], ["U+E000", "U+E001"])
+        good = copy.deepcopy(rows)
+        good[0]["message"] = "％先生\n"
+        good[1]["message"] = "代理字\n"  # a JIS proxy is private-use too
+        self.assertEqual(export(inject(data, rows, manifest, good))[0][0]["message"], "％先生\n")
+        for bad in ("％先生\n", "％先生\n", "％先生\n"):
+            changed = copy.deepcopy(rows)
+            changed[0]["message"] = bad
+            with self.subTest(bad=bad), self.assertRaisesRegex(FormatError, "private-use placeholder"):
+                inject(data, rows, manifest, changed)
+        moved = copy.deepcopy(rows)
+        moved[1]["message"] = "普通\n"
+        with self.assertRaisesRegex(FormatError, "private-use placeholder"):
+            inject(data, rows, manifest, moved)
+        legacy = copy.deepcopy(manifest)
+        legacy["settings"]["reserved_codepoints"] = ["U+E000"]
+        self.assertEqual(inject(data, rows, legacy, rows), data)
+
     def test_manifest_reserves_f040_and_unused_roundtrip(self):
         from python.common.jis_workflow import finalize, prepare
         with tempfile.TemporaryDirectory() as temp:

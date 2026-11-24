@@ -26,6 +26,15 @@ MAX_BYTES = 64 << 20
 RESERVED_CODEPOINTS = ["U+E000"]
 
 
+def _private_use(text):
+    """Private-use characters (CP932 user-defined area) in order.
+
+    Other F0xx codes than F040 appear in source text as engine placeholders
+    whose runtime meaning is not modelled; they are kept verbatim.
+    """
+    return [char for char in text if "\ue000" <= char <= "\uf8ff" and char != "\ue000"]
+
+
 def _json(value):
     return (json.dumps(value, ensure_ascii=False, indent=2) + "\n").encode("utf-8")
 
@@ -70,16 +79,26 @@ def export(data: bytes) -> tuple[list[dict], dict]:
         name_policies=policies, protected_tokens=tokens,
         settings={"suffix": "preserve-exactly; not-interpreted", "suffix_sha256": sha256(doc.trailer),
                   "suffix_size": len(doc.trailer), "name_percent": "context-only",
-                  "reserved_codepoints": list(RESERVED_CODEPOINTS)})
+                  "reserved_codepoints": _reserved(rows)})
     return rows, manifest
 
 
+def _reserved(rows):
+    """U+E000 plus every other private-use codepoint the source text carries."""
+    found = {char for row in rows for value in row.values() for char in _private_use(value)}
+    return list(RESERVED_CODEPOINTS) + [f"U+{ord(char):04X}" for char in sorted(found)]
+
+
 def _same_manifest(expected, manifest):
-    """Also accept workspaces exported before settings.reserved_codepoints."""
+    """Also accept workspaces exported before settings.reserved_codepoints, or
+    before it listed private-use placeholders beyond U+E000."""
     if expected == manifest:
         return True
     legacy = dict(expected, settings=dict(expected["settings"]))
     del legacy["settings"]["reserved_codepoints"]
+    if legacy == manifest:
+        return True
+    legacy["settings"]["reserved_codepoints"] = list(RESERVED_CODEPOINTS)
     return legacy == manifest
 
 
@@ -103,6 +122,7 @@ def inject(data: bytes, original_rows: list[dict], manifest: dict, translated_ro
     names, choices, messages, groups = map(list, (doc.names, doc.choices, doc.messages, doc.groups))
     group_names = {}
     group_messages = {}
+    placeholders = {char for row in original_rows for value in row.values() for char in _private_use(value)}
     for row, (before, after, record) in enumerate(zip(original_rows, translated, manifest["records"]), 1):
         for field in before:
             text = after[field]
@@ -119,6 +139,15 @@ def inject(data: bytes, original_rows: list[dict], manifest: dict, translated_ro
                 raise FormatError(f"Kaguya translation adds a blank edge line: {where}")
             if text.count("％") != before[field].count("％"):
                 raise FormatError(f"Kaguya special percent codepoint changed: {where}")
+            # Only placeholders the source carries are checked: JIS "unused" proxies
+            # are private-use too, but never one listed in reserved_codepoints.
+            kept = set(_private_use(before[field]))
+            order = kept | {"％"}
+            if [c for c in text if c in order] != [c for c in before[field] if c in order] or (
+                    set(_private_use(text)) & placeholders - kept):
+                raise FormatError(f"Kaguya private-use placeholder changed (keep "
+                                  f"{' '.join(f'U+{ord(c):04X}' for c in _private_use(before[field])) or 'none'}"
+                                  f" in order): {where}")
             bad = _unrepresentable(text)
             if bad is not None:
                 raise FormatError(f"Kaguya text is not losslessly CP932 representable: {where}: "
@@ -256,6 +285,10 @@ def extract(game: Path, destination: Path, *, verify_edits: bool = False) -> dic
             raise FormatError("game input changed during extraction")
     notes = ["每条正文的换行可以比原文少，不能新增", "全角 ％ 的数量保持不变；姓名为单独的 ％ 时不可改",
              "同一组对白的姓名须一致", "对白在前、选项在后，按原顺序导出为一个文件"]
+    placeholders = sorted({c for row in rows for v in row.values() for c in _private_use(v)})
+    if placeholders:
+        notes.append("私用区占位字符 " + "、".join(f"U+{ord(c):04X}" for c in placeholders)
+                     + " 是引擎占位符（含义未解析），须原样保留、顺序不变")
     if report["suffix"]["interpretation"] == "opaque":
         notes.append("文本表之后有未识别的数据，是否含显示文本未验证")
     report["delivery"], state = handoff(
