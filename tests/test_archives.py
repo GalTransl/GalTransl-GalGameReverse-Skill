@@ -600,6 +600,26 @@ class PFSTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             pfs.volume_paths(Path(temp) / "missing.pfs")
 
+    def test_sibling_families_are_reported_not_merged(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            for name in ("base.pfs", "base.pfs.000", "base_chs.pfs", "base_chs.pfs.000",
+                         "pack.000.pfs", "pack.001.pfs", "notes.txt"):
+                (root / name).write_bytes(_pfs(8, (("a.txt", b"1"),)))
+            self.assertEqual([Path(p).name for p in pfs.volume_paths(root / "base.pfs")],
+                             ["base.pfs", "base.pfs.000"])
+            self.assertEqual(pfs.sibling_families(root / "base.pfs.000"),
+                             {"base_chs.pfs": ["base_chs.pfs", "base_chs.pfs.000"],
+                              "pack.NNN.pfs": ["pack.000.pfs", "pack.001.pfs"]})
+
+    def test_unknown_pf8_variants_are_rejected(self):
+        with self.assertRaises(pfs.PfsError) as caught:
+            pfs.read_index(_pfs(8, (("\\", b"x" * 12), ("a.txt", b"1"))))
+        self.assertEqual(caught.exception.code, "unsupported_dialect")
+        with self.assertRaises(pfs.PfsError) as caught:
+            pfs.read_index(b"pfz" + bytes(64))
+        self.assertEqual(caught.exception.code, "unsupported_dialect")
+
     def test_writer_rejects_bad_input(self):
         with self.assertRaises(ValueError):
             pfs.build([("a", b"1"), ("a", b"2")])

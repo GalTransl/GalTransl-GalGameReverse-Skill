@@ -18,6 +18,8 @@
 
 - 容器：文件头 `pf8`（或 `pf6`/`pf2`/`pf0`），第 4 字节起为 `u32 index_size`。
 - 多分卷命名族：`root.pfs`、`root.pfs.000`…`root.pfs.012`（编号可以不连续）。每卷都是**独立自洽**的归档，不是"索引在前卷、数据在后卷"的虚拟拼接。
+- `volume_paths` 只归并 `base` 与 `base.NNN`。同目录下另成一族的补丁卷（如汉化补丁 `root_chs.pfs`、`root_chs.pfs.NNN`）或 `stem.NNN.pfs` 命名的卷不会并入，否则会静默只拿到原语言覆盖链；用 `pfs.sibling_families(path)` 列出这些族，再按核实过的加载顺序显式传入卷列表。跨族顺序无法从文件本身得知，不要猜。
+- 未知变体直接拒绝（`PfsError.code == "unsupported_dialect"`）：`pfz` 文件头；或 pf6/pf8 索引中出现没有文件名部分的名称（如单独的 `\`，其余名称为编码过的乱码）。这类卷的名称和偏移都不可信，需先找到对应的解码证据。
 - 剧本：UTF-8 文本，行首为 `//`、`;`、`*`、`#`、`[` 或普通文本；`[&scpsupport ...]`、`[&linetag ...]` 预处理指令与 `tag.ini` 是强特征。
 
 ## 容器方言（pf8）
@@ -59,7 +61,7 @@ pf0     记录 = 0x104 字节 ASCII 名 | u32 offset | u32 size                 
 
 ### 读取门槛
 
-本语法里任何一行都能算"文本"，所以 `read_script` 在 `looks_like_script` 为否时以 `not_scp` 拒绝；探测跳过 `[lua]` 区段，只数非空行。`scenario/*.lua` 这类 Lua 表剧本、纯 Lua 文件都会被拒，**不要用 `force=True` 硬读**——它们不是 SCP。`force=True`（`read_script`/`patch_script` 均有）只用于已由其他证据确认是 SCP、但篇幅太短而探测不足的文件。
+本语法里任何一行都能算"文本"，所以 `read_script` 在 `looks_like_script` 为否时以 `not_scp` 拒绝；探测跳过 `[lua]` 区段，只数非空行。`scenario/*.lua` 这类 Lua 表剧本、纯 Lua 文件都会被拒，**不要用 `force=True` 硬读**——它们不是 SCP。`force=True`（`read_script`/`patch_script` 均有）只用于已由其他证据确认是 SCP、但篇幅太短而探测不足的文件。目录探测（`detect.py`）面对的是任意 `.txt`，改用 `looks_like_script(..., strict=True)`：裸 `[词]` 标题加正文同样符合 INI、更新日志和字符串表，因此还要求出现带引号属性的命令、`[&...]` 预处理指令，或 `*标签` 与命令并存；以裸人物标签开头的剧本可能不被目录探测列出，从归档中选定成员后仍由解析器正常接受。
 
 ### 说话人判定（本族最容易错的一处）
 
@@ -80,6 +82,7 @@ pf0     记录 = 0x104 字节 ASCII 名 | u32 offset | u32 size                 
 from python.archives import pfs
 
 paths = pfs.volume_paths("game/root.pfs")          # base + 同族 NNN，按卷序
+others = pfs.sibling_families("game/root.pfs")     # 非空时先确认补丁族的加载顺序，再显式组 paths
 indexes = {p: pfs.read_index(p) for p in paths}
 resolved = pfs.resolve_volumes([(p, indexes[p]) for p in paths])
 member = resolved.by_name()["scenario\\00\\0001.txt"]  # 真实成员名以 "\" 分隔；覆盖链在 member.overrides

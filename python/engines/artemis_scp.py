@@ -74,6 +74,8 @@ _SECTION_RE = re.compile(r"^\[([^\]]*)\]")
 _PROBE_LABEL_RE = re.compile(r"^\*[^\s*]")
 _PROBE_COMMAND_RE = re.compile(r'^\[([^\s\[\]"=]+)(?:\s(?:"[^"]*"|[^\[\]"])*)?\]\s*(?:(?://|;).*)?$')
 _HEX_RE = re.compile(r"[0-9A-Fa-f]+")
+# looks_like_script(strict=True) only: a quoted attribute (``key="value"``).
+_PROBE_ATTRIBUTE_RE = re.compile(r'\s[^\s\[\]"=]+="')
 #: Embedded Lua code sections: ``[lua]`` ... ``[/lua]`` on their own lines.
 _LUA_RE = re.compile(r"^\[(/?)lua(?:\s[^\]]*)?\]\s*(?:(?://|;).*)?$")
 
@@ -285,8 +287,16 @@ def _scan_command(text: str):
     return tag, dict(pairs)
 
 
-def looks_like_script(data, *, encoding=None, max_lines: int = 40) -> bool:
-    """Weak content probe: enough SCP structure to justify selecting this reader."""
+def looks_like_script(data, *, encoding=None, max_lines: int = 40, strict: bool = False) -> bool:
+    """Weak content probe: enough SCP structure to justify selecting this reader.
+
+    ``strict`` is for triage of arbitrary text files (directory detection):
+    bare ``[word]`` headings over prose also describe INI files, changelogs and
+    string tables, so it additionally requires SCP-specific syntax -- a command
+    with a quoted attribute, a ``[&...]`` directive, or a ``*label`` beside a
+    command. The parser gate stays lenient: a member already selected from a
+    scenario archive may legitimately open with bare speaker tags.
+    """
     try:
         text, _encoding, _bom = _decode(data, encoding)
     except ScpError:
@@ -299,6 +309,7 @@ def looks_like_script(data, *, encoding=None, max_lines: int = 40) -> bool:
     # Lua code sections are skipped, and the line budget counts only lines the
     # probe actually classifies, so a long leading [lua] block cannot hide SCP.
     seen = 0
+    strong = False
     for line, in_lua in zip(lines, mask):
         if in_lua or not line.strip():
             continue
@@ -317,9 +328,13 @@ def looks_like_script(data, *, encoding=None, max_lines: int = 40) -> bool:
             if not match or tag == "-" or tag.isdigit() or (
                     len(tag) in (6, 8) and _HEX_RE.fullmatch(tag) and any(c.isdigit() for c in tag)):
                 kind = "text"
+            elif stripped.startswith("[&") or _PROBE_ATTRIBUTE_RE.search(stripped):
+                strong = True
         kinds[kind] = kinds.get(kind, 0) + 1
     commands = kinds.get("command", 0)
     text_lines = kinds.get("text", 0)
+    if strict and not (strong or (commands and kinds.get("label", 0))):
+        return False
     return commands + text_lines + kinds.get("comment", 0) + kinds.get("linetag", 0) >= 3 \
         and text_lines + commands >= 2 and kinds.get("label", 0) + kinds.get("command", 0) >= 1
 

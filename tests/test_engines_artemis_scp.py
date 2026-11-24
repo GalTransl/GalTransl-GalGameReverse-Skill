@@ -472,6 +472,23 @@ class ProbeTests(unittest.TestCase):
         self.assertTrue(scp.looks_like_script(
             "*start\r\n[fade time=\"1\"]\r\n「text」\r\n[bg file=\"a\"] // c\r\n".encode("utf-8")))
 
+    def test_strict_probe_rejects_bare_heading_files_but_parser_gate_stays_lenient(self):
+        """Directory triage reported tool changelogs, UI string tables and INI
+        files as SCP: each is bare ``[word]`` headings over prose."""
+        changelog = ("\ufeff[2.6.6]\r\n  - Fixed a warning\r\n  - Fixed pasting\r\n\r\n"
+                     "[2.6.5]\r\n  - Fixed preview\r\n")
+        table = "\ufeff$8000-0001$\r\n標題\r\n\r\n$0001-0002$\r\n[選項]\r\n\r\n$8001-0001$\r\n確認\r\n"
+        ini = "[General]\nname=x\n; comment\n[Font]\nsize=1\n"
+        for sample in (changelog, table, ini):
+            with self.subTest(sample=sample[:12]):
+                self.assertFalse(scp.looks_like_script(sample.encode("utf-8"), max_lines=12, strict=True))
+        bare_speakers = "[人物]\n「Body」\n\n「Again」\n".encode("utf-8")
+        self.assertFalse(scp.looks_like_script(bare_speakers, strict=True))
+        self.assertTrue(scp.looks_like_script(bare_speakers))
+        for sample in (SCRIPT, "*start\r\n[adv]\r\n「text」\r\ntext\r\n",
+                       "[&scpsupport mode=\"init\"]\r\ntext\r\ntext\r\n"):
+            self.assertTrue(scp.looks_like_script(sample.encode("utf-8"), max_lines=12, strict=True))
+
     def test_tag_schema_ignores_comments_and_keeps_order(self):
         schema = scp.TagSchema.parse(TAG_INI, encoding="utf-8")
         self.assertIn("var", schema.tags)

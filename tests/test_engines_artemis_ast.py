@@ -85,16 +85,23 @@ ast = {
 """
 SOURCE = BODY.replace("\n", "\r\n").encode("utf-8")
 UNITS = 6
+EXFONT_ON = '{"exfont", size="f2"}'
+EXFONT_OFF = '{"exfont"}'
 MESSAGES = (
     "第一章",
     "「そうですか。円木ちゃんですか？」\nかれこれ１０年ぐらい前です。",
-    "「いいえ」",
+    EXFONT_ON + "「いいえ」" + EXFONT_OFF,
     "「また来てくださいね」",
     "はい",
     "いいえ",
 )
 FIRST = MESSAGES[1]
 MINIMAL = b'astver = 2.0\nast = {\n\tlabel = { top = { block="block_00000", label=1 } },\n}\n'
+
+
+def boxed(text):
+    """The exfont box's message: its two inline commands stay as tokens."""
+    return EXFONT_ON + text + EXFONT_OFF
 
 
 def read(data=SOURCE, **kwargs):
@@ -189,8 +196,7 @@ class UnitTests(unittest.TestCase):
         self.assertEqual(self.units[1].furigana, ("つぶらぎ",))
         self.assertEqual(self.units[1].inline, ())
         self.assertEqual(self.units[2].inline, ("exfont", "exfont"))
-        self.assertEqual(self.units[2].line_lead[0], ('{"exfont", size="f2"}',))
-        self.assertEqual(self.units[2].line_tail[0], ('{"exfont"}',))
+        self.assertEqual(self.units[2].tokens, (EXFONT_ON, EXFONT_OFF))
 
     def test_rows_export_the_last_slot_as_the_display_name(self):
         rows = self.document.rows()
@@ -208,7 +214,8 @@ class UnitTests(unittest.TestCase):
         self.assertEqual(len(self.document.protected_tokens()), len(rows))
         self.assertEqual(self.document.name_policies(),
                          ["absent", "writable", "writable", "absent", "absent", "absent"])
-        self.assertEqual(self.document.protected_tokens(), [[]] * len(rows))
+        self.assertEqual(self.document.protected_tokens(),
+                         [[], [], [EXFONT_ON, EXFONT_OFF], [], [], []])
         locator = self.document.locators()[1]
         self.assertEqual(locator["name_slots"], 2)
         self.assertEqual(locator["source_lines"], 2)
@@ -235,7 +242,7 @@ class RoundtripTests(unittest.TestCase):
         rows = document.rows()
         rows[1]["name"] = "？？？"
         rows[1]["message"] = "「原来如此，圆木当店长时的常客吗？」\n那是十年前左右的事了。"
-        rows[2]["message"] = "「不用了」"
+        rows[2]["message"] = boxed("「不用了」")
         rows[3]["message"] = "「欢迎下次再来」"
         rows[4]["message"] = "好"
         rows[5]["message"] = "不好"
@@ -272,15 +279,15 @@ class RoundtripTests(unittest.TestCase):
         document = read()
         rows = document.rows()
         rows[2]["name"] = "静"
-        rows[2]["message"] = "「不用了」"
+        rows[2]["message"] = boxed("「不用了」")
         after = read(document.patch(rows))
         self.assertEqual(after.units[2].names, ("静流", "静"))
-        self.assertEqual(after.units[2].message, "「不用了」")
+        self.assertEqual(after.units[2].message, boxed("「不用了」"))
 
     def test_unchanged_display_name_adds_no_slot(self):
         document = read()
         rows = document.rows()
-        rows[2]["message"] = "「また」"
+        rows[2]["message"] = boxed("「また」")
         after = read(document.patch(rows))
         self.assertEqual(after.units[2].names, ("静流",))
 
@@ -296,7 +303,7 @@ class RoundtripTests(unittest.TestCase):
         document = read()
         rows = document.rows()
         rows[1]["message"] = "改写"
-        rows[2]["message"] = "改写"
+        rows[2]["message"] = boxed("改写")
         rebuilt = ast.patch_ast(SOURCE, rows, encoding="utf-8").decode("utf-8")
         for fragment in ("delay = {", "[1000] = {", '{"se", id=1, file="se0148"}',
                          '{"vo", file="fem_shi_00004", ch="shi"}',
@@ -339,27 +346,44 @@ class RoundtripTests(unittest.TestCase):
         self.assertIn(b"\t\t\t\t{\r\n\r\n\t\t\t\t\tname", rebuilt)
         self.assertIn(b'\r\n\r\n\t\t\t\t\t"\xe6\x94\xb9\xe5\x86\x99",', rebuilt)
 
-    def test_inline_commands_keep_their_line_when_the_line_count_matches(self):
+    def test_inline_tokens_are_written_back_in_place(self):
         document = read()
         rows = document.rows()
-        rows[2]["message"] = "「いいえ、けっこうです」"
-        after = read(ast.patch_ast(SOURCE, rows, encoding="utf-8"))
-        self.assertEqual(after.units[2].line_lead[0], ('{"exfont", size="f2"}',))
-        self.assertEqual(after.units[2].line_tail[0], ('{"exfont"}',))
+        rows[2]["message"] = boxed("「いいえ、けっこうです」")
+        raw = ast.patch_ast(SOURCE, rows, encoding="utf-8")
+        after = read(raw)
+        self.assertEqual(after.units[2].tokens, (EXFONT_ON, EXFONT_OFF))
         self.assertEqual(after.units[2].inline, ("exfont", "exfont"))
+        self.assertIn(('\t\t\t\t\t' + EXFONT_ON + ',\r\n\t\t\t\t\t"「いいえ、けっこうです」",'
+                       '\r\n\t\t\t\t\t' + EXFONT_OFF + ',\r\n\t\t\t\t\t{"rt2"},')
+                      .encode("utf-8"), raw)
 
-    def test_inline_commands_fall_back_when_the_line_count_changes(self):
+    def test_inline_tokens_survive_a_line_count_change(self):
         document = read()
         rows = document.rows()
-        rows[2]["message"] = "一段目\n二段目"
+        rows[2]["message"] = EXFONT_ON + "一段目\n二段目" + EXFONT_OFF
         after = read(ast.patch_ast(SOURCE, rows, encoding="utf-8"))
-        self.assertEqual(after.units[2].inline, ())    # reported, never silent
-        self.assertEqual(after.units[2].message, "一段目\n二段目")
-        self.assertEqual(self.lines_of(after.units[2]), 2)
+        self.assertEqual(after.units[2].message, rows[2]["message"])
+        self.assertEqual(after.units[2].tokens, (EXFONT_ON, EXFONT_OFF))
+        self.assertEqual(after.units[2].lines, 2)       # one rt2 between, one trailing
 
-    @staticmethod
-    def lines_of(unit):
-        return unit.message.count("\n") + 1
+    def test_missing_moved_or_extra_tokens_are_rejected(self):
+        document = read()
+        for message in ("「いいえ」",                               # tokens dropped
+                        EXFONT_OFF + "「いいえ」" + EXFONT_ON,     # order swapped
+                        boxed("「いいえ」") + EXFONT_OFF,          # one added
+                        boxed('{"heroname"}')):                    # foreign token
+            rows = document.rows()
+            rows[2]["message"] = message
+            with self.subTest(message=message):
+                with self.assertRaises(ast.AstError) as caught:
+                    document.patch(rows, allow_lua_escapes=True)
+                self.assertEqual(caught.exception.code, "token_mismatch")
+        rows = document.rows()
+        rows[3]["message"] = EXFONT_OFF + "x"                      # token-free box
+        with self.assertRaises(ast.AstError) as caught:
+            document.patch(rows, allow_lua_escapes=True)
+        self.assertEqual(caught.exception.code, "token_mismatch")
 
 
 class LuaSyntaxTests(unittest.TestCase):
@@ -465,11 +489,16 @@ class LuaSyntaxTests(unittest.TestCase):
 
 
 class RejectionTests(unittest.TestCase):
-    def test_old_top_level_layout(self):
-        source = (b'ast = { label = {}, text = { [1] = {} }, }\n')
+    def test_positional_layout_is_recognised_and_strays_rejected(self):
+        document = read(b'ast = { {{"text"}}, label = {}, text = { [1] = {} }, }\n')
+        self.assertEqual(document.layout, "positional")
+        self.assertEqual(document.units, ())
         with self.assertRaises(ast.AstError) as caught:
-            read(source)
-        self.assertEqual(caught.exception.code, "old_layout")
+            read(b'ast = { {{"text"}}, chapter = {}, text = {}, }\n')
+        self.assertEqual(caught.exception.code, "unknown_layout_member")
+        with self.assertRaises(ast.AstError) as caught:
+            read(b'ast = { { {"text"}, text = { ja = { {"a"} } } }, text = {}, }\n')
+        self.assertEqual(caught.exception.code, "unknown_layout_member")
 
     def test_missing_label(self):
         with self.assertRaises(ast.AstError) as caught:
@@ -659,9 +688,9 @@ class DocumentPatchVerificationTests(unittest.TestCase):
         document = read(source, lenient_escapes=True)
         self.assertTrue(document.lenient_escapes)
         rows = document.rows()
-        rows[2]["message"] = "「不用了」"
+        rows[2]["message"] = boxed("「不用了」")
         after = read(document.patch(rows), lenient_escapes=True)
-        self.assertEqual(after.units[2].message, "「不用了」")
+        self.assertEqual(after.units[2].message, boxed("「不用了」"))
         broken = SOURCE.replace(b'{"rt2"}', b'{"zzz"}', 1)
         tagged = read(broken, extra_inline_tags={"zzz"})
         self.assertEqual(tagged.extra_inline_tags, frozenset({"zzz"}))
@@ -673,7 +702,7 @@ class DocumentPatchVerificationTests(unittest.TestCase):
     def test_document_patch_rejects_a_rebuild_that_does_not_reparse_equal(self):
         document = read()
         rows = document.rows()
-        rows[2]["message"] = "「不用了」"
+        rows[2]["message"] = boxed("「不用了」")
         original = ast.render
 
         def tampered(doc, new_rows, **kwargs):
@@ -723,6 +752,348 @@ class ContractTests(unittest.TestCase):
         with self.assertRaises(ast.AstError) as caught:
             document.patch(translated)
         self.assertEqual(caught.exception.code, "name_not_writable")
+
+
+def block_file(*blocks):
+    """A named-block (label.top) file from block bodies; CRLF like the real corpus."""
+    body = "astver = 2.0\nast = {\n"
+    for number, block in enumerate(blocks):
+        body += f"\tblock_{number:05d} = {{\n{block}\t}},\n"
+    body += '\tlabel = { top = { block="block_00000", label=1 } },\n}\n'
+    return body.replace("\n", "\r\n").encode("utf-8")
+
+
+def text_block(members):
+    return '\t\t{"text"},\n\t\ttext = {\n' + members + "\t\t},\n"
+
+
+def ja_box(*parts):
+    inner = "".join(f"\t\t\t\t\t{part},\n" for part in parts)
+    return "\t\t\tja = {\n\t\t\t\t{\n" + inner + "\t\t\t\t},\n\t\t\t},\n"
+
+
+class TextMemberTests(unittest.TestCase):
+    """Attribute members of a text table are kept, never taken for a language."""
+
+    SOURCE = block_file(
+        text_block('\t\t\tlinemode = { start="1" },\n' + ja_box('"one"', '{"rt2"}')),
+        text_block("\t\t\tlinemode = {},\n\t\t\thide = true,\n"
+                   '\t\t\tvo = { {"vo", file="v1", ch="a"}, },\n'
+                   + ja_box('"two"', '{"rt2"}')),
+        text_block('\t\t\tvo = { {"vo", file="v2", ch="a"}, },\n'),
+    )
+
+    def test_attributes_before_the_language_are_skipped(self):
+        document = read(self.SOURCE)
+        self.assertEqual([row["message"] for row in document.rows()], ["one", "two"])
+        self.assertEqual(document.languages, ("ja",))
+        self.assertEqual(document.selected_language, "ja")
+        self.assertEqual(document.patch(document.rows()), self.SOURCE)
+
+    def test_voice_only_text_has_no_box_and_round_trips(self):
+        source = block_file(text_block('\t\t\tvo = { {"vo", file="v2", ch="a"}, },\n'))
+        document = read(source)
+        self.assertEqual(document.units, ())
+        self.assertEqual(document.patch([]), source)
+
+    def test_booleans_parse_as_values(self):
+        document = read(self.SOURCE.replace(b"hide = true", b"hide = false"))
+        self.assertEqual(len(document.units), 2)
+        table = document.ast.items[1].value.get("text")
+        self.assertEqual(table.get("hide").kind, "bool")
+
+    def test_unknown_member_shape_is_rejected_not_guessed(self):
+        source = self.SOURCE.replace(b'linemode = { start="1" }',
+                                     b'float = { {mode="x"} }')
+        with self.assertRaises(ast.AstError) as caught:
+            read(source)
+        self.assertEqual(caught.exception.code, "unknown_text_member")
+
+    def test_bare_identifier_is_a_runtime_reference(self):
+        source = block_file(text_block(ja_box('"a"', "{fn}", '"b"')))
+        with self.assertRaises(ast.AstError) as caught:
+            read(source)
+        self.assertEqual(caught.exception.code, "bare_identifier")
+
+
+class MultiLanguageBlockTests(unittest.TestCase):
+    SOURCE = block_file(
+        text_block(ja_box('"ja1"', '{"rt2"}') + '\t\t\ten = {\n\t\t\t\t{\n'
+                   '\t\t\t\t\t"en1",\n\t\t\t\t\t{"rt2"},\n\t\t\t\t},\n\t\t\t},\n'),
+        text_block(ja_box('"ja2"', '{"rt2"}')),
+    )
+
+    def test_default_is_the_first_language_and_others_are_selectable(self):
+        self.assertEqual([r["message"] for r in read(self.SOURCE).rows()], ["ja1", "ja2"])
+        english = read(self.SOURCE, language="en")
+        self.assertEqual([r["message"] for r in english.rows()], ["en1"])
+        self.assertEqual(english.languages, ("ja", "en"))
+        self.assertEqual(english.skipped, ({"kind": "message", "block": "block_00001"},))
+        rows = english.rows()
+        rows[0]["message"] = "英文改写\n第二行"
+        raw = english.patch(rows)
+        self.assertIn(b'"ja1"', raw)
+        self.assertEqual(read(raw, language="en").rows(), rows)
+
+    def test_absent_language_is_an_error(self):
+        with self.assertRaises(ast.AstError) as caught:
+            read(self.SOURCE, language="cn")
+        self.assertEqual(caught.exception.code, "no_language_table")
+
+
+HERO = '{"heroname", mode="fn"}'
+
+
+class InlineTokenTests(unittest.TestCase):
+    SOURCE = block_file(text_block(ja_box('"x"', HERO, '"y"', '{"rt2"}', '"z"',
+                                          '{"gaiji", text="(1)"}', '{"rt2"}')))
+
+    def test_mid_line_commands_are_tokens_in_place(self):
+        document = read(self.SOURCE)
+        self.assertEqual(document.rows(), [{"message": f'x{HERO}y\nz{{"gaiji", text="(1)"}}'}])
+        self.assertEqual(document.protected_tokens(), [[HERO, '{"gaiji", text="(1)"}']])
+        self.assertEqual(document.patch(document.rows()), self.SOURCE)
+
+    def test_rewrite_puts_tokens_back_between_literals(self):
+        document = read(self.SOURCE)
+        rows = [{"message": f'甲{HERO}乙丙\n丁{{"gaiji", text="(1)"}}戊'}]
+        raw = document.patch(rows)
+        self.assertIn(('\t\t\t\t\t"甲",\r\n\t\t\t\t\t' + HERO + ',\r\n\t\t\t\t\t"乙丙",\r\n'
+                       '\t\t\t\t\t{"rt2"},\r\n').encode("utf-8"), raw)
+        self.assertEqual(read(raw).rows(), rows)
+
+    def test_verification_compares_inline_commands(self):
+        document = read(self.SOURCE)
+        rows = [{"message": f'甲{HERO}乙\nz{{"gaiji", text="(1)"}}'}]
+        original = ast.render
+
+        def dropped(doc, new_rows, **kwargs):
+            return original(doc, new_rows, **kwargs).replace(HERO + ",", "", 1)
+
+        with mock.patch.object(ast, "render", dropped):
+            with self.assertRaises(ast.AstError) as caught:
+                document.patch(rows)
+        self.assertEqual(caught.exception.code, "verification_failed")
+
+    def test_contract_counts_tokens(self):
+        document = read(self.SOURCE)
+        rows = document.rows()
+        manifest = contract.make_manifest(
+            engine="artemis", variant="ast-text", reference="test",
+            sources={"a.ast": self.SOURCE}, rows=rows, locators=document.locators(),
+            encoding="utf-8", name_policies=document.name_policies(),
+            protected_tokens=document.protected_tokens())
+        with self.assertRaises(contract.FormatError):
+            contract.validate_translation(manifest, {"a.ast": self.SOURCE}, rows,
+                                          [{"message": "x y z"}])
+
+    def test_literal_that_looks_like_a_token_is_rejected(self):
+        source = block_file(text_block(ja_box('"a{\\"b"', '{"rt2"}')))
+        with self.assertRaises(ast.AstError) as caught:
+            read(source)
+        self.assertEqual(caught.exception.code, "ambiguous_token")
+
+    def test_multiline_inline_command_is_rejected(self):
+        source = block_file(text_block(ja_box('"a"', '{"exfont",\n size="f2"}')))
+        with self.assertRaises(ast.AstError) as caught:
+            read(source)
+        self.assertEqual(caught.exception.code, "multiline_inline")
+
+
+POSITIONAL = (
+    "ast = {\n"
+    "\t{\n"
+    '\t\t{"savetitle", text="序章", en="Prologue"},\n'
+    '\t\t{"text"},\n'
+    '\t\tcrc ="00000001",\n'
+    '\t\tlang="0001_00001",\n'
+    "\t\tline=10,\n"
+    "\t},\n"
+    "\t{\n"
+    '\t\t{"text"},\n'
+    "\t\tline=20,\n"
+    "\t},\n"
+    "\t{\n"
+    '\t\t{"select", file="a", text="はい"},\n'
+    '\t\t{"select", file="b", text="いいえ"},\n'
+    '\t\t{"select", name="sel01", mode="auto"},\n'
+    "\t\tline=30,\n"
+    "\t},\n"
+    "\ttext = {\n"
+    "\t\t[1] = {\n"
+    '\t\t\tvo = { {"vo", file="v001", ch="aaa"}, },\n'
+    '\t\t\tname = {name="遥", en="Haruka"},\n'
+    '\t\t\tja = {\n\t\t\t\t{\n\t\t\t\t\t"「おはよう」",\n\t\t\t\t\t{"rt2"},\n\t\t\t\t},\n\t\t\t},\n'
+    '\t\t\ten = {\n\t\t\t\t{\n\t\t\t\t\t"Morning.",\n\t\t\t\t\t{"rt2"},\n\t\t\t\t},\n\t\t\t},\n'
+    "\t\t},\n"
+    "\t\t[2] = {\n"
+    "\t\t\tlane=1,\n"
+    '\t\t\tname = {name="遥"},\n'
+    "\t\t},\n"
+    "\t\t[3] = {\n"
+    '\t\t\tja = {\n\t\t\t\t{\n\t\t\t\t\t"朝だ。",\n\t\t\t\t\t{"gaiji", text="(1)"},\n'
+    '\t\t\t\t\t{"rt2"},\n\t\t\t\t},\n\t\t\t},\n'
+    '\t\t\ten = {\n\t\t\t\t{\n\t\t\t\t\t"Dawn.",\n\t\t\t\t\t{"rt2"},\n\t\t\t\t},\n\t\t\t},\n'
+    "\t\t},\n"
+    "\t\t[4] = {\n"
+    '\t\t\tselect = {\n\t\t\t\tja = {"はい", "いいえ"},\n\t\t\t\ten = {"Yes", "No"},\n'
+    "\t\t\t},\n"
+    "\t\t},\n"
+    "\t\t[5] = {\n"
+    '\t\t\tja = {\n\t\t\t\t{\n\t\t\t\t\t"独白。",\n\t\t\t\t},\n\t\t\t},\n'
+    "\t\t},\n"
+    "\t},\n"
+    "\tlabel = { scene = { block=1, label=1 }, },\n"
+    "}\n"
+).replace("\n", "\r\n").encode("utf-8")
+
+
+class PositionalLayoutTests(unittest.TestCase):
+    def test_rows_per_language(self):
+        japanese = ast.read_ast(POSITIONAL)
+        self.assertEqual(japanese.layout, "positional")
+        self.assertEqual(japanese.languages, ("ja", "en"))
+        self.assertEqual(japanese.rows(), [
+            {"message": "序章"},
+            {"name": "遥", "message": "「おはよう」"},
+            {"name": "遥", "message": ""},
+            {"message": '朝だ。{"gaiji", text="(1)"}'},
+            {"message": "はい"}, {"message": "いいえ"},
+            {"message": "独白。"},
+        ])
+        self.assertEqual([u.kind for u in japanese.units],
+                         ["title", "message", "message", "message", "choice", "choice",
+                          "message"])
+        self.assertEqual(japanese.locators()[1]["name_identity"], "遥")
+        self.assertTrue(japanese.locators()[2]["boxless"])
+        english = ast.read_ast(POSITIONAL, language="en")
+        self.assertEqual([r["message"] for r in english.rows()],
+                         ["Prologue", "Morning.", "", "Dawn.", "Yes", "No"])
+        self.assertEqual(english.rows()[1]["name"], "Haruka")
+        self.assertEqual(english.skipped, ({"kind": "message", "block": "text[5]"},))
+        for document in (japanese, english):
+            self.assertEqual(document.patch(document.rows()), POSITIONAL)
+
+    def test_display_name_key_is_appended_or_replaced(self):
+        japanese = ast.read_ast(POSITIONAL)
+        rows = japanese.rows()
+        rows[1]["name"] = "小遥"
+        rows[2]["name"] = "小遥"
+        raw = japanese.patch(rows)
+        # The separator is copied from the table; a lone pair gets a bare comma.
+        self.assertIn('name = {name="遥", en="Haruka", ja="小遥"},'.encode("utf-8"), raw)
+        self.assertIn('name = {name="遥",ja="小遥"},'.encode("utf-8"), raw)
+        after = ast.read_ast(raw)
+        self.assertEqual(after.rows()[1]["name"], "小遥")
+        self.assertEqual(after.units[1].identity_name, "遥")
+        self.assertEqual(ast.read_ast(raw, language="en").rows()[1]["name"], "Haruka")
+        english = ast.read_ast(POSITIONAL, language="en")
+        rows = english.rows()
+        rows[1]["name"] = "Haru"
+        raw = english.patch(rows)
+        self.assertIn('name = {name="遥", en="Haru"},'.encode("utf-8"), raw)
+
+    def test_variable_length_edit_keeps_everything_else(self):
+        japanese = ast.read_ast(POSITIONAL)
+        rows = japanese.rows()
+        rows[0]["message"] = "序章：很长的标题"
+        rows[1]["message"] = "「早上好」\n第二行"
+        rows[3]["message"] = '天亮了，{"gaiji", text="(1)"}真早'
+        rows[4]["message"] = "是"
+        raw = japanese.patch(rows)
+        after = ast.read_ast(raw)
+        self.assertEqual(after.rows(), rows)
+        text = raw.decode("utf-8")
+        for fragment in ('en="Prologue"', '"Morning."', '"Dawn."', '{"Yes", "No"}',
+                         'crc ="00000001"', "lane=1", '{"select", file="a", text="はい"}',
+                         "label = { scene = { block=1, label=1 }, }"):
+            self.assertIn(fragment, text)
+        self.assertEqual(ast.read_ast(raw, language="en").rows(),
+                         ast.read_ast(POSITIONAL, language="en").rows())
+
+    def test_boxless_entry_takes_no_message(self):
+        japanese = ast.read_ast(POSITIONAL)
+        rows = japanese.rows()
+        rows[2]["message"] = "新增"
+        with self.assertRaises(ast.AstError) as caught:
+            japanese.patch(rows)
+        self.assertEqual(caught.exception.code, "bad_message")
+
+    def test_repeated_entry_keys_are_all_exported(self):
+        source = POSITIONAL.replace(b"\t\t[5] = {", b"\t\t[3] = {")
+        document = ast.read_ast(source)
+        flagged = [u.block for u in document.units if u.duplicate_entry]
+        self.assertEqual(flagged, ["text[3]", "text[3]"])
+        self.assertEqual(document.patch(document.rows()), source)
+
+    def test_entry_name_rules(self):
+        two_boxes = POSITIONAL.replace(
+            '"「おはよう」",\r\n\t\t\t\t\t{"rt2"},\r\n\t\t\t\t},'.encode("utf-8"),
+            '"「おはよう」",\r\n\t\t\t\t},\r\n\t\t\t\t{\r\n\t\t\t\t\t"b",\r\n\t\t\t\t},'
+            .encode("utf-8"))
+        no_identity = POSITIONAL.replace('name = {name="遥"}'.encode("utf-8"),
+                                         'name = {ja="遥"}'.encode("utf-8"))
+        both = POSITIONAL.replace(
+            '"朝だ。"'.encode("utf-8"), '"朝だ。"'.encode("utf-8")).replace(
+            "\t\t[3] = {\r\n".encode("utf-8"),
+            '\t\t[3] = {\r\n\t\t\tname = {name="x"},\r\n'.encode("utf-8")).replace(
+            '\t\t\tja = {\r\n\t\t\t\t{\r\n\t\t\t\t\t"朝だ。"'.encode("utf-8"),
+            '\t\t\tja = {\r\n\t\t\t\tname = {"name", name="y"},\r\n\t\t\t\t{\r\n'
+            '\t\t\t\t\t"朝だ。"'.encode("utf-8"))
+        for source, code in ((two_boxes, "ambiguous_name"), (no_identity, "bad_name"),
+                             (both, "duplicate_name")):
+            self.assertNotEqual(source, POSITIONAL)
+            with self.subTest(code=code):
+                with self.assertRaises(ast.AstError) as caught:
+                    ast.read_ast(source)
+                self.assertEqual(caught.exception.code, code)
+
+
+COMPACT = (
+    'ast={{{"savetitle",text="第一話",text_cn="第一话"},{"text"},},{{"text"},},'
+    '{{"select",file="a",text="進む",text_cn="前进"},'
+    '{"select",name="s1",mw="どうする",mw_cn="怎么办"},},'
+    'text={[1]={ja={name={"name",name="遥"},{"「やあ」",{"rt2"},},},'
+    'cn={name={"name",name="遥"},{"「嗨」",{"rt2"},},},},'
+    '[2]={vo={{"vo",file="v1"},},ja={{"朝。",},},cn={{"早。",},},},},label={},}'
+).encode("utf-8")
+
+
+class CompactLanguageNameTests(unittest.TestCase):
+    """Minified files, language-level names and ``text_<lang>`` attributes."""
+
+    def test_rows_and_roundtrip(self):
+        japanese = ast.read_ast(COMPACT)
+        self.assertEqual(japanese.rows(), [
+            {"message": "第一話"}, {"message": "進む"}, {"message": "どうする"},
+            {"name": "遥", "message": "「やあ」"}, {"message": "朝。"}])
+        self.assertEqual([u.kind for u in japanese.units],
+                         ["title", "choice", "prompt", "message", "message"])
+        chinese = ast.read_ast(COMPACT, language="cn")
+        self.assertEqual([r["message"] for r in chinese.rows()],
+                         ["第一话", "前进", "怎么办", "「嗨」", "早。"])
+        for document in (japanese, chinese):
+            self.assertEqual(document.patch(document.rows()), COMPACT)
+
+    def test_edits_stay_on_one_line_and_in_one_language(self):
+        chinese = ast.read_ast(COMPACT, language="cn")
+        rows = chinese.rows()
+        rows[0]["message"] = "第一话·改"
+        rows[1]["message"] = "继续前进"
+        rows[3] = {"name": "小遥", "message": "「你好啊」\n第二行"}
+        raw = chinese.patch(rows)
+        self.assertNotIn(b"\n", raw)
+        self.assertIn('cn={name={"name",name="小遥"},{"「你好啊」\\n第二行",{"rt2"},}'
+                      .encode("utf-8"), raw)
+        self.assertIn('ja={name={"name",name="遥"},{"「やあ」",{"rt2"},}'.encode("utf-8"), raw)
+        self.assertEqual(ast.read_ast(raw, language="cn").rows(), rows)
+        self.assertEqual(ast.read_ast(raw).rows(), ast.read_ast(COMPACT).rows())
+
+    def test_two_overrides_for_one_language_are_ambiguous(self):
+        source = COMPACT.replace(b'text_cn="', b'cn="x",text_cn="', 1)
+        with self.assertRaises(ast.AstError) as caught:
+            ast.read_ast(source, language="cn")
+        self.assertEqual(caught.exception.code, "ambiguous_attribute")
 
 
 if __name__ == "__main__":

@@ -31,18 +31,16 @@
 
 ## 容器到剧本路线
 1. 从资源证据确定 PFS/PF2 或外置文件路线。
-2. PFS 参考 [python/archives/pfs.py](../python/archives/pfs.py) 模块：`read_index`（只读头/索引，不载入载荷）、`read_member`、`volume_paths`/`resolve_volumes`（多分卷覆盖链）、`build`/`repack`（pf6/pf8 写出）。
+2. PFS 参考 [python/archives/pfs.py](../python/archives/pfs.py) 模块：`read_index`（只读头/索引，不载入载荷）、`read_member`、`volume_paths`/`resolve_volumes`（多分卷覆盖链；`sibling_families` 列出 `_chs` 等另成一族的补丁卷，见 [artemis-scp](artemis-scp.md)）、`build`/`repack`（pf6/pf8 写出）。
 3. 校验提取成员路径和原始哈希，候选 ASB 先独立解析。
 4. 按内容选路，都不强行塞给 `read_asb`：
 
    | 成员 | 判定 | 路线 |
    |---|---|---|
    | `ASB\0\0` 开头（`.asb`/`.iet`） | 二进制头 | 本页 `read_asb` |
-   | `.ast`，`label.top` 布局 | `looks_like_ast` | [artemis-ast](artemis-ast.md) |
+   | `.ast`，`label.top` 命名块或顶层 `text = { [N] = … }` 位置块 | `looks_like_ast` | [artemis-ast](artemis-ast.md)，两种布局都支持 |
    | `.txt`/`.iet` SCP 文本 | `looks_like_script` | [artemis-scp](artemis-scp.md)；`[lua]` 区段跳过 |
-   | `scenario/*.lua`（Lua 表剧本） | Lua 表文本，无 SCP 结构 | **未支持，不要走 SCP**；`read_script` 以 `not_scp` 拒绝 |
-   | 旧布局 `.ast`（顶层 `text` 表） | `read_ast` 报 `old_layout` | **未支持，不要走 SCP** |
-5. 保存 ASB 树、提取字段身份与原始字节，之后只修改批准的属性。
+   | `scenario/*.lua`（Lua 表剧本） | Lua 表文本，无 SCP 结构 | **未支持，不要走 SCP**；`read_script` 以 `not_scp` 拒绝 |5. 保存 ASB 树、提取字段身份与原始字节，之后只修改批准的属性。
 - 本模块不处理容器 XOR、目录索引、压缩或加载优先级；pf8 载荷 XOR、索引尾部附加表、多卷覆盖由 `pfs.py` 处理。读成员时必须用**该成员所在卷**的索引（`member.volume` 对应的 `read_index` 结果），每卷 XOR key 不同，用错卷的索引会静默得到乱码。
 - pf8 载荷 XOR key 来自索引的 SHA-1；修改 index 后 key 会变化，不能只复制旧密文而不按新索引重新处理载荷。
 - 名称编码不要固定假设 CP932：`read_index` 默认自动判定，pf8 的成员名可以使用 UTF-8。

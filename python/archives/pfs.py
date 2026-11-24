@@ -201,6 +201,8 @@ def probe_header(source):
     try:
         stream.seek(0)
         header = stream.read(3)
+        if header == MAGIC + b"z":
+            raise PfsError("unsupported_dialect", "pfz header: a PFS variant outside pf0-pf8", "index")
         if len(header) < 3 or header[:2] != MAGIC or not header[2:3].isdigit():
             raise PfsError("bad_magic", "not an Artemis PFS header", "index")
         version = header[2] - ord("0")
@@ -276,6 +278,9 @@ def read_index(source, *, name_encoding=None, max_entries: int = 100_000,
         if max_archive_size is not None and total > max_archive_size:
             raise PfsError("archive_budget", "PFS volume exceeds the whole-file budget", "index")
         header = stream.read(7)
+        if header[:3] == MAGIC + b"z":
+            raise PfsError("unsupported_dialect", "pfz header: a PFS variant outside pf0-pf8; its layout "
+                           "is not documented here, research it before extracting", "index")
         if len(header) < 7 or header[:2] != MAGIC or not header[2:3].isdigit():
             raise PfsError("bad_magic", "not an Artemis PFS header", "index")
         version = header[2] - ord("0")
@@ -313,6 +318,11 @@ def read_index(source, *, name_encoding=None, max_entries: int = 100_000,
             raw, offset, size, padding = record
             if not name or "\0" in name:
                 raise PfsError("bad_name", "empty or NUL-containing PFS name", "index")
+            if name.endswith(("\\", "/")):
+                # Plain pf6/pf8 names are file paths; a bare separator marks a variant
+                # whose names (and possibly offsets) are encoded differently.
+                raise PfsError("unsupported_dialect", f"PFS name has no file component ({name!r}): this "
+                               "volume is not a plain pf6/pf8 index; do not trust its names or offsets", "index")
             if name in seen:
                 raise PfsError("duplicate_name", f"duplicate PFS name: {name}", "index")
             seen.add(name)
@@ -415,6 +425,36 @@ def volume_paths(path) -> list:
     # Base volume first, then the numbered siblings in numeric order.
     found.sort(key=lambda item: (len(os.path.basename(item)), os.path.basename(item)))
     return found
+
+
+def _family_key(name):
+    lowered = name.lower()
+    head, _, tail = name.rpartition(".")
+    if lowered.endswith(".pfs"):
+        stem, _, number = name[:-4].rpartition(".")
+        return f"{stem}.NNN.pfs" if stem and number.isdigit() else name
+    if tail.isdigit() and head.lower().endswith(".pfs"):
+        return head
+    return None
+
+
+def sibling_families(path) -> dict:
+    """Other PFS families beside ``path``'s, e.g. ``root_chs.pfs`` next to ``root.pfs``.
+
+    :func:`volume_paths` only groups ``base`` and ``base.NNN``. A translation patch
+    shipped as its own family, or volumes named ``stem.NNN.pfs``, are reported here
+    as ``{family: [file names]}``; their load order relative to ``path`` is not
+    known, so pass an explicit, verified volume list instead of guessing.
+    """
+    base = os.path.abspath(os.fspath(path))
+    directory, name = os.path.split(base)
+    own = _family_key(name)
+    families = {}
+    for candidate in sorted(os.listdir(directory)):
+        key = _family_key(candidate)
+        if key is not None and key.casefold() != (own or "").casefold() and os.path.isfile(os.path.join(directory, candidate)):
+            families.setdefault(key, []).append(candidate)
+    return families
 
 
 def resolve_volumes(volumes) -> VolumeSet:
