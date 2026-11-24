@@ -5,7 +5,7 @@
 识别为本格式后先直接运行提取命令：按实际路径替换占位符，多条命令对应不同方言或来源，按下文的识别条件选一条。提取器自行校验格式并用原文走真实的解析与回写，结构不符时拒绝并指出失败位置。命令成功就不必读实现源码或研究资料；失败时再按报错读本页对应章节和 `python/` 中的实现。
 
 ```text
-python -m python.engines.eagls_extract extract "<游戏目录>/script" "<游戏目录>/game_extract" --smoke-test
+python -m python.engines.eagls_extract extract "<游戏目录>/script" "<游戏目录>/game_extract" --verify-edits
 ```
 
 ## 模块分工
@@ -95,6 +95,7 @@ python -m python.engines.eagls_extract extract "<游戏目录>/script" "<游戏�
 - `dialogue_spans` 仅保留为旧预设的单行辅助器；批量导出使用 `eagls_text` 的引号边界扫描和字节跨度，避免把命令的字符串参数当对白。
 - 不能按行合并消息：一行可能包含多个 `&ID`；姓名命令可能紧跟上一句尾部或单独占行，应交给**后续第一条**消息，随后清空，不把其后的旁白全部标为同一说话人。
 - 回填保留逗号参数、语音编号、资源字符串、消息 ID、换行及未修改文本的原始字节。重新从原件解析定位，核对 manifest，不信任外部提供的任意 offset。
+- 正文和姓名中的内联控制 `(字母)`、`(字母=值)`（如 `(e)`、`(r)`、`(f=2)`、`(y=…)`）与变量引用 `:变量名`（ASCII 标识符，可紧贴后续文字，也可整个充当姓名）未作语义解释：译文须逐个原样保留、顺序不变，也不得新增；增删、改值或调换顺序时 `rebuild_script` 拒绝并列出期望的记号序列。交付时把这条写进“翻译时注意”。
 - 引号、真实换行、命令分隔符不能注入字段；尚未解释的控制样式字符序列必须保留。此实现不是完整 EAGLS 命令编译器，陌生对白语法需先扩展并验证。
 
 ## 正确回填顺序
@@ -117,8 +118,13 @@ python -m python.engines.eagls_extract extract "<游戏目录>/script" "<游戏�
 在技能根目录运行（下列游戏路径为示例）：
 
 ```text
-python -m python.engines.eagls_extract extract "<游戏目录>/script" "<游戏目录>/game_extract" --smoke-test
+python -m python.engines.eagls_extract extract "<游戏目录>/script" "<游戏目录>/game_extract" --verify-edits
 ```
+
+- `--verify-edits`（旧名 `--smoke-test` 仍可用）在原文往返之外再改一条文本，经 writer 回写、重封包并重新解出全部成员核对。
+- **原版在备份文件里时**用 `--idx` 与 `--pak` 成对指定要读取的文件（如 `SCPACK.idx.bak` / `SCPACK.pak.bak`，或“副本”目录中的那一对）；工作区内仍按规范名 `SCPACK.idx` / `SCPACK.pak` 保存，无需先复制改名。
+- 提取结果中含假名的条目占比过低时，提取器在 stderr、`reports/extraction.json` 的 `warnings` 和交付表“翻译时注意”首条给出“疑似非日文原版”提示。提示不阻止提取；出现时先核对目录中的备份/副本和探测输出的 `existing_patch_hints`，改用原版重新提取，目录中找不到原版就如实告知用户。
+- 标准输出含 `delivery`，同时写出 `reports/translation-state.md`，交付表直接取自它。
 
 使用默认参数前先核对索引、文本区与加密布局；可通过 `--short-offsets`、`--text-offset`、`--version`、`--label-size`、`--encoding`、`--index-key`、`--script-key` 指定。未知密钥须先研究，不靠默认值宣称成功。
 

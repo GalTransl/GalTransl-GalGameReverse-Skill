@@ -173,6 +173,31 @@ class EaglsTextTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             rebuild_script(self.raw, original, changed, self.profile)
 
+    def test_inline_controls_and_variable_references_are_protected(self):
+        """Translations could drop "(e)"-style display controls or overwrite a
+        ":Variable" name reference; the writer accepted both."""
+        body = ('$Start\n#:PlayerName,3\r\n&1"待って(e)、:PlayerNameさん(y=よみ)(f=2)"\r\n'
+                '#花子\r\n&2"plain"\r\n$End\r\n')
+        raw = script(body, self.profile)
+        original, manifest = export_script(raw, self.profile)
+        self.assertEqual(original[0], {"name": ":PlayerName", "message": "待って(e)、:PlayerNameさん(y=よみ)(f=2)"})
+        fine = copy.deepcopy(original)
+        fine[0]["message"] = "少々(e)，:PlayerName先生(y=よみ)(f=2)"
+        fine[1]["name"], fine[1]["message"] = "華子", "(普通)文字：良好"
+        rebuilt = rebuild_script(raw, fine, manifest, self.profile)
+        self.assertEqual(export_script(rebuilt, self.profile)[0], fine)
+        for index, field, value in ((0, "message", "少々，:PlayerName先生(y=よみ)(f=2)"),
+                                    (0, "message", "少々(e)，先生(y=よみ)(f=2)"),
+                                    (0, "message", "少々(e)，:PlayerName先生(f=2)(y=よみ)"),
+                                    (0, "message", "少々(e)，:PlayerName先生(y=よみ)(f=3)"),
+                                    (0, "name", "客人"),
+                                    (1, "message", "added(e)"),
+                                    (1, "name", ":Other")):
+            rows = copy.deepcopy(original)
+            rows[index][field] = value
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                rebuild_script(raw, rows, manifest, self.profile)
+
     def test_v1_and_alis_label_width(self):
         p = Profile(text_offset=408, label_size=136, version=1, key=b"ADVSYS")
         raw = script('$Start\r\n&1"hello"\r\n$End\r\n', p)
@@ -208,6 +233,38 @@ class EaglsTextTests(unittest.TestCase):
             with self.assertRaises(FileExistsError):
                 extract(root, root / "work", profile=self.profile, key=b"key")
             self.assertEqual((root / "SCPACK.pak").read_bytes(), pak)
+            self.assertEqual(report["delivery"]["suggested_first_json"]["file"], "sc01.json")
+            self.assertEqual(report["delivery"]["not_verified"], ["游戏内加载与显示"])
+            self.assertNotIn("warnings", report)
+            self.assertIn("交付表格", (root / "work/reports/translation-state.md").read_text(encoding="utf-8"))
+
+    def test_backup_pair_input_and_non_japanese_source_warning(self):
+        """A patched pack sat under the canonical names with the original beside it as
+        *.bak: extraction succeeded on the translated pack without any notice."""
+        translated = script('$Start\n' + ''.join(f'&{n}"漢字{n}"\r\n' for n in range(1, 61)) + '$End\r\n',
+                            self.profile)
+        with tempfile.TemporaryDirectory() as root:
+            root = Path(root)
+            for suffix, member in (("", translated), (".bak", self.raw)):
+                idx, pak = archive([("sc01.dat", member)])
+                (root / f"SCPACK.idx{suffix}").write_bytes(idx)
+                (root / f"SCPACK.pak{suffix}").write_bytes(pak)
+            report = extract(root, root / "patched", profile=self.profile, key=b"key")
+            self.assertIn("0/60", report["warnings"][0])
+            self.assertEqual(report["delivery"]["translation_notes"][0], report["warnings"][0])
+            self.assertIn("试编辑回写", "".join(report["delivery"]["not_verified"]))
+            report = extract(root, root / "original", profile=self.profile, key=b"key",
+                             idx=root / "SCPACK.idx.bak", pak=root / "SCPACK.pak.bak")
+            self.assertEqual(report["rows"], 4)
+            self.assertNotIn("warnings", report)
+            self.assertEqual((root / "original/original/SCPACK.pak").read_bytes(),
+                             (root / "SCPACK.pak.bak").read_bytes())
+            rows, _ = export_script(self.raw, self.profile)
+            rows[0]["message"] = "changed"
+            (root / "original/gt_output/sc01.json").write_bytes(dump_rows(rows))
+            self.assertEqual(rebuild(root / "original", root / "patch")["translated_members"], ["sc01.dat"])
+            with self.assertRaises(ValueError):
+                extract(root, root / "half", profile=self.profile, key=b"key", idx=root / "SCPACK.idx.bak")
 
 
 if __name__ == "__main__":

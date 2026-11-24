@@ -9,6 +9,7 @@ from pathlib import Path
 
 from ..archives.eagls import DEFAULT_INDEX_KEY, pack_archive, read_index
 from ..common.contract import dump_rows, load_json, sha256
+from ..common.handoff import STATE_FILE, handoff, source_language_note
 from ..common.safety import Limits, validate_names, write_new_tree, _check_existing_ancestors, validate_new_tree_destination
 from .eagls_text import Profile, export_script, parse_script, rebuild_script
 
@@ -51,20 +52,27 @@ def _legacy_profile_settings(settings):
 
 
 def extract(source, output, *, profile=Profile(), key=DEFAULT_INDEX_KEY,
-            long_offsets=True, smoke_test=False):
+            long_offsets=True, smoke_test=False, idx=None, pak=None):
+    """``idx``/``pak`` name the pair to read when it is not ``source``'s
+    SCPACK.idx/SCPACK.pak, e.g. a backup kept beside a patched pack. The
+    workspace always stores the pair under the canonical names."""
     source, output = Path(source), Path(output)
+    if (idx is None) != (pak is None):
+        raise ValueError("idx and pak must be given together")
+    idx_path = Path(idx) if idx else source / "SCPACK.idx"
+    pak_path = Path(pak) if pak else source / "SCPACK.pak"
     validate_new_tree_destination(output)
-    index = read_bounded(source / "SCPACK.idx")
+    index = read_bounded(idx_path)
     # Validate the bounded index against PAK size before reading PAK.
-    _, entries = read_index(index, (source / "SCPACK.pak").stat().st_size,
+    _, entries = read_index(index, pak_path.stat().st_size,
                             key=key, long_offsets=long_offsets)
-    pak = read_bounded(source / "SCPACK.pak", Limits().max_total_bytes)
+    pak = read_bounded(pak_path, Limits().max_total_bytes)
     files = {"original/SCPACK.idx": index, "original/SCPACK.pak": pak,
              "gt_output/.keep": b""}
     names = [Path(e.name).stem + ".json" for e in entries]
     validate_names(names)
     replacements, records, total = {}, [], 0
-    smoke = None
+    smoke, texts, first_json = None, [], None
     for entry, filename in zip(entries, names):
         raw = pak[entry.offset:entry.offset + entry.size]
         try:
@@ -90,6 +98,8 @@ def extract(source, output, *, profile=Profile(), key=DEFAULT_INDEX_KEY,
             files[f"gt_input/{filename}"] = dump_rows(rows)
             files[f"metadata/{filename}"] = json_bytes(manifest)
             total += len(rows)
+            first_json = first_json or filename
+            texts.extend(row["message"] for row in rows)
             if smoke_test and smoke is None and entry.name.lower().startswith("sc"):
                 changed = [dict(r) for r in rows]
                 changed[0]["message"] += " (EAGLS roundtrip ABC)"
@@ -125,7 +135,22 @@ def extract(source, output, *, profile=Profile(), key=DEFAULT_INDEX_KEY,
         files[f"reports/smoke-translation/{filename}"] = dump_rows(rows)
         report["smoke_test"] = {"member": name, "size_delta": len(changed) - next(e.size for e in entries if e.name == name),
                                 "all_members_reextracted": True, "runtime_verified": False}
+    notes = ["正文和姓名中的 (字母)、(字母=值) 内联控制与 :变量名 引用须逐个原样保留、顺序不变，不得新增",
+             "不得加入半角引号和换行；姓名不得含 , & # = 和数字"]
+    warning = source_language_note(texts)
+    if warning:
+        notes.insert(0, warning)
+        report["warnings"] = [warning]
+    if blocked:
+        notes.append(f"{len(blocked)} 个成员解析受阻未导出，见 reports/extraction.json 的 blocked")
+    report["delivery"], state = handoff(
+        workspace=output, engine="EAGLS（SCPACK 源文本剧本）",
+        json_files=sum(1 for r in records if r["status"] == "exported"), rows=total, notes=notes,
+        verified="各成员经 writer 重建后与原字节一致，整包 IDX/PAK 重建一致", edit_checked=smoke_test,
+        first_json=first_json, first_json_basis="索引顺序中第一个有文本的成员，未确认是否开场",
+        command="extract --verify-edits" if smoke_test else "extract")
     files["reports/extraction.json"] = json_bytes(report)
+    files[STATE_FILE] = state
     write_new_tree(output, list(files.items()))
     return report
 
@@ -202,7 +227,10 @@ def main():
     export.add_argument("--encoding", default="cp932")
     export.add_argument("--index-key", default=DEFAULT_INDEX_KEY.decode("ascii"))
     export.add_argument("--script-key", default="EAGLS_SYSTEM")
-    export.add_argument("--smoke-test", action="store_true")
+    export.add_argument("--verify-edits", "--smoke-test", dest="smoke_test", action="store_true",
+                        help="also write one edited row through the writer and re-extract the changed pack")
+    export.add_argument("--idx", help="index file to read instead of SOURCE/SCPACK.idx (e.g. a .bak backup)")
+    export.add_argument("--pak", help="data file paired with --idx")
     pack = commands.add_parser("rebuild")
     pack.add_argument("workspace")
     pack.add_argument("output", help="new output directory")
@@ -213,10 +241,13 @@ def main():
                                    label_size=args.label_size, encoding=args.encoding,
                                    key=args.script_key.encode("ascii"))
             result = extract(args.source, args.output, profile=profile, key=args.index_key.encode("ascii"),
-                             long_offsets=not args.short_offsets, smoke_test=args.smoke_test)
+                             long_offsets=not args.short_offsets, smoke_test=args.smoke_test,
+                             idx=args.idx, pak=args.pak)
+            for warning in result.get("warnings", []):
+                print(f"warning: {warning}", file=sys.stderr)
             print(json.dumps({"status": result["status"], "members": len(result["members"]), "rows": result["rows"],
-                              "blocked": result["blocked"], "gt_input": str(Path(args.output) / "gt_input")},
-                             ensure_ascii=True))
+                              "blocked": result["blocked"], "warnings": result.get("warnings", []),
+                              "delivery": result["delivery"]}, ensure_ascii=True))
             # Same convention as the YU-RIS workflow: partial output exits 1.
             raise SystemExit(result["status"] != "complete")
         print(json.dumps(rebuild(args.workspace, args.output), ensure_ascii=True))

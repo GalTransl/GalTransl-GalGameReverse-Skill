@@ -33,6 +33,18 @@ class Profile:
                 "storage_encoding": self.encoding}
 
 
+_PROTECTED_RE = re.compile(r"\([A-Za-z](?:=[^()]*)?\)|:[A-Za-z_][A-Za-z0-9_]*")
+
+
+def protected_tokens(text: str) -> list:
+    """Inline controls ``(x)`` / ``(x=value)`` and ``:Variable`` references, in order.
+
+    Their runtime meaning is not modelled, so a translation must carry the same
+    tokens verbatim in the same order; the surrounding text is free.
+    """
+    return _PROTECTED_RE.findall(text)
+
+
 def parse_script(encrypted: bytes, profile: Profile):
     """Return plain bytes, rows and byte locators; name applies to next message.
 
@@ -121,6 +133,11 @@ def rebuild_script(encrypted: bytes, rows: list, manifest: dict, profile: Profil
             # No inferred escape syntax: preserve existing control-like literals.
             if field == "message" and re.findall(r'[\\%{}\[\]#&$]', before[field]) != re.findall(r'[\\%{}\[\]#&$]', value):
                 raise ValueError("changed control-like literal sequence")
+            # Inline display controls "(e)", "(f=3)", "(y=...)" and ":Variable"
+            # references are uninterpreted here: keep each one verbatim and in order.
+            if protected_tokens(before[field]) != protected_tokens(value):
+                raise ValueError(f"changed inline control or variable reference in {field}: expected "
+                                 f"{protected_tokens(before[field])}")
             if value != before[field]:
                 start, end = loc[field]
                 edits.append((start, end, profile.encode(value)))
