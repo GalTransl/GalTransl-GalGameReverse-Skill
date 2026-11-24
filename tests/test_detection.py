@@ -29,6 +29,50 @@ class DetectionTests(unittest.TestCase):
             self.assertEqual((root / "scene.asb").read_bytes(), before)
             self.assertEqual(len(list(root.iterdir())), 2)
 
+    def test_image_content_with_script_suffix_is_not_evidence(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            (root / "cg.ast").write_bytes(b"\xff\xd8\xff\xe0" + bytes(60))
+            self.assertNotIn("artemis", detect_directory(root)["candidates"])
+            (root / "scene.ast").write_bytes(b"astver = 2.0\nast = {\n}\n")
+            hits = detect_directory(root)["candidates"]["artemis"]
+            self.assertEqual([hit["file"] for hit in hits], ["scene.ast"])
+
+    def test_numbered_pfs_naming_is_a_volume_set(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            for number in range(3):
+                (root / f"data.{number:03}.pfs").write_bytes(b"pf8" + bytes(40))
+            sets = detect_directory(root)["volume_sets"]
+            self.assertEqual([(s["base"], s["count"]) for s in sets], [("data.NNN.pfs", 3)])
+
+    def test_xp3_index_profile_ranks_kirikiri_commands(self):
+        from python.archives import xp3
+        from python.detect import next_steps
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            (root / "data.xp3").write_bytes(xp3.build([("scenario/a.ks", b"text")], filter_name="none"))
+            (root / "broken.xp3").write_bytes(b"XP3\r\n \n\x1a\x8b\x67\x01" + bytes(8))
+            result = detect_directory(root)
+            profiles = {item["file"]: item.get("profile") for item in result["xp3_indexes"]}
+            self.assertEqual(profiles, {"broken.xp3": None, "data.xp3": "plain"})
+            step = next(s for s in next_steps(result) if s["engine"] == "kirikiri")
+            self.assertEqual(step["strongest_evidence"], "probe")
+            self.assertIn("kirikiri_extract ", step["extract_commands"][0])
+            self.assertTrue(any(route.startswith("data.xp3: standard index") for route in step["routes"]))
+            self.assertTrue(any(route.startswith("broken.xp3: index not readable") for route in step["routes"]))
+
+    def test_hxv4_archive_outranks_plain_siblings(self):
+        from python.detect import _xp3_routes
+        commands = ["python -m python.engines.kirikiri_extract extract A B",
+                    "python -m python.engines.kirikiri_hxv4_text extract A B",
+                    "python -m python.engines.kirikiri_kag_extract extract A B"]
+        ordered, routes = _xp3_routes(commands, [{"file": "patch.xp3", "profile": "plain"},
+                                                 {"file": "scn.xp3", "profile": "hxv4"}])
+        self.assertIn("kirikiri_hxv4_text", ordered[0])
+        self.assertEqual(sorted(ordered), sorted(commands))
+        self.assertEqual(len(routes), 2)
+
     def test_limits_and_footer(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
@@ -534,8 +578,32 @@ class DetectionAdditionsTests(unittest.TestCase):
         self.assertEqual([step["engine"] for step in steps], ["kaguya", "nosuch"])
         self.assertEqual(steps[0]["engine_page"], "engines/kaguya.md")
         self.assertIn("kaguya_extract extract", steps[0]["extract_commands"][0])
+        from python.detect import WEAKER_CANDIDATE_NOTE
         self.assertEqual(steps[1], {"engine": "nosuch", "strongest_evidence": "extension",
-                                    "matched_files": 3, "engine_page": None})
+                                    "matched_files": 3, "note": WEAKER_CANDIDATE_NOTE, "engine_page": None})
+
+    def test_extension_only_candidate_beside_a_probed_one_gets_no_command(self):
+        """.ks made every XP3 game a TyranoScript candidate with a runnable extract command."""
+        from python.detect import (HOW_TO_PROCEED, HOW_TO_PROCEED_API, HOW_TO_PROCEED_NONE,
+                                   how_to_proceed, next_steps)
+        probed = {"by_strength": {"probe": 2, "extension": 2}, "matched_files": 2}
+        suffix = {"by_strength": {"extension": 9}, "matched_files": 9}
+        steps = next_steps({"candidate_stats": {"tyrano": suffix, "kirikiri": probed}})
+        self.assertEqual([step["engine"] for step in steps], ["kirikiri", "tyrano"])
+        self.assertTrue(steps[0]["extract_commands"])
+        self.assertNotIn("note", steps[0])
+        self.assertNotIn("extract_commands", steps[1])
+        self.assertEqual(steps[1]["engine_page"], "engines/tyrano.md")
+        self.assertEqual(how_to_proceed(steps), HOW_TO_PROCEED)
+        # Alone, the suffix is all there is: keep the command.
+        alone = next_steps({"candidate_stats": {"tyrano": suffix}})
+        self.assertTrue(alone[0]["extract_commands"])
+        self.assertNotIn("note", alone[0])
+        # Pages without a workspace command, and no candidate at all, get matching advice.
+        api = next_steps({"candidate_stats": {"bgi": probed}})
+        self.assertNotIn("extract_commands", api[0])
+        self.assertEqual(how_to_proceed(api), HOW_TO_PROCEED_API)
+        self.assertEqual(how_to_proceed([]), HOW_TO_PROCEED_NONE)
 
 
 if __name__ == "__main__":

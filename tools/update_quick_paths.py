@@ -11,7 +11,11 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 HEADING = "## 快速路径"
-COMMAND = re.compile(r"^python -m python\.engines\.\w+ extract [^\n]*$", re.M)
+# An extract command is `<module> extract ...`, or a `*_extract` module called
+# directly with a path argument (its other stages are subcommands or --readback).
+# Interpreter switches such as -B and -X utf8 stay part of the command as documented.
+COMMAND = re.compile(r"^python (?:-B |-X utf8 )*-m python\.engines\."
+                     r"(?:\w+ extract |\w+_extract (?=[\"/<])(?![^\n]*--readback))[^\n]*$", re.M)
 # Ends at its own closing fence: the page may continue with prose, not a heading.
 SECTION = re.compile(r"^" + re.escape(HEADING) + r"\n.*?^```text\n.*?^```\n\n?", re.M | re.S)
 INTRO = ("识别为本格式后先直接运行提取命令：按实际路径替换占位符，多条命令对应不同方言或来源，按下文的识别条件选一条。"

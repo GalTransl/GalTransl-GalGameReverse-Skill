@@ -192,6 +192,7 @@
           "read_member",
           "extract",
           "volume_paths",
+          "sibling_families",
           "resolve_volumes",
           "offset_table",
           "trailing_matches_offset_table",
@@ -245,6 +246,7 @@
           "read_member",
           "extract",
           "volume_paths",
+          "sibling_families",
           "resolve_volumes",
           "offset_table",
           "trailing_matches_offset_table",
@@ -294,6 +296,7 @@
           "read_member",
           "extract",
           "volume_paths",
+          "sibling_families",
           "resolve_volumes",
           "offset_table",
           "trailing_matches_offset_table",
@@ -517,6 +520,7 @@
           "Scene",
           "DialogueExport",
           "read_cst",
+          "cst_text_encodings",
           "export_cst",
           "patch_dialogue",
           "patch_cst"
@@ -660,6 +664,7 @@
         ],
         "python/engines/eagls_text.py": [
           "Profile",
+          "protected_tokens",
           "parse_script",
           "export_script",
           "rebuild_script"
@@ -1217,6 +1222,7 @@
           "Group",
           "Document",
           "read_message_dat",
+          "stale_records",
           "write_message_dat"
         ],
         "python/engines/kaguya_early.py": [
@@ -1324,6 +1330,8 @@
           "member_name_keys",
           "speaker_key_conflicts",
           "name_scan_archives",
+          "empty_selection_hint",
+          "read_selected_member",
           "flat_patch_members",
           "extract",
           "build_patch",
@@ -1354,6 +1362,9 @@
           "candidate_names"
         ],
         "python/engines/kirikiri_hxv4_text.py": [
+          "unwrap",
+          "wrap",
+          "stored_script",
           "encrypted_archive",
           "plain_members",
           "extract",
@@ -1366,6 +1377,7 @@
           "main"
         ],
         "python/engines/kirikiri_kag_text.py": [
+          "inline_tags",
           "prose",
           "restore_comments",
           "signature",
@@ -1378,6 +1390,7 @@
           "png_valid",
           "classify",
           "recover_akabei",
+          "try_filters",
           "probe",
           "main"
         ],
@@ -1828,16 +1841,24 @@
           "assemble_bin"
         ],
         "python/engines/nexas_bin.py": [
+          "Dialect",
           "Command",
           "Script",
           "parse",
           "controls",
+          "message_shaped_calls",
+          "message_sites",
+          "select_dialect",
           "records",
+          "dialect_of",
           "export",
           "inject"
         ],
         "python/engines/nexas_extract.py": [
+          "parse_packlist",
+          "default_archives",
           "verify_archive",
+          "edit_rows",
           "extract",
           "pack",
           "main"
@@ -2036,6 +2057,7 @@
           "game_key_from_pe"
         ],
         "python/archives/qlie_writer.py": [
+          "lookup_version",
           "hash13_tail",
           "hash14_tail",
           "lookup_tail",
@@ -2051,10 +2073,12 @@
           "decode_script",
           "encode_script",
           "KeyMaterial",
+          "default_archives",
           "extract",
           "main"
         ],
         "python/engines/qlie_imos.py": [
+          "ScriptError",
           "Span",
           "Record",
           "scan",
@@ -2623,6 +2647,7 @@
           "rebuild_fpk"
         ],
         "python/engines/systemc.py": [
+          "character_table",
           "systemc_name_header",
           "cp932_error",
           "export_act",
@@ -2924,6 +2949,9 @@
           "Bundle",
           "padding_flag_is_alignment",
           "is_unityfs",
+          "signature_offset",
+          "split_prefix",
+          "SubStream",
           "read_header",
           "BundleReader",
           "read_bundle",
@@ -2943,6 +2971,7 @@
           "mono_script",
           "behaviour_header",
           "scan_serialized",
+          "ScriptTables",
           "resolve",
           "scan",
           "summarize",
@@ -2962,6 +2991,7 @@
           "guess_encoding",
           "entropy",
           "Container",
+          "prefix_report",
           "open_container",
           "text_assets",
           "rebuild_container",
@@ -3226,6 +3256,7 @@
         "python/engines/yuris.py",
         "python/engines/yuris_extract.py",
         "python/engines/yuris_font.py",
+        "python/engines/yuris_names.py",
         "python/engines/yuris_text.py",
         "python/engines/yuris_ydg.py",
         "python/engines/yuris_ydg_workflow.py"
@@ -3265,10 +3296,17 @@
           "reverse_mapping",
           "render_page"
         ],
+        "python/engines/yuris_names.py": [
+          "read_script_list",
+          "member_number",
+          "json_names"
+        ],
         "python/engines/yuris_text.py": [
           "Profile",
           "Scenario",
           "commands_from",
+          "descriptor_key",
+          "select_key",
           "literal",
           "expression_tokens",
           "literal_free_expression",

@@ -74,6 +74,10 @@ MAGICS = (
 # Version-bearing heads handled by dedicated probes below: YPF\0, Entis, UnityFS,
 # Unity serialized files and the QLIE FilePackVer footer.
 
+# Script suffixes that games also use for plain images; checked against the file head.
+IMAGE_AMBIGUOUS_SUFFIXES = frozenset({".ast"})
+IMAGE_MAGICS = (b"\xff\xd8\xff", b"\x89PNG\r\n\x1a\n", b"GIF87a", b"GIF89a")
+
 EXTENSIONS = {
     ".xp3": ("kirikiri",), ".ks": ("kirikiri", "tyrano"), ".tjs": ("kirikiri",),
     ".rpa": ("renpy",), ".rpy": ("renpy",), ".rpyc": ("renpy",),
@@ -171,6 +175,19 @@ MAX_EXECUTABLES = 50
 #: Executables (and hook DLLs beside them) are reported down to this depth;
 #: some releases keep the real game EXE one or two folders below a launcher.
 EXECUTABLE_MAX_DEPTH = 2
+#: XP3 index chunks (bounded: header + an index of at most 16 MiB, no payloads)
+#: decide which Kirikiri extractor applies; only this many archives are read.
+MAX_XP3_PROBES = 24
+XP3_ROUTES = {
+    "hxv4": ("kirikiri_hxv4_text", "Hxv4 index: run kirikiri_hxv4_text on the archive holding .scn "
+             "(usually scn.xp3) with the game's EXE"),
+    "yuzu-names": ("kirikiri_extract", "Yuzu name-mapped index: kirikiri_extract usually also needs "
+                   "--filter-spec with the yuzu byte filter; see engines/kirikiri.md"),
+    "elif-plain": ("kirikiri_extract", "eliF name-mapped index: kirikiri_extract"),
+    "senren-cx": ("kirikiri_extract", "sen: Cx index: kirikiri_extract"),
+    "plain": ("kirikiri_extract", "standard index: kirikiri_extract for PSB .scn; if the selected archives "
+              "hold only .ks it names kirikiri_kag_extract, and it lists sibling archives that hold .scn"),
+}
 
 # Catalog fallback: generic media/container heads carry no engine signal.
 GENERIC_PREFIXES = (
@@ -234,8 +251,8 @@ def _ypf_probe(header: bytes):
     version, count = struct.unpack_from("<II", header, 4)
     if not 0 < version < 0x1000:
         return None, "YPF header with an implausible version word; validate before any reader"
-    route = ("v482 has the bundled extraction/writer route" if version == 0x1E2
-             else "only v482 (0x1E2) has the full route; swap table/name key unproven")
+    route = ("the bundled extraction/writer route covers this layout" if version in (482, 487)
+             else "only YPF 482/487 have the full route; swap table/name key unproven")
     return version, f"YPF archive version {version} (0x{version:X}), {count} entries declared; {route}"
 
 
@@ -446,6 +463,7 @@ def detect_directory(root: Path, *, max_files: int = 2000, max_depth: int = 5,
     directory_files: dict[str, dict[str, tuple]] = {}
     bgi_archives: list[tuple] = []
     archive_files: list[tuple] = []
+    xp3_files: list[tuple] = []
     unity_backend = {"mono": [], "il2cpp": []}
     exe_directories: set[str] = set()
     hook_dlls: list[tuple] = []
@@ -541,8 +559,9 @@ def detect_directory(root: Path, *, max_files: int = 2000, max_depth: int = 5,
                     lowered = name.lower()
                     suffix = path.suffix.lower()
                     directory_files.setdefault(directory_relative, {})[lowered] = (relative, info.st_size, path)
-                    for engine in EXTENSIONS.get(suffix, ()):
-                        evidence(engine, relative, "weak-extension", EXTENSION_NOTES.get(suffix, path.suffix))
+                    if suffix not in IMAGE_AMBIGUOUS_SUFFIXES:
+                        for engine in EXTENSIONS.get(suffix, ()):
+                            evidence(engine, relative, "weak-extension", EXTENSION_NOTES.get(suffix, path.suffix))
                     for engine in BASENAMES.get(lowered, ()):
                         evidence(engine, relative, "weak-layout", name)
                     if lowered == "gameassembly.dll":
@@ -562,8 +581,13 @@ def detect_directory(root: Path, *, max_files: int = 2000, max_depth: int = 5,
                         patch_hint("copy-named-file", file=relative)
                     head, _, tail = name.rpartition(".")
                     stem = head if (tail.isdigit() and head.lower().endswith(".pfs")) else name
+                    numbered, _, number = name[:-4].rpartition(".")
+                    if lowered.endswith(".pfs") and numbered and number.isdigit():
+                        stem = f"{numbered}.NNN.pfs"   # stem.000.pfs naming, not base + .NNN
                     if stem.lower().endswith(".pfs"):
                         volume_families.setdefault((directory_relative, stem), []).append(relative)
+                    if suffix == ".xp3" and depth <= EXECUTABLE_MAX_DEPTH and len(xp3_files) < MAX_XP3_PROBES:
+                        xp3_files.append((relative, path))
                     if ((suffix in ARCHIVE_SUFFIXES or PFS_VOLUME.search(name))
                             and info.st_size >= DUPLICATE_MIN_SIZE):
                         archive_files.append((relative, lowered, info.st_size, path))
@@ -586,6 +610,10 @@ def detect_directory(root: Path, *, max_files: int = 2000, max_depth: int = 5,
                             result["executables"].append({"file": relative, "machine": machine})
                     if depth <= EXECUTABLE_MAX_DEPTH and lowered in HOOK_DLL_NAMES:
                         hook_dlls.append((directory_relative, relative, machine))
+                    # Suffixes shared with image files only count when the content is not an image.
+                    if suffix in IMAGE_AMBIGUOUS_SUFFIXES and not header.startswith(IMAGE_MAGICS):
+                        for engine in EXTENSIONS.get(suffix, ()):
+                            evidence(engine, relative, "weak-extension", EXTENSION_NOTES.get(suffix, path.suffix))
                     header_hit = False
                     for magic, engine, explanation in MAGICS:
                         if header.startswith(magic):
@@ -640,7 +668,7 @@ def detect_directory(root: Path, *, max_files: int = 2000, max_depth: int = 5,
                     if pack:
                         version = pack.group(1).decode("ascii")
                         evidence("qlie", relative, "footer-hint",
-                                 f"FilePackVer{version} footer; bundled reader/writer cover only 3.0; "
+                                 f"FilePackVer{version} footer; bundled reader/writer cover 3.0 and 3.1; "
                                  "validate key/layout", version=version)
                         version_seen("qlie-filepack", version)
                         header_hit = True
@@ -650,7 +678,7 @@ def detect_directory(root: Path, *, max_files: int = 2000, max_depth: int = 5,
                         if header.startswith(b"ASB\0\0"):
                             evidence("artemis", relative, "content-probe",
                                      "ASB tree inside a .txt/.iet file; not the SCP text dialect")
-                        elif looks_like_script(header, max_lines=12):
+                        elif looks_like_script(header, max_lines=12, strict=True):
                             evidence("artemis-scp", relative, "content-probe",
                                      "line-oriented SCP text (// or ; comments, [tag ...], *label)")
                     if not header_hit and len(header) >= 4 and not _generic_head(header):
@@ -663,9 +691,27 @@ def detect_directory(root: Path, *, max_files: int = 2000, max_depth: int = 5,
             continue
         result["volume_sets"].append({"directory": directory, "base": stem,
                                       "count": len(files), "volumes": sorted(files)})
-        evidence("artemis", sorted(files)[0], "volume-set",
-                 f"{stem} plus {len(files) - 1} numbered siblings; each volume is a "
-                 "separate archive and the engine merges their namespaces")
+        if stem.endswith(".NNN.pfs"):
+            note = (f"{len(files)} volumes named {stem}; pfs.volume_paths does not group this naming, "
+                    "pass the volumes explicitly and check each header (pfz or encoded names are rejected)")
+        else:
+            note = (f"{stem} plus {len(files) - 1} numbered siblings; each volume is a "
+                    "separate archive and the engine merges their namespaces")
+        evidence("artemis", sorted(files)[0], "volume-set", note)
+
+    if xp3_files:
+        from python.archives import kirikiri_xp3
+        indexes = []
+        for relative, path in xp3_files:
+            try:
+                with path.open("rb") as stream:
+                    profile = kirikiri_xp3.detect(stream)
+            except (OSError, ValueError, EOFError) as exc:
+                indexes.append({"file": relative, "error": str(exc)[:160]})
+                continue
+            indexes.append({"file": relative, "profile": profile})
+            evidence("kirikiri", relative, "content-probe", f"XP3 index profile {profile}")
+        result["xp3_indexes"] = indexes
 
     # Proxy DLLs only matter beside a game executable (or in the scanned root).
     for directory, file, machine in hook_dlls:
@@ -792,6 +838,19 @@ MERGED_FILES_SHOWN = 4
 HOW_TO_PROCEED = ("Read the quick-path section at the top of engine_page, then run an extract command with real "
                   "paths. The extractor validates the format and fails closed with the failing location, so do "
                   "not read python sources or research notes first; read them only if the command fails.")
+HOW_TO_PROCEED_API = ("No candidate page documents a workspace extract command. Read engine_page and drive the "
+                      "staged Python API it documents (index, member decode, parse, export, original roundtrip).")
+HOW_TO_PROCEED_NONE = ("No candidate. Search engines/ by extension or magic, or query the catalog with "
+                       "tools/query_catalog.py (guides/detection.md); an empty result does not mean no script.")
+WEAKER_CANDIDATE_NOTE = ("extension-only evidence while another candidate has probe evidence; an extension shared "
+                         "between engines or reused by unrelated files. Settle the stronger candidate first.")
+
+
+def how_to_proceed(steps: list) -> str:
+    """The instruction matching what next_steps actually offers."""
+    if any(step.get("extract_commands") for step in steps):
+        return HOW_TO_PROCEED
+    return HOW_TO_PROCEED_API if any(step.get("engine_page") for step in steps) else HOW_TO_PROCEED_NONE
 
 
 def _merge_hits(hits: list) -> list:
@@ -805,6 +864,34 @@ def _merge_hits(hits: list) -> list:
             entry["more_files"].append(hit["file"])
     return [entry if entry["files"] > 1 else {k: v for k, v in entry.items() if k not in ("files", "more_files")}
             for entry in merged.values()]
+
+
+def _xp3_routes(commands, indexes):
+    """Order the page's Kirikiri commands by the XP3 index profiles that were read.
+
+    Returns the reordered commands and one route line per archive; commands are
+    never rewritten, only ranked, so they stay identical to the engine page.
+    """
+    groups, wanted = {}, []
+    for item in indexes:
+        if "profile" in item and item["profile"] in XP3_ROUTES:
+            module, why = XP3_ROUTES[item["profile"]]
+            wanted.append(module)
+        elif "profile" in item:
+            why = f"index profile {item['profile']}"
+        else:
+            why = f"index not readable here ({item['error']})"
+        groups.setdefault(why, []).append(item["file"])
+    routes = [f"{', '.join(files[:6])}{f' (+{len(files) - 6} more)' if len(files) > 6 else ''}: {why}"
+              for why, files in groups.items()]
+    # An Hxv4 archive can only be read by its own tool, so it outranks the others.
+    wanted.sort(key=lambda module: module != "kirikiri_hxv4_text")
+    rank = {module: position for position, module in reversed(list(enumerate(wanted)))}
+
+    def key(command):
+        match = re.search(r"-m python\.engines\.(\w+)", command)
+        return rank.get(match.group(1) if match else "", len(rank))
+    return sorted(commands, key=key), routes
 
 
 def next_steps(result: dict, skill_root: Path | None = None) -> list:
@@ -824,9 +911,17 @@ def next_steps(result: dict, skill_root: Path | None = None) -> list:
     except (OSError, ValueError, KeyError, TypeError):
         pass
     steps = []
+    strengths = {engine: min(stats["by_strength"], key=STRENGTH_RANK.__getitem__)
+                 for engine, stats in result["candidate_stats"].items()}
+    probed = "probe" in strengths.values()
     for engine, stats in result["candidate_stats"].items():
-        strongest = min(stats["by_strength"], key=STRENGTH_RANK.__getitem__)
+        strongest = strengths[engine]
         step = {"engine": engine, "strongest_evidence": strongest, "matched_files": stats["matched_files"]}
+        # A suffix alone (.ks is KAG and TyranoScript, .ast is also an image suffix) must not
+        # hand out a runnable command beside a candidate that was actually probed.
+        weaker = probed and strongest == "extension"
+        if weaker:
+            step["note"] = WEAKER_CANDIDATE_NOTE
         page = documents.get(engine.casefold(), f"engines/{engine}.md")
         try:
             text = (skill_root / page).read_text(encoding="utf-8")
@@ -834,9 +929,16 @@ def next_steps(result: dict, skill_root: Path | None = None) -> list:
             step["engine_page"] = None
         else:
             step["engine_page"] = page
-            commands = re.findall(r"^python -m python\.engines\.\w+ extract [^\n]*$", text, re.M)
-            if commands:
-                step["extract_commands"] = list(dict.fromkeys(commands))[:4]
+            # The page's generated quick-path section (tools/update_quick_paths.py) is the
+            # single definition of "the extract commands"; do not re-derive them here.
+            section = re.search(r"^## 快速路径\r?\n.*?^```text\r?\n(.*?)^```", text, re.M | re.S)
+            commands = [line.strip() for line in section.group(1).splitlines()
+                        if line.startswith("python ")] if section else []
+            if commands and not weaker:
+                commands = list(dict.fromkeys(commands))
+                if engine == "kirikiri" and result.get("xp3_indexes"):
+                    commands, step["routes"] = _xp3_routes(commands, result["xp3_indexes"])
+                step["extract_commands"] = commands[:4]
         steps.append(step)
     steps.sort(key=lambda step: (STRENGTH_RANK[step["strongest_evidence"]], -step["matched_files"]))
     return steps
@@ -874,8 +976,9 @@ def main() -> None:
                                   include_derived=args.include_derived, merge_similar=not args.full)
         if not args.full:
             # What to do next comes first; fields with nothing to report are dropped.
-            result = {"kind": result.pop("kind"), "next_steps": next_steps(result),
-                      "how_to_proceed": HOW_TO_PROCEED,
+            steps = next_steps(result)
+            result = {"kind": result.pop("kind"), "next_steps": steps,
+                      "how_to_proceed": how_to_proceed(steps),
                       **{key: value for key, value in result.items()
                          if value not in (None, [], {}) or key == "candidates"}}
     except (OSError, ValueError) as exc:

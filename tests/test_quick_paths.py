@@ -46,6 +46,33 @@ class QuickPathTests(unittest.TestCase):
         self.assertEqual(render(render(PAGE).replace("python -m python.engines.demo_extract extract", "run")),
                          PAGE.replace("python -m python.engines.demo_extract extract", "run"))
 
+    def test_direct_extract_modules_and_interpreter_switches_are_listed(self):
+        """Extractors without an ``extract`` subcommand, or documented with -B / -X utf8,
+        were left out, so detection named the page but gave no command to run."""
+        page = ("# 标题\n\n## 用法\n\n```text\n"
+                "python -B -m python.engines.demo_extract \"<游戏目录>\" --archive a.int\n"
+                "python -B -m python.engines.demo_extract pack \"<工作区>\" \"<补丁>\"\n"
+                "python -m python.engines.demo_extract \"<工作区>\" \"<回读>\" --readback \"<补丁>\"\n"
+                "python -X utf8 -m python.engines.other_tool extract \"<游戏目录>\" \"<输出>\"\n"
+                "python -X utf8 -m python.engines.other_tool rebuild \"<输出>\" \"<新目录>\"\n"
+                "python -m python.engines.demo_pack \"<工作区>\" \"<补丁>\"\n```\n")
+        head = render(page).split("## 用法", 1)[0]
+        self.assertEqual([line for line in head.splitlines() if line.startswith("python ")],
+                         ["python -B -m python.engines.demo_extract \"<游戏目录>\" --archive a.int",
+                          "python -X utf8 -m python.engines.other_tool extract \"<游戏目录>\" \"<输出>\""])
+
+    def test_detection_next_steps_repeat_the_page_section(self):
+        sys.path.insert(0, str(ROOT))
+        from python.detect import next_steps
+        for engine in ("catsystem2", "qlie", "escude", "entis-gls", "kirikiri"):
+            with self.subTest(engine=engine):
+                stats = {"candidate_stats": {engine: {"by_strength": {"probe": 1}, "matched_files": 1}}}
+                step = next_steps(stats)[0]
+                text = (ROOT / step["engine_page"]).read_text(encoding="utf-8")
+                section = text.split(HEADING, 1)[1].split("```text", 1)[1].split("```", 1)[0]
+                self.assertEqual(step["extract_commands"], section.strip().splitlines()[:4])
+                self.assertTrue(step["extract_commands"])
+
     def test_bundled_pages_are_current_and_line_endings_survive(self):
         self.assertEqual(stale_pages(ROOT), [])
         with tempfile.TemporaryDirectory() as temp:

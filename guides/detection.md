@@ -20,7 +20,7 @@
 
 ### 版本与运行环境字段
 
-- `format_versions` 汇总读到的头部版本（计数）：`yuris-ypf`（YPF 头版本字，只有 v482 有完整路线）、`qlie-filepack`（包尾 `FilePackVerX.Y`，随包 reader/writer 覆盖 3.0 与 3.1）、`renpy-rpa`（`RPA-3.0`、改名的 `ARC-3.0`、`RPA-3.2`、`RPA-2.0`；随包 reader 只接受 3.0/ARC-3.0）、`entis`（子类型）、`unityfs`（bundle 格式版本）、`unity-serialized`（serialized 版本）。对应 hit 另带 `version`、`unity_version` 或 `subtype`。
+- `format_versions` 汇总读到的头部版本（计数）：`yuris-ypf`（YPF 头版本字，482 与 487 有完整路线）、`qlie-filepack`（包尾 `FilePackVerX.Y`，随包 reader/writer 覆盖 3.0 与 3.1）、`renpy-rpa`（`RPA-3.0`、改名的 `ARC-3.0`、`RPA-3.2`、`RPA-2.0`；随包 reader 只接受 3.0/ARC-3.0）、`entis`（子类型）、`unityfs`（bundle 格式版本）、`unity-serialized`（serialized 版本）。对应 hit 另带 `version`、`unity_version` 或 `subtype`。
 - Entis：偏移 `0x10` 为 `ERISA-Archive file` 的标为 NOA 归档（`subtype: noa`，随包 reader 可解 ERISA-N，回写为不压缩成员），为 `Cotopha Image file` 的才是 CSX；其他子签名标 `other`。
 - `executables` 列出扫描根及其下两层内 `*.exe` 的 PE Machine：`x86`、`x64`、`arm64` 等，非 PE 记 `not-pe`。选择 JIS hook DLL 时按实际游戏 EXE 的位数，不按启动器。
 - `unity`：`scripting_backend` 为 `mono`（存在 `*_Data/Managed/Assembly-CSharp.dll`）、`il2cpp`（存在 `GameAssembly.dll` 或 `il2cpp_data`）、两者或 `undetermined`。这只是运行时后端，不决定资源或剧情的序列化布局；`.assets`、`globalgamemanagers` 的 serialized 版本仅在头部声明大小与实际大小一致时报告。
@@ -40,7 +40,7 @@
 - 默认跳过派生目录：名字以 `_extract` 结尾或带 `_extract_…` 后缀（如 `_extract_2`、`_extract_pack_…`）的目录，`…Extract…_Output` 形式的解包输出，同时含 `gt_input` 与 `metadata`/`reports` 的工作区，以及根下有 `verification.json` 的封包输出。仅以 `_output` 结尾的普通目录（如媒体插件的 `audio_output`）照常扫描。被跳过的目录列在 `skipped_directories`（展示有上限，总数见 `skipped_directory_count`）。这些是旧提取结果或第三方解包输出，不是游戏原件；确需检查时加 `--include-derived`。被扫描的根目录本身不受此规则影响。
 - 文件头未命中任何内置规则时，用前 4 字节查 [formats.json](../catalog/formats.json)，命中写入 `catalog_hints`（标签最多 5 个、总数有上限，统计见 `catalog_hint_stats`）。常见通用头（PNG、Ogg、RIFF、MZ、ZIP、CAB 等）和小于 `0x10000` 的版本/计数字不参与。它只是资料线索：用 `tools/query_catalog.py --magic` 继续查来源，不代表存在对应引擎页或已支持。
 - CLI 固定以 UTF-8 输出 JSON，不受控制台代码页影响。
-- CLI 输出以 `next_steps` 开头：每个候选按最强证据排序，给出 `engine_page`（要读的引擎页）和 `extract_commands`（该页记载的提取命令，占位符照原样，没有工作区 CLI 的引擎不带此项）。候选仍只是线索；引擎页开头的“快速路径”列出同样的命令，直接运行即可，提取器会自行校验格式，失败时再读该页其余部分和实现。
+- CLI 输出以 `next_steps` 开头：每个候选按最强证据排序，给出 `engine_page`（要读的引擎页）和 `extract_commands`（该页记载的提取命令，占位符照原样，没有工作区 CLI 的引擎不带此项）。候选仍只是线索；引擎页开头的“快速路径”列出同样的命令，直接运行即可，提取器会自行校验格式，失败时再读该页其余部分和实现。另有候选具备 `probe` 证据时，只有扩展名证据的候选（如 `.ks` 同属 KAG 与 TyranoScript、`.ast` 也被图片使用）带 `note` 且不给提取命令，先核实更强的候选；它单独出现时照常给出命令。`.ast` 文件头是 JPEG/PNG/GIF 时不计扩展名证据。Kirikiri 候选会读取浅层 `.xp3` 的索引块（有界，不读载荷），结果列在 `xp3_indexes`；`next_steps` 按索引类型（Hxv4、Yuzu/eliF 名称映射、sen: Cx、标准）给出 `routes` 并把对应提取命令排在前面，命令文本仍与引擎页一致。`how_to_proceed` 随结果变化：有提取命令时指向快速路径，候选页只有分阶段 Python API 时改为读引擎页并调用 API，没有候选时提示按扩展名或魔数搜索。
 - 只有文件名不同的同类证据合并为一条，按已扫描到的相对路径字典序选择代表文件和其余示例，不依赖文件系统的枚举顺序；`files` 是文件数，`more_files` 列出另外几个文件名；没有内容的字段不输出。`--full` 恢复逐条列出并保留全部字段；`detect_directory()` 默认不合并，传 `merge_similar=True` 才合并。
 
 ```text
