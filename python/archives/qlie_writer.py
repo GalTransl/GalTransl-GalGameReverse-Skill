@@ -1,4 +1,4 @@
-"""Template writer for FilePackVer3.0 + HashVer1.3 and 3.1 + HashVer1.4.
+"""Template writer for FilePackVer3.0 (HashVer1.3/1.4) and 3.1 + HashVer1.4.
 
 New inverse writer based on the GARbro-derived qlie.py reader; names and
 order are unchanged. HashVer1.3/1.4 layouts were checked against actual
@@ -14,6 +14,14 @@ from typing import BinaryIO
 from .qlie import (Entry, Index, PACK_KEY_NAME, checksum, crypt_name, crypt_name31, decrypt,
                    decompress, encrypt, member_keys, read_index, read_member)
 
+# (PACK version, lookup signature) -> header size, bucket-count width, name
+# unit (bytes per length unit) and ordinal width. A 3.0 pack may carry either
+# table: HashVer1.4 there keeps the 1.3 body (u16 buckets, CP932 byte names,
+# u16 ordinals) behind the 68-byte 1.4 header with the compression flag.
+LOOKUPS = {('3.0', b'HashVer1.3'): (32, 2, 1, 2),
+           ('3.0', b'HashVer1.4'): (68, 2, 1, 2),
+           ('3.1', b'HashVer1.4'): (68, 4, 2, 4)}
+
 
 def _read(stream, at, size):
     stream.seek(at)
@@ -23,126 +31,96 @@ def _read(stream, at, size):
     return data
 
 
-def hash13_tail(stream: BinaryIO, index: Index, *, max_bytes: int = 32 << 20) -> bytes:
-    """Validate every lookup name -> ordinal mapping before preserving tail."""
-    size = index.file_size - 28 - index.index_end
-    if not 1092 <= size <= max_bytes:
-        raise ValueError('unsupported QLIE hash/key tail size')
-    tail = _read(stream, index.index_end, size)
-    if tail[:16] != b'HashVer1.3\0\0\0\0\0\0':
-        raise ValueError('template writer requires HashVer1.3')
-    buckets, count, mapping_size, stored = struct.unpack_from('<IIII', tail, 16)
-    if (buckets != 256 or count != len(index.entries) or count > 65535
-            or mapping_size != count * 2 or 32 + stored + 1060 != len(tail)):
-        raise ValueError('invalid HashVer1.3 dimensions')
-    if struct.unpack_from('<I', tail, len(tail) - 1028)[0] != 32 + stored:
-        raise ValueError('QLIE key trailer hash-size mismatch')
-    synthetic = Entry('hash', b'hash', 0, stored, stored, 0, 1, 0)
-    data = decrypt(tail[32:32 + stored], synthetic, 0x428, mode='legacy')
-    if data[:4] != b'1PC\xff' or len(data) < 12:
-        raise ValueError('HashVer1.3 compression signature mismatch')
-    data = decompress(data, expected_size=struct.unpack_from('<I', data, 8)[0], max_output=max_bytes)
-    pos, refs = 0, []
-
-    def take(n):
-        nonlocal pos
-        if n < 0 or pos + n > len(data):
-            raise ValueError('truncated HashVer1.3 lookup')
-        result = data[pos:pos + n]
-        pos += n
-        return result
-
-    for _ in range(buckets):
-        n = int.from_bytes(take(2), 'little')
-        if len(refs) + n > count:
-            raise ValueError('HashVer1.3 entry count overflow')
-        for _ in range(n):
-            length = int.from_bytes(take(2), 'little')
-            if not 0 < length <= 256:
-                raise ValueError('HashVer1.3 filename length mismatch')
-            name = take(length)
-            offset, _name_hash = struct.unpack('<QI', take(12))
-            refs.append((name, offset))
-    mapping = struct.unpack('<' + 'H' * count, take(mapping_size))
-    if pos != len(data) or len(refs) != count or sorted(mapping) != list(range(count)):
-        raise ValueError('HashVer1.3 ordinal array mismatch')
-    seen = set()
-    for name, offset in refs:
-        if offset % 2 or offset >= mapping_size:
-            raise ValueError('HashVer1.3 lookup offset outside ordinal array')
-        ordinal = mapping[offset // 2]
-        if ordinal in seen or name != index.entries[ordinal].raw_name:
-            raise ValueError('HashVer1.3 filename/ordinal disagrees with index')
-        seen.add(ordinal)
-    return tail
+def lookup_version(stream: BinaryIO, index: Index) -> str:
+    """Lookup-table signature after the index, e.g. 'HashVer1.3' (not validated)."""
+    head = _read(stream, index.index_end, 16)
+    return head[:10].decode('ascii', errors='replace')
 
 
-def hash14_tail(stream: BinaryIO, index: Index, *, max_bytes: int = 32 << 20) -> bytes:
-    """3.1 HashVer1.4: validate every lookup name -> ordinal before preserving.
+def _lookup(stream: BinaryIO, index: Index, signature: bytes, max_bytes: int) -> bytes:
+    """Validate every lookup name -> ordinal mapping before preserving the tail.
 
-    Header (68 bytes): signature, u32 buckets=256, count, ordinal-array size
-    (count*4), stored size, compressed flag, 32 opaque bytes kept verbatim.
-    Lookup: per bucket u32 n, then n x (u16 chars, UTF-16LE name, u64 offset
-    into the u32 ordinal array, u32 name hash); then the ordinal array.
+    Header: signature, u32 buckets=256, count, ordinal-array size, stored size;
+    1.4 adds a compression flag and 32 opaque bytes kept verbatim. Lookup: per
+    bucket n, then n x (u16 length, name, u64 offset into the ordinal array,
+    u32 name hash); then the ordinal array.
     """
+    layout = LOOKUPS.get((index.version, signature))
+    if layout is None:
+        raise ValueError(f'FilePackVer{index.version} template writer does not support '
+                         f'{signature.decode("ascii", "replace")}')
+    header, bucket_width, unit, ordinal_width = layout
+    label = signature.decode('ascii')
     size = index.file_size - 28 - index.index_end
-    if not 1128 <= size <= max_bytes:
+    if not header + 1060 <= size <= max_bytes:
         raise ValueError('unsupported QLIE hash/key tail size')
     tail = _read(stream, index.index_end, size)
-    if tail[:16] != b'HashVer1.4\0\0\0\0\0\0':
-        raise ValueError('FilePackVer3.1 template writer requires HashVer1.4')
-    buckets, count, mapping_size, stored, compressed = struct.unpack_from('<5I', tail, 16)
-    if (buckets != 256 or count != len(index.entries) or mapping_size != count * 4
-            or 68 + stored + 1060 != len(tail)):
-        raise ValueError('invalid HashVer1.4 dimensions')
+    if tail[:16] != signature + bytes(6):
+        raise ValueError(f'FilePackVer{index.version} template writer requires {label}')
+    buckets, count, mapping_size, stored = struct.unpack_from('<IIII', tail, 16)
+    compressed = struct.unpack_from('<I', tail, 32)[0] if header == 68 else 1
+    if (buckets != 256 or count != len(index.entries) or count >= 1 << (8 * ordinal_width)
+            or mapping_size != count * ordinal_width or header + stored + 1060 != len(tail)):
+        raise ValueError(f'invalid {label} dimensions')
     if compressed not in (0, 1):
-        raise ValueError('unknown HashVer1.4 compression flag')
-    if struct.unpack_from('<I', tail, len(tail) - 1028)[0] != 68 + stored:
+        raise ValueError(f'unknown {label} compression flag')
+    if struct.unpack_from('<I', tail, len(tail) - 1028)[0] != header + stored:
         raise ValueError('QLIE key trailer hash-size mismatch')
     synthetic = Entry('hash', b'hash', 0, stored, stored, 0, 1, 0)
-    data = decrypt(tail[68:68 + stored], synthetic, 0x428, mode='legacy')
-    if compressed:  # flag 0 (seen in separately built patch packs): encrypted only
+    data = decrypt(tail[header:header + stored], synthetic, 0x428, mode='legacy')
+    if compressed:  # 1.4 flag 0 (seen in separately built patch packs): encrypted only
         if data[:4] != b'1PC\xff' or len(data) < 12:
-            raise ValueError('HashVer1.4 compression signature mismatch')
+            raise ValueError(f'{label} compression signature mismatch')
         data = decompress(data, expected_size=struct.unpack_from('<I', data, 8)[0], max_output=max_bytes)
     pos, refs = 0, []
 
     def take(n):
         nonlocal pos
         if n < 0 or pos + n > len(data):
-            raise ValueError('truncated HashVer1.4 lookup')
+            raise ValueError(f'truncated {label} lookup')
         result = data[pos:pos + n]
         pos += n
         return result
 
     for _ in range(buckets):
-        n = int.from_bytes(take(4), 'little')
+        n = int.from_bytes(take(bucket_width), 'little')
         if len(refs) + n > count:
-            raise ValueError('HashVer1.4 entry count overflow')
+            raise ValueError(f'{label} entry count overflow')
         for _ in range(n):
             length = int.from_bytes(take(2), 'little')
             if not 0 < length <= 256:
-                raise ValueError('HashVer1.4 filename length mismatch')
-            name = take(2 * length)
+                raise ValueError(f'{label} filename length mismatch')
+            name = take(unit * length)
             offset, _name_hash = struct.unpack('<QI', take(12))
             refs.append((name, offset))
-    mapping = struct.unpack(f'<{count}I', take(mapping_size))
+    mapping = struct.unpack('<' + ('H' if ordinal_width == 2 else 'I') * count, take(mapping_size))
     if pos != len(data) or len(refs) != count or sorted(mapping) != list(range(count)):
-        raise ValueError('HashVer1.4 ordinal array mismatch')
+        raise ValueError(f'{label} ordinal array mismatch')
     seen = set()
     for name, offset in refs:
-        if offset % 4 or offset >= mapping_size:
-            raise ValueError('HashVer1.4 lookup offset outside ordinal array')
-        ordinal = mapping[offset // 4]
+        if offset % ordinal_width or offset >= mapping_size:
+            raise ValueError(f'{label} lookup offset outside ordinal array')
+        ordinal = mapping[offset // ordinal_width]
         if ordinal in seen or name != index.entries[ordinal].raw_name:
-            raise ValueError('HashVer1.4 filename/ordinal disagrees with index')
+            raise ValueError(f'{label} filename/ordinal disagrees with index')
         seen.add(ordinal)
     return tail
 
 
+def hash13_tail(stream: BinaryIO, index: Index, *, max_bytes: int = 32 << 20) -> bytes:
+    """3.0 HashVer1.3 (32-byte header, always 1PC-compressed)."""
+    return _lookup(stream, index, b'HashVer1.3', max_bytes)
+
+
+def hash14_tail(stream: BinaryIO, index: Index, *, max_bytes: int = 32 << 20) -> bytes:
+    """HashVer1.4: 3.1 UTF-16LE/u32 body, or 3.0 CP932/u16 body (see LOOKUPS)."""
+    return _lookup(stream, index, b'HashVer1.4', max_bytes)
+
+
 def lookup_tail(stream: BinaryIO, index: Index) -> bytes:
-    """Validated hash/key tail for the archive's PACK version."""
-    return (hash13_tail if index.version == '3.0' else hash14_tail)(stream, index)
+    """Validated hash/key tail for the archive's PACK version and table signature."""
+    signature = lookup_version(stream, index).encode('ascii', errors='replace')
+    return _lookup(stream, index, signature, 32 << 20)
 
 
 def rebuild(source: BinaryIO, destination: BinaryIO, replacements: dict[str, bytes], *,

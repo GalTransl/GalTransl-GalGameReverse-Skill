@@ -76,7 +76,9 @@ def pe():
     return bytes(head + rsrc)
 
 
-def archive(files=None, *, bad_mapping=False, reverse_physical=False):
+def archive(files=None, *, bad_mapping=False, reverse_physical=False, lookup14=False):
+    """Synthetic FilePackVer3.0; lookup14 uses the 68-byte HashVer1.4 header
+    over the same u16/CP932 lookup body."""
     files = files or [('scene.s', SCRIPT.encode('cp932')), ('image.bin', b'UNCHANGED_MEDIA')]
     files = [(qlie.PACK_KEY_NAME, PKEY), *files]
     key_blob = bytes((i * i + 17) % 256 for i in range(1024))
@@ -108,7 +110,11 @@ def archive(files=None, *, bad_mapping=False, reverse_physical=False):
     packed = literal(lookup)
     dummy = qlie.Entry('hash', b'hash', 0, len(packed), len(packed), 0, 1, 0)
     packed = qlie.encrypt(packed, dummy, 0x428, mode='legacy')
-    tail = b'HashVer1.3' + bytes(6) + struct.pack('<IIII', 256, len(entries), len(entries) * 2, len(packed)) + packed
+    if lookup14:
+        tail = (b'HashVer1.4' + bytes(6) + struct.pack('<5I', 256, len(entries), len(entries) * 2, len(packed), 1)
+                + bytes(32) + packed)
+    else:
+        tail = b'HashVer1.3' + bytes(6) + struct.pack('<IIII', 256, len(entries), len(entries) * 2, len(packed)) + packed
     tail += bytes(32) + struct.pack('<I', len(tail)) + key_blob
     return bytes(payload) + tail + b'FilePackVer3.0\0\0' + struct.pack('<IQ', len(entries), index_offset)
 

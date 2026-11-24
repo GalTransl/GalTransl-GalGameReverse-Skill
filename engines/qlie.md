@@ -1,5 +1,14 @@
 # QLIE：PACK 3.0/3.1 解包、ImoScripter 对白与模板重封包
 
+## 快速路径
+
+识别为本格式后先直接运行提取命令：按实际路径替换占位符，多条命令对应不同方言或来源，按下文的识别条件选一条。提取器自行校验格式并用原文走真实的解析与回写，结构不符时拒绝并指出失败位置。命令成功就不必读实现源码或研究资料；失败时再按报错读本页对应章节和 `python/` 中的实现。
+
+```text
+python -B -m python.engines.qlie_extract "GAME" "NEW_EXTRACT" --verify-edits
+python -B -m python.engines.qlie_extract "GAME" "NEW_EXTRACT" --exe "game.exe" --verify-edits
+```
+
 目录输出遵循 [公共安全写出约定](../guides/python-reference-api.md#安全写出示例)：父目录须已存在，目标须不存在或为可复用的已有目录（不含同名产物或非空结果目录）；文件和链接拒绝。
 
 ## 路线选择
@@ -10,10 +19,10 @@
 |---|---|
 | PACK 3.0 / 3.1 | [qlie.py](../python/archives/qlie.py)：有界索引；3.0 为 CP932 文件名与 `legacy`/`key-file`/`keyed`，3.1 为 UTF-16LE 文件名与 `pack-key`/`default-key`；按版本校验密文 checksum，`1PC FF` 字节对解压 |
 | EXE 密钥资源 | [qlie_keys.py](../python/archives/qlie_keys.py)：静态解析 PE 的 `RCDATA/TFORM1/ IconKeyImage`（3.0 keyed）与 `RCDATA/RESKEY`（3.1 可选外部 key），不运行 EXE、不脱壳、不实例化 Delphi 对象 |
-| ImoScripter 多行方言 | [qlie_imos.py](../python/engines/qlie_imos.py)：`FormatType=1`、`ReturnCode=[n]`，空行分句、姓名与选项、居中文字、可逆回填 |
-| 提取入口 | [qlie_extract.py](../python/engines/qlie_extract.py)：明确指定包；按包尾版本与包内 key 成员逐包判定模式（或 `--mode`），只在需要时读取 EXE/key，生成平铺 JSON、原件、manifest 和报告 |
-| PACK 重建 | [qlie_writer.py](../python/archives/qlie_writer.py)：以原始 `FilePackVer3.0 + HashVer1.3` 或 `FilePackVer3.1 + HashVer1.4` 为模板替换已有成员，重写偏移/长度/密文校验 |
-| 译文打包入口 | [qlie_repack.py](../python/engines/qlie_repack.py)：从 `gt_output` 校验、回填、生成新 PACK；支持原文整包往返 |
+| ImoScripter 多行方言 | [qlie_imos.py](../python/engines/qlie_imos.py)：`FormatType=1`、`ReturnCode=[n]`，空行分句、姓名与选项、居中文字、注音与等待/速度标签、可逆回填 |
+| 提取入口 | [qlie_extract.py](../python/engines/qlie_extract.py)：默认读取 `GameData/*.pack`（或 `--archives`）；按包尾版本与包内 key 成员逐包判定模式（或 `--mode`），只在需要时读取 EXE/key，生成平铺 JSON、原件、manifest、报告与交付状态 |
+| PACK 重建 | [qlie_writer.py](../python/archives/qlie_writer.py)：以原始 `FilePackVer3.0 + HashVer1.3/1.4` 或 `FilePackVer3.1 + HashVer1.4` 为模板替换已有成员，重写偏移/长度/密文校验 |
+| 译文打包入口 | [qlie_repack.py](../python/engines/qlie_repack.py)：从 `gt_output` 校验、回填、生成新 PACK；支持部分成功的工作区和原文整包往返 |
 | 旧文本字段 API | [qlie.py](../python/engines/qlie.py)：有限 `id,name,message`、独立姓名、`^select` 的字符范围 API；下文保留说明 |
 
 PACK 1.x/2.x、未知 hash 版本、新建或删除成员、重命名、任意脚本 VM 尚不支持。writer 只支持 **3.0/3.1 原包模板重建**，版本之间不互相转换。
@@ -28,6 +37,10 @@ PACK 1.x/2.x、未知 hash 版本、新建或删除成员、重命名、任意�
 6. ArcKey 从末尾 `0x41c` 处的 256 字节生成。QLIE 使用 64-word 的 MT 变体、MMX 分 lane 加法和明文反馈，不等同于标准 MT19937 或对称地调用 decrypt 两遍。末尾不足 8 字节不加密，checksum 也只覆盖完整 qword；另用完整 SHA-256 保存输入身份。
 
 只从用户提供的游戏中静态读取密钥。`game_key_from_pe(bytes)` 不扫描进程，不加载可执行文件，也不附带任何游戏密钥。先限制 EXE 大小；不支持的 PE/Delphi 结构报错。
+
+**原名 EXE 可能只是启动器**：与游戏同名的 EXE 可以是几 KB 的启动器/存根，没有资源段，真正的游戏 PE 换了名字或扩展名（例如同目录的 `.bin`）。此时提取器以退出码 2 报“cannot read the IconKeyImage … launcher/stub”，改用目录中另一个以 `MZ` 开头、带资源段的文件作 `--exe`；密钥仍以 checksum 与解压是否通过为准。
+
+**3.0 名称查找表**：3.0 包可以带 `HashVer1.3`（32 字节头，总是 `1PC` 压缩）或 `HashVer1.4`。3.0 的 `HashVer1.4` 只换成 68 字节头（多出压缩标志和 32 字节保留区），表体仍是 1.3 布局：每桶 u16 个数、u16 字节长度的 CP932 名称、u64 偏移、u32 哈希，最后是 u16 序号数组。writer 按（包版本，表签名）选择布局，逐项核对“名称→序号”并要求整表恰好用完，不认识的组合拒绝；报告 `archives[].hash_version` 记录实际签名。
 
 ## PACK 3.1
 
@@ -53,19 +66,27 @@ PACK 1.x/2.x、未知 hash 版本、新建或删除成员、重命名、任意�
 
 **EXE 被改过时**：目录中 `<名>.exe` 与 `<名>.exe.org` 同在时，`.org` 通常是原版（补丁常改导入表以加载注入 DLL）。只有确实需要 EXE（3.0 keyed、3.1 method 2 包内 key）时才读取；传入当前 EXE 而旁边有内容不同的 `.org` 时，提取器拒绝并提示显式传 `--exe "<名>.exe.org"`；两者相同则记录 `identical`。报告 `exe_check` 记录选择与哈希。需要人工核对时，只比较两个文件的差异字节所在区域（导入表、代码段或资源段），资源段一致才说明密钥材料相同。`RESKEY`/`TFORM1` 数据位于加壳后的虚拟区段时 `pe_rcdata` 明确报错，不脱壳、不运行 EXE。
 
-**覆盖包与交付**：同一路径出现在多个包里（例如编号较大的补丁包重复了较早包中的图片），报告 `overlaps` 列出数量和示例。补丁包与其备份副本哈希相同、成员是旧包的子集时，可判断它是覆盖包；修改剧本时改**实际生效**的那份，并在游戏中确认。默认交付仍是生成与原包同名的新 PACK（只重建含译文的包），由用户替换；不改其他包、不新建覆盖包。
+**覆盖包与交付**：同一路径出现在多个包里（例如编号较大的补丁包重复了较早包中的图片），报告 `overlaps` 按包顺序列出数量和示例。补丁包与其备份副本哈希相同、成员是旧包的子集时，可判断它是覆盖包；修改剧本时改**实际生效**的那份，并在游戏中确认。默认交付仍是生成与原包同名的新 PACK（只重建含译文的包），由用户替换；不改其他包、不新建覆盖包。
 
-**脚本编码**：3.1 包中剧本与配置通常是带 BOM 的 UTF-16LE，可直接写中文，不走 CP932 JIS 代理；少数无 BOM 的系统文件按 CP932 严格解码。正文中的 `[rb,本文,注音]` 注音标签当前不支持，含它的脚本整份标记 `failed` 并给出原因，不导出部分结果；此时用 `--members` 先处理其他剧本。
+**同一剧本的多个副本**：同一路径、解码后字节相同的副本只导出一个 JSON，manifest 的 `settings.copies` 与各成员的 `json` 指向它，回封时写入全部副本，避免同一译文翻两遍、漏改生效的那份。内容不同的副本各导出一个带 `__aNN_mNNNNN` 后缀的 JSON，报告 `differing_copies` 按包顺序列出每份的包、状态与哈希；哪一份在运行时生效未由本路线确认，不按包号推断，交付说明会提示先在游戏中核对。
+
+**脚本编码**：3.1 包中剧本与配置通常是带 BOM 的 UTF-16LE，可直接写中文，不走 CP932 JIS 代理；少数无 BOM 的系统文件按 CP932 严格解码。
 
 ## 提取工作区
 
 在 Skill 根目录运行，替换 `GAME`、`NEW_EXTRACT` 为实际路径：
 
 ```text
-python -B -m python.engines.qlie_extract "GAME" "NEW_EXTRACT" --archives GameData/story.pack GameData/update.pack
-python -B -m python.engines.qlie_extract "GAME" "NEW_EXTRACT" --exe "game.exe" --key-file "DLL/key.fkey" --archives GameData/story.pack
+python -B -m python.engines.qlie_extract "GAME" "NEW_EXTRACT" --verify-edits
+python -B -m python.engines.qlie_extract "GAME" "NEW_EXTRACT" --exe "game.exe" --verify-edits
 ```
 
+第一条用于 3.1 及不需要 EXE 的包；3.0 `keyed` 包用第二条（`--key-file` 缺省为 `DLL/key.fkey`）。
+
+- 不给 `--archives` 时读取 `GameData/` 下全部 `.pack`，按自然顺序（`data2` 在 `data10` 前）编号；媒体包只读索引并流式计算哈希。要只处理部分包时用 `--archives GameData/<包名>.pack ...` 显式列出。包顺序只决定编号和报告顺序，不代表加载优先级。
+- `--verify-edits` 在原文往返之外，把建议先试的 JSON 的第一行正文加测试后缀、第一个可写姓名加别名，经 writer 写入整包（匿名临时文件，不发布），重新读索引和该成员并比对 name/message，同时核对其他成员存储字节不变；结果写入报告 `edit_check`。
+- 退出码：0 全部通过；1 部分剧本 `failed`（其余照常导出）；2 输入或格式错误，只输出一行 `error:`，不生成目录。
+- 报告带 `delivery`，并写好 `reports/translation-state.md`：交付表格、翻译注意事项（注音、等待标签、行数、姓名规则，编码路线，未导出脚本、共用与不同副本，原文疑似非日文时的提示）、建议先试的 JSON（`scenario/` 子目录中按文件名自然排序的第一个剧本，未确认是否开场）。
 - `--mode auto`（默认）按包判定，报告 `archives[]` 记录 `pack_version`、`mode`、`mode_evidence` 与 `key_source`；判定只决定试用的密钥链，成功仍以 checksum、严格解压和脚本解码为准。显式 `--mode` 必须与包版本匹配，否则报错。
 - `--exe`、`--key-file` 只在密钥链需要时读取：3.0 `keyed` 需要两者（`--key-file` 缺省为 `DLL/key.fkey`）；3.1 仅在包内 key 成员为 method 2 时需要外部 key。缺 key 文件、EXE 资源不可静态读取、模式与版本不符时给出明确错误并以退出码 2 结束，不输出 traceback。
 - `--members` 用大小写不敏感的 glob（`/` 路径）只选部分 `.s`，便于少量试注；`.txt` 配套文件仍全部读取作为方言证据。
@@ -74,22 +95,30 @@ python -B -m python.engines.qlie_extract "GAME" "NEW_EXTRACT" --exe "game.exe" -
 
 - 提取器只解出 `.s`、配套 `.txt` 和内部 key，媒体只读索引；累计脚本输出默认 64 MiB。完整包 SHA-256 以流方式计算。
 - 脚本编码按成员判定：以 `FF FE` 开头为带 BOM 的 UTF-16LE，否则严格 CP932；两者都要求原文重新编码后逐字节一致。manifest 的 `encoding` 与设置中的 `bom` 记录该结果，回填按原编码与 BOM 写回。
-- 同名/同路径剧本跨包时保留每个版本，不擅自断言包加载优先级；文件名冲突才加 `__aNN_mNNNNN` 后缀。报告记录精确来源及输出名。
+- 同路径剧本跨包时：字节相同的共用一个 JSON，内容不同的各自保留，不擅自断言包加载优先级（见上文“同一剧本的多个副本”）；文件名冲突才加 `__aNN_mNNNNN` 后缀。报告记录精确来源及输出名。
+- 单个剧本含未支持的结构时只把该剧本标为 `failed`，不发布它的 JSON/manifest，其他剧本照常导出（`status: partial`）。报告 `failed` 列出包、成员、原因、行号与出错片段（如 `line 12: unrecognized ImoScripter text tag: '[xx,1]'`），`failure_reasons` 按原因计数；原件仍保存在 `original/` 供研究。`--members` 可先只处理选定剧本。
 - `.txt` 保存在 `original` 供核对配置，不泛化为对白。汉化 EXE 的外部覆盖数据（例如 `.cn`、`.1/.2`）未解析；此路线只导出所选 PACK 内的剧本，不推断其语言或补丁状态。
 
 ## ImoScripter 多行方言与回填
 
 `avg/projectsetting.txt` 的 `FormatType=1`、`avg/setting.txt` 的 `ReturnCode=[n]` 是进入此路线的证据；下列规则不适用于 FormatType=0。
 
-- 姓名和正文只在同一空行分隔句中结合；空行后姓名清空，旁白不会继承上一人物。语音行 `％...％` 和控制行不送翻译。孤立姓名、句内未知控制流和未知文本标签报错。
+行角色以包内 ImoScripter 系统脚本为准（`Imo_FormatModeMulti`、`Imo_FormatDeleteCode`）：文本行先去首尾空白，首字符等于 `FormatNameCode` 的开符（`【`）就是姓名行，姓名取**整行**删去第一个开符和第一个闭符后的内容；首字符为 `FormatVoiceCode`（`％`）是语音行；空行结束一句；其余是正文，引擎把同句正文用 `ReturnCode` 拼接。
+
+- 姓名和正文只在同一空行分隔句中结合；空行后姓名清空，旁白不会继承上一人物。语音行 `％...％` 和控制行不送翻译。孤立姓名、句内未知控制流和未知文本标签报错，错误带行号与出错片段。
 - `【身份名＠显示名】` 导出显示名。译名写回时保留原身份名，避免改变按身份名查找的语音音量设置；例如 `【Alice】` 翻译后为 `【Alice＠艾丽丝】`。变量姓名为上下文只读。`＠` 不是多人名分隔符。
-- `[spd,0][pc,文字][spd]` 只导出 `文字`，回填保留外部指令；不能把整段 `pc` 当不可翻译标签，否则会遗漏诗句。当前支持独立 pc 文本行，不支持与普通正文混排的复杂 pc。
-- 同一句的连续物理正文行合并为一个 JSON `message`，用换行分隔。多物理行回填可以比原文少：只删除句尾多余的 `message` 物理行，`pc` 行不能删除，也不能新增物理行。单物理行的显示换行转换为 `[n]`。保留原缩进、CRLF、语音和全部非文本字节。仅含一个全角空格的显示间隔不产生空消息。
+- 姓名行的形状：`】` 后只跟空白（含全角空格）时，导出括号内姓名，尾部空白原样保留；只有 `【` 没有 `】` 的行按引擎规则仍是姓名行，姓名取 `【` 之后的内容（不含尾部空白），回写为 `【身份名＠译名`。拒绝：`【A】【B】`/`【A】 【B】`（删去第一对括号后剩下 `A【B】`，显示语义未确认）、`【A】正文`（整行成为姓名，正文不会显示）、空的 `【`、含两个以上 `＠` 的姓名。
+- 正文中的注音 `[rb,底字,注音]` 是受保护的整组：导出时原样留在 `message` 中；译文可以保留、改写、删除或新增整组，但每组必须是两段非空、不含逗号/方括号/换行的 `[rb,底字,注音]`。选项、pc、存档标题和姓名中不接受注音或其他方括号。
+- 等待/速度标签 `[w,数字]`、`[spd,数字]`、`[spd]` 可单独成行或位于正文中，作为同一 `message` 的一部分导出；译文必须在该条中按原顺序原样保留它们（可随文字移动，不能增删或改值）。不带参数的 `[w]`、非数字参数及其他未知标签仍报错。
+- `[spd,0][pc,文字][spd]` 只导出 `文字`，回填保留外部指令；不能把整段 `pc` 当不可翻译标签，否则会遗漏诗句。pc 标签后只跟标点（Unicode 标点类，如 `、`）时同样只导出 `文字`，标点原样保留、不送翻译；后面跟其他文字的混排 pc 拒绝。
+- 句内的 `\cal,` 行只做变量赋值，不输出文字、不跳转，不打断句子，原样保留；`\sub,` 等其他 `\`/`@` 控制行出现在未结束的句中时拒绝（子程序可能产生文字或分句事件，未逐个确认）。
+- 同一句的连续物理正文行合并为一个 JSON `message`，用换行分隔。多物理行回填可以比原文少：只删除句尾多余的 `message` 物理行，`pc` 行不能删除，也不能新增物理行。单物理行的显示换行转换为 `[n]`；译文中不要直接写 `[n]`。保留原缩进、CRLF、语音和全部非文本字节。仅含一个全角空格的显示间隔不产生空消息。
+- 正文行开头的一个全角空格作为缩进保留在 `message` 之外。有缩进的行无论译文以什么开头都仍是正文（例如原文缩进后正好以 `【` 或第二个全角空格开头，可以原样回写）；没有缩进的行，译文不能以 `^`、`@`、`\`、`％`、`【`、全角空格或半角空白开头，也不能以半角空白结尾，否则行角色或分句会改变。
 - `^select,` 后每个选项各一条，空选项也保留；不把 `^selectset1`、`^selectjmp` 的控制参数当选项。选项/pc 文本不得引入 ASCII 逗号、物理换行或新标签。
 - `^savetext,标题,...` 的第一个简单参数导出独立存档标题行；后续参数、前导缩进及尾部空白原样保留。标题不得新增逗号、换行或标签；嵌套标签参数布局拒绝，不猜逗号归属。
 - 存档标题命令不清空当前句的姓名，也不拆分其前后的正文；正文仍按原空行边界分组，标题独立定位回填。
 - parser 重新从原件生成定位，与 manifest 中的定位对比；不信任任意 sidecar 偏移。回填后重新解析并比对全部 name/message。
-- 当前 parser 标识为 `qlie-imos-multi/2`。旧工作区须从可靠原件重新提取到新目录，保留已有译文并核对新增标题的位置；不改 manifest 或按旧序号直接套用。多物理行支持减少尾部 message 行后，旧 metadata 的 `physical_multiline` 设置也不再匹配，同样需要重新提取。
+- 当前 parser 标识为 `qlie-imos-multi/3`，报告 schema 为 `qlie-extract/3`。`/3` 只新增接受上述形状，`/2` 能解析的脚本在 `/3` 下行与定位完全相同，因此 `qlie-extract/2` 工作区仍可打包（定位仍逐条核对）；要导出新支持的剧本或合并相同副本，须从可靠原件重新提取到新目录，保留已有译文后按同名核对，不改 manifest 或按旧序号直接套用。
 
 ```python
 from python.engines.qlie_imos import rows, patch
@@ -109,19 +138,21 @@ assert rows(rebuilt) == translated
 python -B -m python.engines.qlie_repack "GAME" "NEW_EXTRACT" "NEW_REBUILT"
 ```
 
-打包按提取报告中逐包记录的版本、模式和 key 来源重建密钥链，并核对用到的 EXE/key 文件哈希未变；旧版 `qlie-extract/1` 报告按 3.0 keyed、CP932 处理。输出为 `NEW_REBUILT/GameData/story.pack` 等**原归档同名文件**和 `reports/repack.json`，只重建含译文的包；同包内没有译文的成员按原密文复制。空翻译目录、未知文件名、原件或 manifest 被修改、译文条数/字段/控制结构错误均会拒绝，不生成冒充成功的包。
+打包按提取报告中逐包记录的版本、模式和 key 来源重建密钥链，并核对用到的 EXE/key 文件哈希未变；旧版 `qlie-extract/1` 报告按 3.0 keyed、CP932 处理。输出为 `NEW_REBUILT/GameData/story.pack` 等**原归档同名文件**和 `reports/repack.json`，只重建含译文的包；同包内没有译文的成员按原密文复制。多个副本共用的 JSON 写入每个副本所在的包，报告 `translated_members` 逐个列出。空翻译目录、未知文件名、原件或 manifest 被修改、译文条数/字段/控制结构错误均会拒绝，不生成冒充成功的包；错误以一行 `error:` 和退出码 2 报告，指明 JSON、成员和条目序号。
+
+部分成功（`status: partial`）的工作区可以直接打包：提取时 `failed` 的剧本从不提交给 writer，所在包重建时按原密文复制，报告 `copied_failed_members` 列出；`gt_output` 中出现这些剧本对应的文件名时拒绝并给出其失败原因与行号，不会把译文写进未解析的脚本。
 
 ```text
 python -B -m python.engines.qlie_repack "GAME" "NEW_EXTRACT" "NEW_ROUNDTRIP" --source-roundtrip
 ```
 
-`--source-roundtrip` 使用原文 JSON，所有 `.s`（包括空系统脚本）提交给 writer。相同原文仍经过解密→保留原压缩流→重新加密及索引重建；不是整包直接复制。生成后比较原包与重建包的哈希。
+`--source-roundtrip` 使用原文 JSON，所有已解析的 `.s`（包括空系统脚本；不含 `failed`）提交给 writer。相同原文仍经过解密→保留原压缩流→重新加密及索引重建；不是整包直接复制。生成后比较原包与重建包的哈希。
 
 writer 的明确边界：
 
-- 文件名、索引顺序、条数、内部 key 保持不变。`HashVer1.3` 的 256 桶查找表逐项验证“名称→序号数组”对应后原样保留；其中的 64 位值指向序号数组，不是资源的绝对文件偏移。
+- 文件名、索引顺序、条数、内部 key 保持不变。`HashVer1.3`/`HashVer1.4` 的 256 桶查找表逐项验证“名称→序号数组”对应后原样保留；其中的 64 位值指向序号数组，不是资源的绝对文件偏移。
 - 修改成员以**未压缩、原加密模式**重新存储，并更新 payload 偏移、存储/解码长度、密文 checksum 和包尾索引偏移。不实现 BPE 优化压缩，因此新包可能略大；未修改成员保留原压缩密文。
-- 底层 `rebuild(source, destination, replacements, mode=..., key_file=..., game_key=...)` 支持流式复制媒体，`destination` 必须是独立、空的可读写流。调用者以 `x+b` 创建新文件并负责失败清理。便捷 CLI 为安全使用 `write_new_tree`，限制单原包 128 MiB、整个产物 256 MiB；更大包按流式 API 单独处理。
+- 底层 `rebuild(source, destination, replacements, mode=..., key_file=..., game_key=...)` 支持流式复制媒体，`destination` 必须是独立、空的可读写流。调用者以 `x+b` 创建新文件并负责失败清理。便捷 CLI 把每个重建包先写入匿名临时文件（内存只随单个成员增长），再经 `write_new_tree` 的流式条目发布到新目录，大型剧本包也可处理；替换成员合计仍限 64 MiB。
 - CLI 按原脚本编码严格写回：CP932 脚本不会偷偷转 CP936、损失字符或安装字符隧道，中文回注走 [JIS 公共流程](../guides/jis-substitution.md)；UTF-16LE 脚本可直接写入中文，不需要 JIS 代理。归档算法可保存任意 bytes，不能由此推断游戏支持对应文本编码或字体。
 - 新包须完整重新解包，核对脚本语义及未改成员字节；通过不等于游戏加载、补丁优先级、字体和选项跳转已验证。
 
@@ -213,7 +244,8 @@ assert changed.startswith('  【Ann】  \r\n')
 - HashVer1.3 头结构交叉核对 msg-tool 提交 `f72716cee88554d40c1cdface2812493b14ca653` 的 `src/scripts/qlie/archive/pack/types.rs`；HashVer1.4 布局交叉核对其 `v31.rs`，未复制代码，详见 [3.1 出处](../provenance/qlie-pack31.json)。新增模板 writer/语义提取按本项目 GPL-3.0-or-later 许可。
 - 存档标题语义参考 msg-tool，Python 仅替换第一个参数的原始范围，保留其他参数；来源见 [文本字段来源](../provenance/common-text-fields.json)。
 - [tests/test_qlie.py](../tests/test_qlie.py) 使用纯合成 PE/DFM、key、PACK、脚本，覆盖两种物理顺序、原文/变长重建、加密向量、坏 checksum、错误 key、BPE 循环/预算、查找表错误、显示姓名和 pc、manifest 定位篡改及不覆盖输出；3.1 另覆盖固定加密/名称/checksum 向量、method 2 包内 key 需外部 key、压缩与未压缩 HashVer1.4、UTF-16 BOM 脚本的自动模式提取→变长中文回填→读回、原文整包逐字节往返、错误模式、未知版本、缺 key 文件与 EXE 被改时的 CLI 报错。
+- [tests/test_qlie_workspace.py](../tests/test_qlie_workspace.py) 覆盖注音的保留/改写/删除/新增与畸形拒绝、等待/速度标签顺序、pc 后接标点、姓名行尾空白与无闭符形状及各类拒绝（带行号与片段）、句内 `\cal`、缩进行的角色、部分成功工作区的打包与失败剧本原样复制及译文拒绝、相同副本共用 JSON 与不同副本列表、默认 `GameData/*.pack` 自然顺序、`/2` 工作区兼容、启动器存根 EXE 的 CLI 报错、`--verify-edits` 与交付状态文件、3.0 + `HashVer1.4` 查找表的往返与篡改拒绝。
 
 ```text
-python -B -m unittest discover -s tests -p test_qlie.py -v
+python -B -m pytest tests -q -k qlie
 ```
