@@ -53,7 +53,7 @@ python -m python.engines.renpy_extract extract "游戏目录/game" "<输出>/ws_
 python -m python.engines.renpy_extract pack "<输出>/ws" "<输出>/ws/新回包目录" [--font fonts/中文字体.ttf]
 ```
 
-1. `scan` 只读归档头和索引、松散脚本名及 loader 文本证据，列出 `.rpy`、`.rpyc`、`.rpym`、`.rpymc` 及大小。明确选择脚本包。**Character 定义所在的包要一起选上**，否则 `who` 只有变量名。`who` 未解析时 stderr 输出 `WARNING`，报告记录 `unresolved_speaker_rows` 与 `unresolved_speakers`（不计 `extend`、`narrator`、`centered`、`vcentered`、`nvl`）。
+1. `scan` 只读归档头和索引、松散脚本名及 loader 文本证据，列出 `.rpy`、`.rpyc`、`.rpym`、`.rpymc` 及大小。明确选择脚本包。**Character 定义所在的包要一起选上**，否则 `who` 只有变量名。`who` 未解析时 stderr 输出 `WARNING`，报告记录 `unresolved_speaker_rows` 与 `unresolved_speakers`（不计 `extend`、`narrator`、`centered`、`vcentered`、`nvl`，也不计 `Character(None, ...)` 这类本就不显示姓名的旁白/NVL 角色）。
 2. `extract` 的来源是 `--archives` 与 `--loose`（`game/` 下递归的 `.rpyc`）的并集，松散文件按虚拟来源 `loose` 与归档成员统一建 manifest。即使未给 `--loose` 也会扫描松散文件名：所选归档成员被松散文件覆盖时报错要求加 `--loose`。报告 `overrides` 列出 `{name, effective: loose, shadowed: 归档}`，被覆盖的归档成员不导出。参数必须是 `game/` 目录本身。
 3. 默认模式（原位改写 RPYC2）对选中脚本完整解析并原文回填，要求逐字节一致；`--tl-language` 生成新语言；`--rpy` 为源码工作区（只读松散 `.rpy`，不可与前两者混用）。
 4. 保留 `original/archives`、`original/loose`、`original/scripts`（`--rpy` 为 `original/rpy`）、`metadata`、`reports`。`gt_input` 平铺 UTF-8 JSON；同名冲突才加来源后缀（归档名，松散文件用目录名），仍重名再加序号，以报告 `outputs.json` 为准。空脚本不生成 JSON。

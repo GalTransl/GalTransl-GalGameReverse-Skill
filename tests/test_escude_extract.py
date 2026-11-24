@@ -36,6 +36,8 @@ class EscudeExtractTests(unittest.TestCase):
             self.assertEqual(rows, [{'message': '試験<r>本文', 'name': '甲＆乙'}])
             self.assertTrue((output / 'original/script/staff/scene.bin').is_file())
             self.assertTrue((output / 'gt_output').is_dir())
+            self.assertEqual(report['delivery']['suggested_first_json']['file'], 'scene.json')
+            self.assertTrue((output / 'reports/translation-state.md').is_file())
             with self.assertRaises(FileExistsError):
                 extract(game, output)
             self.assertEqual(originals, {p.name: p.read_bytes() for p in game.iterdir()})

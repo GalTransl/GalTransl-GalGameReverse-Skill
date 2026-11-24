@@ -353,15 +353,20 @@ def main():
     pk.add_argument("--mode", choices=("asar", "tpatch", "loose"))
     pk.add_argument("--game", help="game directory if it moved since extraction")
     args = parser.parse_args()
-    if args.command == "extract":
-        result = extract(args.game, args.output, archive=args.asar, members=args.members,
-                         include_unreferenced=args.include_unreferenced)
-        out = {"counts": result["counts"], "unreferenced": result["reachability"]["unreferenced"],
-               "dynamic_references": result["reachability"]["dynamic_references"]}
-    else:
-        out = pack(args.workspace, args.output, mode=args.mode, game=args.game)
+    try:
+        if args.command == "extract":
+            result = extract(args.game, args.output, archive=args.asar, members=args.members,
+                             include_unreferenced=args.include_unreferenced)
+            out = {"counts": result["counts"], "unreferenced": result["reachability"]["unreferenced"],
+                   "dynamic_references": result["reachability"]["dynamic_references"]}
+        else:
+            out = pack(args.workspace, args.output, mode=args.mode, game=args.game)
+    except (ValueError, OSError, tyrano.TyranoError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
     sys.stdout.buffer.write(js(out))
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

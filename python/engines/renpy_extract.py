@@ -36,6 +36,13 @@ LOOSE = "loose"
 SCRIPT_SUFFIXES = (".rpyc", ".rpy", ".rpymc", ".rpym")
 # Speakers predefined by the Ren'Py runtime itself, never in game archives.
 BUILTIN_SPEAKERS = frozenset({"extend", "narrator", "centered", "vcentered", "nvl"})
+
+
+def _nameless(speaker, names):
+    """Runtime speakers and ``Character(None, ...)`` (narration/NVL boxes) show no name by design."""
+    return speaker in BUILTIN_SPEAKERS or (speaker in names and names[speaker] is None)
+
+
 CONFIG_HINT = re.compile(r"\bconfig\.(archives|force_archives|file_open_callback|searchpath|language|default_language)\b")
 
 
@@ -437,7 +444,7 @@ def _extract_rpyc(report, files, sources, entries, ctx, smoke_test):
             report["scripts"] += 1
             missing = Counter(r["locator"]["speaker"] for row, r in zip(rows, manifest["records"])
                               if isinstance(r["locator"]["speaker"], str) and "name" not in row
-                              and r["locator"]["speaker"] not in BUILTIN_SPEAKERS)
+                              and not _nameless(r["locator"]["speaker"], names))
             if missing:
                 detail["unresolved_speaker_rows"] = sum(missing.values())
                 unresolved.update(missing)
@@ -523,8 +530,9 @@ def _extract_tl(report, files, entries, ctx, language_name, smoke_test, loose_na
         messages = [r["message"] for r in rows]
         text = tl.render(language_name, kept, messages)
         tl.verify(text, language_name, kept, messages, filename=detail["output"])
+        names = names_for(entry.name, ctx)
         unresolved.update(loc["speaker"] for row, loc in zip(rows, locators) if loc["kind"] == "say"
-                          and loc["speaker"] and "name" not in row and loc["speaker"] not in BUILTIN_SPEAKERS)
+                          and loc["speaker"] and "name" not in row and not _nameless(loc["speaker"], names))
         if not rows:
             detail["status"] = "empty"
             continue

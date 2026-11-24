@@ -317,6 +317,21 @@ class RPAAndWorkspaceTests(unittest.TestCase):
             rows = json.loads((root / "both/gt_input/story.json").read_text(encoding="utf-8"))
             self.assertEqual(rows[0]["name"], "Alice")
 
+    def test_nameless_character_is_not_an_unresolved_speaker(self):
+        def define(var, source, line):
+            pycode = Raw(b"crenpy.ast\nPyCode\n)\x81" + encode((1, source, ("file", line), "eval")) + b"b")
+            return node("Define", line, varname=var, code=pycode, store="store", operator="=")
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp); game = root / "game"; game.mkdir()
+            (game / "story.arc").write_bytes(archive({"story.rpyc": sample()}))
+            (game / "defs.arc").write_bytes(archive({"defs.rpyc": envelope(program(
+                [define("e", 'Character(None, kind=nvl)', 1)]))}))
+            report = workflow.extract(game, root / "work", archives=["story.arc", "defs.arc"])
+            self.assertEqual(report["unresolved_speaker_rows"], 0)
+            self.assertNotIn("warnings", report)
+            rows = json.loads((root / "work/gt_input/story.json").read_text(encoding="utf-8"))
+            self.assertNotIn("name", rows[0])
+
     def test_path_traversal_rejected_and_archived_source_is_only_noted(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp); (root / "story.arc").write_bytes(archive({"../intro.rpyc": sample()}))

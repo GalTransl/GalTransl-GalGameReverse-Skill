@@ -14,9 +14,11 @@ import json
 import os
 from pathlib import Path
 import stat
+import sys
 
 from python.archives.escude import read_index, read_member
 from python.common.contract import dump_rows, load_json, make_manifest, validate_translation
+from python.common.handoff import STATE_FILE, handoff, source_language_note
 from python.common.safety import Limits, validate_names, write_new_tree, validate_new_tree_destination
 from python.engines.escude_mdb import read_names
 from python.engines.escude_mess import (
@@ -178,6 +180,25 @@ def extract(game: Path, output: Path) -> dict:
     for source in report['sources']:
         require(digest(read_archive_file(source['path'])) == source['sha256'], 'source changed during extraction')
     totals = report['totals']
+    texts = [row['message'] for path, data in payloads if path.startswith('gt_input/')
+             for row in json.loads(data)]
+    notes = ['正文中的 ruby/font 等控制标签及其属性须逐个原样保留、顺序不变，不得新增；'
+             '<r> 是显示换行，可以少用但不能新增或移过其他标签，不要换成物理换行',
+             '回写编码为 CP932，中文须走公共 JIS 替换流程（见 engines/escude.md）',
+             '姓名是只读上下文，人物表不回写']
+    warning = source_language_note(texts)
+    if warning:
+        notes.insert(0, warning)
+        report['warnings'] = [warning]
+    first = report['exports'][0]['json'].rsplit('/', 1)[-1] if report['exports'] else None
+    report['delivery'], state = handoff(
+        workspace=output, engine='Escu:de（script.bin 中的 @code/@mess 分离消息）',
+        json_files=totals['json_files'], rows=totals['rows'], notes=notes,
+        verified='各 .001 经 patch_mess 原文回写后与原字节一致',
+        edit_checked=True, first_json=first,
+        first_json_basis='归档成员顺序中第一个有文本的脚本，未确认是否开场',
+        command='extract（每个脚本都做了首条变长回填与重新解析）')
+    payloads = payloads + [(STATE_FILE, state)]
     _publish(output, payloads, report, (
         f"{totals['json_files']} 个 JSON，{totals['rows']} 条（日文原版）。\n"
         '把 gt_input 导入 GalTransl，译文放入 gt_output，保留文件名、顺序和姓名。\n'
@@ -261,7 +282,12 @@ def main():
         report = readback(args.game, args.readback, args.output)
     else:
         report = extract(args.game, args.output)
-    print(json.dumps({'output': str(args.output), 'totals': report['totals']}, ensure_ascii=False, indent=2))
+    shown = {'output': str(args.output), 'totals': report['totals']}
+    shown.update({k: report[k] for k in ('warnings', 'delivery') if k in report})
+    text = json.dumps(shown, ensure_ascii=False, indent=2) + '\n'
+    sys.stdout.flush()
+    sys.stdout.buffer.write(text.encode('utf-8'))  # readable whatever the console code page
+    sys.stdout.buffer.flush()
 
 
 if __name__ == '__main__':

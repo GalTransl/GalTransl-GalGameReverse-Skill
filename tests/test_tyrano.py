@@ -185,6 +185,19 @@ class TyranoScriptTests(unittest.TestCase):
                 tyrano.parse(source.encode())
 
 
+class TyranoCliTests(unittest.TestCase):
+    def test_missing_archive_is_a_one_line_error(self):
+        from unittest import mock
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp); (root / "game").mkdir()
+            argv = ["tyrano_extract", "extract", str(root / "game"), str(root / "out"), "--asar", "missing.asar"]
+            err = io.StringIO()
+            with mock.patch.object(sys, "argv", argv), mock.patch.object(sys, "stderr", err):
+                self.assertEqual(tyrano_extract.main(), 2)
+            self.assertIn("asar archive not found", err.getvalue())
+            self.assertNotIn("Traceback", err.getvalue())
+
+
 class TyranoWorkspaceTests(unittest.TestCase):
     def game(self, root: Path, *, loose=False):
         files = {
