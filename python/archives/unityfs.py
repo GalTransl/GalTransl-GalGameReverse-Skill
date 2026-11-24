@@ -16,6 +16,12 @@ node. No game code is executed and no Unity runtime is required.
 
 Layout notes are an independent implementation of the published UnityFS
 structure; see provenance/unity-containers.json for the format references.
+
+Some titles put foreign bytes in front of an otherwise ordinary bundle.
+``signature_offset``/``split_prefix``/``SubStream`` locate the header inside a
+bounded head window so callers can parse the bundle that follows and write the
+prefix back unchanged; ``read_header`` itself still requires the signature at
+offset 0 of the stream it is given.
 """
 from dataclasses import dataclass
 import io
@@ -45,6 +51,7 @@ MAX_NODES = 65536
 MAX_BLOCK = 2 << 30
 MAX_READ = 512 << 20
 MAX_REBUILD = 512 << 20
+MAX_PREFIX = 4096  # foreign bytes tolerated before the signature (see signature_offset)
 
 _VERSION_RE = re.compile(r"^(\d+)\.(\d+)\.(\d+)")
 
@@ -207,6 +214,60 @@ def is_unityfs(head):
     return head.startswith(SIGNATURE)
 
 
+def signature_offset(head):
+    """Offset of the UnityFS signature inside the first ``MAX_PREFIX`` bytes.
+
+    Returns 0 for an ordinary bundle, a positive prefix length when foreign
+    bytes precede the header, and None when the bounded window has no
+    signature. The window is never widened: a signature further in is not
+    treated as a bundle start.
+    """
+    at = bytes(head[:MAX_PREFIX + len(SIGNATURE)]).find(SIGNATURE)
+    return None if at < 0 else at
+
+
+def split_prefix(data):
+    """Split in-memory bytes into ``(prefix, bundle)`` at the bounded signature."""
+    at = signature_offset(data)
+    if at is None:
+        raise FormatError(f"no UnityFS signature in the first {MAX_PREFIX} bytes")
+    return bytes(data[:at]), data[at:]
+
+
+class SubStream(io.RawIOBase):
+    """Read-only seekable view of ``stream`` from byte ``start`` to its end."""
+
+    def __init__(self, stream, start):
+        stream.seek(0, 2)
+        if not 0 <= start <= stream.tell():
+            raise FormatError("UnityFS prefix outside file")
+        self.stream, self.start, self.size, self.pos = stream, start, stream.tell() - start, 0
+
+    def readable(self):
+        return True
+
+    def seekable(self):
+        return True
+
+    def seek(self, offset, whence=0):
+        if whence not in (0, 1, 2):
+            raise ValueError(f"invalid whence {whence}")
+        self.pos = max(0, (0, self.pos, self.size)[whence] + offset)
+        return self.pos
+
+    def tell(self):
+        return self.pos
+
+    def read(self, size=-1):
+        end = self.size if size is None or size < 0 else min(self.size, self.pos + size)
+        if end <= self.pos:
+            return b""
+        self.stream.seek(self.start + self.pos)
+        data = self.stream.read(end - self.pos)
+        self.pos += len(data)
+        return data
+
+
 def read_header(stream):
     """Parse header, blocks and node table. Raises FormatError on anything unknown."""
     stream.seek(0, 2)
@@ -218,7 +279,7 @@ def read_header(stream):
     if any(head.startswith(sig) for sig in LEGACY_SIGNATURES):
         raise FormatError("legacy UnityWeb/UnityRaw bundles are not supported")
     if not head.startswith(SIGNATURE):
-        raise FormatError("not a UnityFS bundle")
+        raise FormatError("not a UnityFS bundle (no signature at offset 0)")
     pos = len(SIGNATURE)
     version = struct.unpack_from(">I", head, pos)[0]
     pos += 4

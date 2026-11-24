@@ -1,7 +1,8 @@
 # SPDX-License-Identifier: GPL-3.0-only
 """Unity TextAsset (class 49) whole-content extract and replace workspace.
 
-Container chain: UnityFS bundle (optional) -> serialized file v17-v22 ->
+Container chain: UnityFS bundle (optional, possibly behind a bounded foreign
+prefix that is written back verbatim) -> serialized file v17-v22 ->
 TextAsset. With a TypeTree the object is read field by field; without one the
 known layout (``m_Name`` string, ``m_Script`` bytes, and ``m_PathName`` on
 engines before 2017) must consume the object exactly. Only the whole
@@ -158,18 +159,47 @@ class Container:
     raw: bytes
     bundle: object
     serialized: dict  # node path ("" for a bare serialized file) -> bytes
+    prefix: bytes = b""  # foreign bytes before the UnityFS signature, kept verbatim
+
+    @property
+    def body(self):
+        return self.raw[len(self.prefix):]
+
+
+def prefix_report(prefix):
+    """Facts about a bundle prefix for reports; None when there is none."""
+    if not prefix:
+        return None
+    return {"length": len(prefix), "sha256": sha256(prefix),
+            "uniform_byte": f"{prefix[0]:#04x}" if len(set(prefix)) == 1 else None}
 
 
 def open_container(raw):
-    if fs.is_unityfs(raw[:16]):
-        bundle, _, nodes = fs.read_bundle(raw, budget=MAX_CONTAINER)
-        serialized = {}
-        for node in bundle.nodes:
-            if node.flags & 4:
-                serialized[node.path] = nodes[node.path]
-        return Container("unityfs", raw, bundle, serialized)
-    us.read_index(io.BytesIO(raw))
-    return Container("serialized", raw, None, {"": raw})
+    """Open a UnityFS bundle (optionally behind a bounded prefix) or a serialized file."""
+    if raw.startswith(fs.LEGACY_SIGNATURES):
+        raise FormatError("legacy UnityWeb/UnityRaw bundles are not supported")
+    at = fs.signature_offset(raw)
+    if at != 0:
+        try:
+            us.read_index(io.BytesIO(raw))
+            return Container("serialized", raw, None, {"": raw})
+        except FormatError as exc:
+            if at is None:
+                raise FormatError(
+                    f"neither a UnityFS bundle (no signature in the first {fs.MAX_PREFIX} bytes) "
+                    f"nor a supported serialized file ({exc}); the file may be encrypted or another format") from exc
+    prefix, body = fs.split_prefix(raw)
+    try:
+        bundle, _, nodes = fs.read_bundle(body, budget=MAX_CONTAINER)
+    except FormatError as exc:
+        if prefix:
+            raise FormatError(f"UnityFS bundle after a {len(prefix)}-byte prefix: {exc}") from exc
+        raise
+    serialized = {}
+    for node in bundle.nodes:
+        if node.flags & 4:
+            serialized[node.path] = nodes[node.path]
+    return Container("unityfs", raw, bundle, serialized, prefix)
 
 
 def text_assets(container):
@@ -202,7 +232,7 @@ def rebuild_container(container, replacements):
         new_nodes[node] = us.rebuild(data, objs)
     if container.kind == "serialized":
         return new_nodes.get("", container.raw)
-    return fs.rebuild(container.raw, new_nodes, budget=MAX_CONTAINER)
+    return container.prefix + fs.rebuild(container.body, new_nodes, budget=MAX_CONTAINER)
 
 
 def verify_container(original, rebuilt, replacements):
@@ -210,9 +240,11 @@ def verify_container(original, rebuilt, replacements):
     after = open_container(rebuilt)
     if after.kind != original.kind or list(after.serialized) != list(original.serialized):
         raise FormatError("container kind or serialized node list changed")
+    if after.prefix != original.prefix:
+        raise FormatError("bundle prefix changed on rebuild")
     if original.kind == "unityfs":
-        _, _, old_nodes = fs.read_bundle(original.raw, budget=MAX_CONTAINER)
-        _, _, new_nodes = fs.read_bundle(rebuilt, budget=MAX_CONTAINER)
+        _, _, old_nodes = fs.read_bundle(original.body, budget=MAX_CONTAINER)
+        _, _, new_nodes = fs.read_bundle(after.body, budget=MAX_CONTAINER)
         for path, payload in old_nodes.items():
             if path not in after.serialized and new_nodes[path] != payload:
                 raise FormatError(f"non-serialized node {path!r} changed")
@@ -337,6 +369,7 @@ def extract(source, output, *, names=(), path_ids=(), node=None, target=None):
               "source_size": len(raw), "source_sha256": sha256(raw), "target": target,
               "container": container.kind,
               "bundle": fs.describe(container.bundle) if container.bundle else None,
+              "bundle_prefix": prefix_report(container.prefix),
               "textassets": len(members), "verified_objects": checked,
               "identity_rebuild_sha256": sha256(rebuilt),
               "identity_serialized_byte_identical": True,
@@ -349,7 +382,7 @@ def extract(source, output, *, names=(), path_ids=(), node=None, target=None):
         "替换时把改好的同名文件放入 replace/ 后告诉 agent；默认按原始字节写入，"
         "--text 则按 UTF-8 文本读入后编码回原编码。\n"
         "rebuilt/roundtrip 是经真实 writer 重建并逐对象读回核对的原文容器；"
-        "UnityFS 会写成无压缩数据块，文件会变大。\n"
+        "UnityFS 会写成无压缩数据块，文件会变大；签名之前的前缀字节（见 reports 的 bundle_prefix）原样保留。\n"
         "本工作区不解析剧本方言，不生成 gt_input；未覆盖游戏、未运行游戏。\n").encode("utf-8")
     write_new_tree(output, list(files.items()), LIMITS)
     return {k: v for k, v in report.items() if k != "bundle"}
@@ -432,6 +465,7 @@ def pack(workspace, output, *, source_dir=None, text=False):
               "replaced_files": used, "changed_objects": [{"node": n, "path_id": p} for n, p in changed],
               "unmatched_files": sorted(unmatched), "verified_objects": checked,
               "text_mode": text, "bundle_compression": "none" if container.kind == "unityfs" else None,
+              "bundle_prefix": prefix_report(container.prefix),
               "runtime_verified": False}
     files = {"files/" + target: rebuilt, "reports/rebuild.json": _json(result)}
     after = open_container(rebuilt)

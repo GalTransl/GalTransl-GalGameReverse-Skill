@@ -6,11 +6,13 @@
 python -m python.engines.unity_scan "/game" --output "/work/unity_scan"
 ```
 
-`scan.json` 的主要字段：`containers`（每个 `.assets`/serialized 文件或 UnityFS 包，以及包内每个 serialized 节点）、`streaming_assets`、`il2cpp_metadata`、`summary`、`budget`。`partial: true` 表示有容器因预算或错误没有扫完，先看 `budget.exhausted` 和各项 `error`，不要把“没扫到”当成“没有文本”。
+`scan.json` 的主要字段：`containers`（每个 `.assets`/serialized 文件或 UnityFS 包，以及包内每个 serialized 节点）、`streaming_assets`、`unrecognized_bundles`、`il2cpp_metadata`、`summary`、`budget`。`partial: true` 表示有容器因预算、打不开或认不出而没有扫完，原因在 `partial_reasons`；先看 `summary.unopened_containers`、`summary.unrecognized_bundles`、`budget.exhausted` 和各项 `error`，不要把“没扫到”当成“没有文本”。
+
+`summary` 另有：`known_route_objects`（本页有路线的框架类对象，不受类名排行截断）、`suspected_encrypted_files`（高熵无魔数的松散文件）、`prefixed_bundles`（签名前带前缀的包数）、`duplicate_container_names`（同名容器的多个副本）。
 
 ## 1. StreamingAssets
 
-StreamingAssets 里的文件按原样随游戏发布，常见 JSON、CSV、自定义脚本、SQLite 或独立 bundle。扫描对其中的非 Unity 文件给出编码猜测、熵和少量预览，对其中的 UnityFS 包按容器处理。
+StreamingAssets 里的文件按原样随游戏发布，常见 JSON、CSV、自定义脚本、SQLite 或独立 bundle。扫描对其中的非 Unity 文件给出编码猜测、熵和少量预览（超过 4 MiB 的文件只采样计算熵，见 `entropy_samples`），对其中的 UnityFS 包按容器处理。
 
 - 继续：只有第三方库自带文件（播放器、插件说明、服务配置等）或没有文本。
 - 停止并转入对应格式：发现剧情样式的文本文件或数据库。这些不是 Unity 容器，按其实际格式另行适配，不走 TextAsset 工作区。
@@ -21,6 +23,9 @@ StreamingAssets 里的文件按原样随游戏发布，常见 JSON、CSV、自�
 
 - 对象类别帮助判断资源性质：大量 `AudioClip`/`VideoClip`/`Texture2D`/`Sprite` 而几乎没有 `TextAsset`、文本类 MonoBehaviour 时，文本可能烘焙在图像或视频里。
 - 停止并报告：UnityFS 版本不在 6–8、出现未知 flags（可能加密）、serialized 版本不在 17–22、big-endian 或 LZHAM。这些需要补齐容器证据，不能绕过。
+- 签名前有前缀的包（`prefix_length`）：签名在文件头 4096 字节内、之后的头部完整合法时照常扫描，TextAsset 工作区会原样保留前缀（见 [签名前的前缀](../unity.md#签名前的前缀)）。
+- 停止并报告：`summary.unopened_containers` 中的包（签名找到但头部不合法，或节点打不开）和 `unrecognized_bundles` 中的文件（bundle 扩展名或旁边有同名 `.manifest`，但窗口内没有签名、也不是 serialized 文件）。后者多为整包加密，转第 6 步；不要扩大搜索窗口或猜偏移去“找”签名。
+- `duplicate_container_names` 有条目时，先确认哪一份是游戏实际加载的文件（当前文件、备份、转储目录副本），再选择提取输入与 `--target`。
 - `.resS`/`.resource` 是贴图、音频、视频的原始数据，不含 serialized 对象；体积再大也不作为文本候选。
 
 ## 3. TextAsset 名称与编码
@@ -45,9 +50,9 @@ StreamingAssets 里的文件按原样随游戏发布，常见 JSON、CSV、自�
 
 ## 4. MonoBehaviour 类名
 
-扫描读取每个 MonoBehaviour 头部（GameObject、enabled、MonoScript PPtr、`m_Name`），再通过本文件或其他已扫描文件中的 MonoScript 解析出 `命名空间.类名`，给出类名统计 `monobehaviour_classes`、未解析数 `monobehaviour_unresolved` 和最大的 20 个对象（含名称、类名、头部 4 KiB 内 CJK 字符数）。
+扫描读取每个 MonoBehaviour 头部（GameObject、enabled、MonoScript PPtr、`m_Name`），再通过本文件、同一 bundle 或同一 `*_Data` 目录内的 MonoScript 解析出 `命名空间.类名`（不跨数据目录；同名副本给出不同类名时计入 `monobehaviour_ambiguous`），给出类名统计 `monobehaviour_classes`、未解析数 `monobehaviour_unresolved` 和最大的 20 个对象（含名称、类名、头部 4 KiB 内 CJK 字符数）。
 
-- 留意数据表类脚本（ScriptableObject、表格导入生成的 `Entity_*` 一类、`*Data`/`*Table`/`*Scenario`），以及已知剧情框架类（例如 Utage 的 `AdvImportBook`，转 [Utage 路线](../unity.md#utage-book-profile)）。
+- 留意数据表类脚本（ScriptableObject、表格导入生成的 `Entity_*` 一类、`*Data`/`*Table`/`*Scenario`），以及已知剧情框架类。`summary.known_route_objects` 逐个列出本页有路线的框架类对象（例如 Utage 的 `AdvImportBook`，转 [Utage 路线](../unity.md#utage-book-profile)），即使它们不在 `top_monobehaviour_classes` 里。
 - UI 组件（`Text`、`TextMeshProUGUI`、`UILabel` 等）通常只放界面文字；它们的字段布局需要 TypeTree 或程序集元数据才能完整解析。
 - 大对象里只有资源键（场景、图片、语音编号）而没有自然语言文字时，说明剧情文字不在这里。
 - 停止并报告：候选类的字段布局没有 TypeTree，也无法从程序集静态元数据确认。不要靠可打印字符串反推字段位置去写回。
@@ -60,7 +65,7 @@ IL2CPP 游戏的 `il2cpp_data/Metadata/global-metadata.dat` 存放代码里的�
 
 ## 6. 高熵对象（疑似加密）
 
-TextAsset 或其他对象为二进制、熵接近 8、没有可识别魔数时，可能被游戏自行加密或压缩。
+TextAsset 或其他对象为二进制、熵接近 8、没有可识别魔数时，可能被游戏自行加密或压缩。扫描把这类 TextAsset 列在 `summary.suspected_encrypted_textassets`，松散文件列在 `summary.suspected_encrypted_files`（大文件为采样熵）；带 bundle 特征却认不出的文件见 `unrecognized_bundles`，旁边的 `.manifest` 说明它原本是 AssetBundle。
 
 - 停止并报告：列出对象名、大小、熵和所在容器。不要猜密钥、不要按字节搜索替换；密钥或算法需要从用户提供的输入或静态程序分析中取得证据后再补实现。
 
