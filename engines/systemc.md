@@ -63,7 +63,12 @@ CP932 ACT/DAT/SPT 工作区通过 [systemc_extract.pack](../python/engines/syste
 python -m python.engines.systemc_extract extract "<游戏目录>" --output "<新输出目录>" --verify-edits
 ```
 
-提取只需这一条：它已完成原文往返、试编辑回写和整包重封包比对，并在输出的 `delivery` 与 `reports/translation-state.md` 中给出交付表格的内容。下面两条属于回填，`gt_output` 中有译文后才运行：
+提取只需这一条：它已完成原文往返、试编辑回写和整包重封包比对，并在输出的 `delivery` 与 `reports/translation-state.md` 中给出交付表格的内容。
+
+- 日文原版保存在备份文件（如 `data.fpk.bak`）里时，加 `--archive "<游戏目录>/data.fpk.bak"` 直接读取，无需复制改名；工作区仍以 `data.fpk` 保存，同目录其他 FPK 照常对照，当前生效的 `data.fpk` 视为被替换对象，不参与对照。报告 `source_file` 记录实际读取的文件。
+- ACT 解码失败时，错误信息会附带下一步：同目录有 `data.fpk.*` 备份时提示用 `--archive`；包内有 `*_JA.TXD/PTR` 时提示改用 `systemc_txd_extract`（UTF-8 文本表方言）。
+
+下面两条属于回填，`gt_output` 中有译文后才运行：
 
 ```text
 python -m python.engines.systemc_extract pack "<新输出目录>" --jis-preflight

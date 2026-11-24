@@ -130,16 +130,34 @@ def _verify_archive(archive, expected):
         raise FormatError("rebuilt FPK did not reproduce all expected members")
 
 
-def extract(game, destination, *, verify_edits=False):
+def _route_hint(game, members, archive):
+    """What to try when the selected package's ACT texts fail to parse."""
+    hints = []
+    if any(name.upper().endswith("_JA.TXD") for name in members):
+        hints.append("this FPK carries UTF-8 *_JA.TXD/PTR text tables: use "
+                     "python -m python.engines.systemc_txd_extract instead")
+    backups = sorted(p.name for p in Path(game).iterdir()
+                     if p.is_file() and p.name.casefold().startswith("data.fpk.") and p != archive)
+    if backups:
+        hints.append("a possible original package is beside it (" + ", ".join(backups[:4])
+                     + "): pass it with --archive")
+    return hints
+
+
+def extract(game, destination, *, verify_edits=False, archive=None):
+    """``archive`` reads another file than ``game/data.fpk`` (e.g. a ``.bak``
+    original kept beside a patched package); the workspace stores it as data.fpk."""
     game, destination = Path(game), Path(destination)
     validate_new_tree_destination(destination)
-    raw = _read(game / "data.fpk")
+    archive = Path(archive) if archive else game / "data.fpk"
+    raw = _read(archive)
     index, members = unpack_fpk(raw)
     outputs = [("original/data.fpk", raw)]
     outputs.extend((f"original/members/{n}", data) for n, data in members.items())
     rewritten, edited, used_spt, manifests = dict(members), dict(members), set(), []
     report = {"schema": "systemc-workspace/1", "variant": VARIANT,
               "source": {"path": "data.fpk", "size": len(raw), "sha256": sha256(raw)},
+              "source_file": archive.name,
               "members": len(members), "decoded_bytes": sum(map(len, members.values())),
               "archive_index_offset": index.offset, "scripts": [], "json_files": 0,
               "json_rows": 0, "selection_rows": 0, "runtime_verified": False,
@@ -159,7 +177,11 @@ def extract(game, destination, *, verify_edits=False):
         # Shown before parsing so it is visible even if the base scripts fail.
         print(f"WARNING: {warning}", file=sys.stderr, flush=True)
     for name in _acts(members):
-        rows, manifest = export_act(name, members)
+        try:
+            rows, manifest = export_act(name, members)
+        except FormatError as exc:
+            hints = _route_hint(game, members, archive)
+            raise FormatError("; ".join([str(exc), *hints])) from exc
         manifests.append(manifest)
         rebuilt = inject_act(name, members, rows, manifest, rows)
         if rebuilt != members[name]:
@@ -207,7 +229,7 @@ def extract(game, destination, *, verify_edits=False):
             "size": len(smoke), "sha256": sha256(smoke),
             "test": "prefix first message line with CP932 検証; preserve physical line count",
             "runtime_verified": False}
-    if _read(game / "data.fpk") != raw:
+    if _read(archive) != raw:
         raise FormatError("SystemC source archive changed during extraction")
     exported = [s["outputs"]["json"] for s in report["scripts"] if s["outputs"]["json"]]
     notes = ["每条正文的行数不得超过原文，可以更少",
@@ -449,6 +471,8 @@ def main():
     ex.add_argument("game", type=Path)
     ex.add_argument("--output", type=Path, required=True)
     ex.add_argument("--verify-edits", action="store_true")
+    ex.add_argument("--archive", type=Path,
+                    help="package to read instead of GAME/data.fpk, e.g. an original kept as data.fpk.bak")
     pk = commands.add_parser("pack")
     pk.add_argument("workspace", type=Path)
     pk.add_argument("--output", type=Path)
@@ -475,7 +499,8 @@ def main():
         if args.jis_preflight and args.jis_mode not in (None, "auto"):
             parser.error("--jis-preflight requires --jis-mode auto")
     try:
-        result = (extract(args.game, args.output, verify_edits=args.verify_edits) if args.command == "extract"
+        result = (extract(args.game, args.output, verify_edits=args.verify_edits, archive=args.archive)
+                  if args.command == "extract"
                   else pack(args.workspace, args.output, translations=args.translations,
                             jis_mode=args.jis_mode, jis_preflight=args.jis_preflight,
                             base_confirmed=args.base_confirmed, output_encoding=args.output_encoding,
@@ -486,8 +511,12 @@ def main():
         print(f"error: {exc}", file=sys.stderr)
         raise SystemExit(1)
     # Full per-member detail is saved in reports; keep console output compact.
-    print(json.dumps({k: v for k, v in result.items() if k not in {"scripts", "loose_data", "sibling_packages"}},
-                     ensure_ascii=True, indent=2))
+    text = json.dumps({k: v for k, v in result.items() if k not in {"scripts", "loose_data", "sibling_packages"}},
+                      ensure_ascii=False, indent=2) + "\n"
+    # UTF-8 regardless of the console code page, so the delivery text stays readable.
+    sys.stdout.flush()
+    sys.stdout.buffer.write(text.encode("utf-8"))
+    sys.stdout.buffer.flush()
     if args.command == "pack" and args.jis_preflight and not result["jis_preflight"]["ok"]:
         raise SystemExit(1)
     if args.command == "pack" and args.gbk_preflight and not result["gbk_preflight"]["ok"]:
