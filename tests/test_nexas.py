@@ -13,7 +13,7 @@ from python.archives import nexas as pac
 from python.common.binary import FormatError
 from python.common.contract import dump_rows
 from python.engines import nexas_bin as nexas
-from python.engines.nexas_extract import extract, pack, verify_archive
+from python.engines.nexas_extract import default_archives, extract, main, pack, parse_packlist, verify_archive
 from tools.check_skill import runtime_dependency_errors
 
 
@@ -207,7 +207,11 @@ class NexasWorkflowTests(unittest.TestCase):
             (root / "Update3.pac").write_bytes(patch)
             out = root / "extract"
             out.mkdir()
-            summary = extract(root, out, ["Script.pac", "Update3.pac"])
+            report = extract(root, out, ["Script.pac", "Update3.pac"])
+            summary = report["summary"]
+            self.assertEqual(report["status"], "complete")
+            self.assertEqual(report["profile"], nexas.PROFILE)
+            self.assertTrue((out / "reports/translation-state.md").is_file())
             self.assertEqual(summary["exported_files"], 1)
             self.assertEqual(summary["empty_scripts"], 1)
             self.assertEqual(summary["original_bin_roundtrips"], 3)
@@ -227,6 +231,204 @@ class NexasWorkflowTests(unittest.TestCase):
                 pack(out, out / "packed")
             with self.assertRaises(FileExistsError):
                 extract(root, out, ["Script.pac", "Update3.pac"])
+
+
+F69 = nexas.DIALECT_FUNC69
+
+
+def func69_bin(text="@v12345678本文@n二行目", *, name="名前", extra=()):
+    """Earlier FUNC table: message 0x40069, continuation 0x1006A, choice 0x30062."""
+    strings = ["", name, text, "続き", "選択肢", "通知文", "@d@m32", "@k"]
+    commands = [(0, 1), (5, 1), (0, 2), (5, 1), (7, 0x40069),
+                (0, 3), (5, 1), (7, 0x1006A),
+                (0, 0), (5, 0), (0, 4), (5, 1), (0, 0), (5, 0), (7, 0x30062),
+                (0, 5), (5, 1), (0, 0), (5, 0), (7, 0x2006E),
+                # name + (effect + text) + control suffix custom message
+                (0, 1), (5, 1), (0, 6), (4, 0), (0, 2), (6, 1), (9, 1), (4, 0),
+                (0, 7), (6, 1), (9, 1), (5, 1), (7, 0x40069),
+                # operand-less comparison operator, then conditional jump
+                (4, 0), (0, 0), (6, 1), (22, 0), (66, 3), *extra]
+    return bin_file(commands, strings)
+
+
+def packlist(names, header=struct.pack("<III", 2, 1, 2)):
+    return header + b"".join(n.encode() + b"\0" + struct.pack("<I", g) for n, g in names)
+
+
+class NexasDialectTests(unittest.TestCase):
+    def test_func69_dialect_selected_exported_and_edit_roundtrip(self):
+        data = func69_bin()
+        scripts = [nexas.parse(data)]
+        self.assertIs(nexas.select_dialect(scripts), F69)
+        self.assertIs(nexas.select_dialect([nexas.parse(message_bin())]), nexas.DIALECT_EXTRAS)
+        # Default dialect sees no message site here; the guard refuses, not exports empty.
+        with self.assertRaisesRegex(FormatError, "opcode outside|shaped call"):
+            nexas.export(data, source_name="a.bin")
+        rows, manifest = nexas.export(data, source_name="a.bin", dialect=F69)
+        self.assertEqual([r["locator"]["kind"] for r in manifest["records"]],
+                         ["message", "continuation", "choice", "notification", "custom-message"])
+        self.assertEqual(manifest["engine"]["variant"], F69.profile)
+        self.assertEqual(nexas.inject(data, rows, manifest, rows, source_name="a.bin"), data)
+        edited = [dict(r, message=r["message"] + "長" * (i + 1)) for i, r in enumerate(rows)]
+        edited[0]["name"] = "ずっと長い名前"
+        built = nexas.inject(data, rows, manifest, edited, source_name="a.bin")
+        new, old = nexas.parse(built), nexas.parse(data)
+        self.assertEqual(nexas.records(new, F69)[0], edited)
+        self.assertEqual(new.raw_strings[:len(old.raw_strings)], old.raw_strings)
+        self.assertEqual(new.trailer, old.trailer)
+
+    def test_selection_refuses_unknown_or_ambiguous_message_tables(self):
+        unknown = bin_file([(0, 1), (5, 1), (0, 2), (5, 1), (7, 0x40077)], ["", "名", "本文"])
+        with self.assertRaisesRegex(FormatError, r"FUNC 0x40077 x1"):
+            nexas.select_dialect([nexas.parse(unknown)])
+        with self.assertRaisesRegex(FormatError, "no single NeXAS FUNC dialect"):
+            nexas.select_dialect([nexas.parse(func69_bin()), nexas.parse(message_bin())])
+        # A message-shaped call outside the selected table blocks the member.
+        mixed = func69_bin(extra=[(0, 1), (5, 1), (0, 2), (5, 1), (7, 0x40077)])
+        with self.assertRaisesRegex(FormatError, r"shaped call to FUNC 0x40077"):
+            nexas.records(nexas.parse(mixed), F69)
+
+    def test_stack_operator_shape_is_checked(self):
+        with self.assertRaisesRegex(FormatError, "operator opcode 22"):
+            nexas.records(nexas.parse(func69_bin(extra=[(5, 0), (22, 0)])), F69)
+        with self.assertRaisesRegex(FormatError, "operator opcode 63"):
+            nexas.records(nexas.parse(func69_bin(extra=[(4, 0), (6, 1), (0, 1), (63, 0)])), F69)
+        with self.assertRaisesRegex(FormatError, "operator opcode 12"):
+            nexas.records(nexas.parse(func69_bin(extra=[(4, 0), (6, 1), (12, 5)])), F69)
+
+    def test_extras_voice_suffix_is_part_of_the_token(self):
+        extras = nexas.DIALECT_EXTRAS
+        self.assertEqual(nexas.controls("@v12345678b「本文」", extras), ["@v12345678b"])
+        self.assertEqual(nexas.controls("@v12345678_a「本文」", extras), ["@v12345678_a"])
+        self.assertEqual(nexas.controls("@v12345678「本文」", extras), ["@v12345678"])
+        for bad in ["@v12345678ab「", "@v123456789「", "@v12345678_「", "@v12345678b1", "@v1234567「"]:
+            with self.subTest(text=bad), self.assertRaises(FormatError):
+                nexas.controls(bad, extras)
+        data = message_bin("@v12345678b「本文」@n次")
+        rows, manifest = nexas.export(data, source_name="a.bin")
+        self.assertEqual(manifest["records"][0]["message_tokens"], ["@v12345678b"])
+        for text in ["@v12345678「訳文」", "@v12345678c「訳文」"]:
+            with self.subTest(text=text), self.assertRaises(FormatError):
+                nexas.inject(data, rows, manifest, [dict(rows[0], message=text)], source_name="a.bin")
+        ok = [dict(rows[0], message="@v12345678b「長い訳文です」")]
+        built = nexas.inject(data, rows, manifest, ok, source_name="a.bin")
+        self.assertEqual(nexas.records(nexas.parse(built))[0], ok)
+
+    def test_func69_controls_ruby_and_boundaries(self):
+        good = "@v1234567a「@s4040@r漢字@かんじ@です@t0100@hFACE_A1@n@k"
+        self.assertEqual(nexas.controls(good, F69),
+                         ["@v1234567a", "@s4040", "@r", "@", "@", "@t0100", "@hFACE_A1", "@n", "@k"])
+        self.assertEqual(nexas.controls("@vA1234567「", F69), ["@vA1234567"])
+        self.assertEqual(nexas.controls("@v12345678b「", F69), ["@v12345678b"])
+        for bad in ["@v1234567「", "@v1234567890「", "@vかな", "@s40401", "@s404",
+                    "@r漢字@かんじ", "@r@かんじ@", "@HFACE", "@x"]:
+            with self.subTest(text=bad), self.assertRaises(FormatError):
+                nexas.controls(bad, F69)
+        with self.assertRaises(FormatError):
+            nexas.controls("@r漢字@かんじ@", nexas.DIALECT_EXTRAS)
+        data = func69_bin("@v12345678@s4040「@r漢字@かんじ@です」@n次")
+        rows, manifest = nexas.export(data, source_name="a.bin", dialect=F69)
+        self.assertEqual(manifest["records"][0]["message_tokens"], ["@v12345678", "@s4040", "@r"])
+        ok = [dict(rows[0], message="@v12345678@s4040「@r中文@zhong@です」"), *rows[1:]]
+        built = nexas.inject(data, rows, manifest, ok, source_name="a.bin")
+        self.assertEqual(nexas.records(nexas.parse(built), F69)[0][0], ok[0])
+        for text in ["@v12345678@s4040「中文です」@n次", "@v12345678@s4040「@r中文@zhong です」@n次",
+                     "@v12345678@s4040「@r中文@zhong@です」@n次@n", "@v12345678x@s4040「@r中文@zhong@」"]:
+            with self.subTest(text=text), self.assertRaises(FormatError):
+                nexas.inject(data, rows, manifest, [dict(rows[0], message=text), *rows[1:]],
+                             source_name="a.bin")
+
+
+class NexasPacklistTests(unittest.TestCase):
+    def test_parse_packlist_layout(self):
+        names = [("Update2", 0), ("Update", 0), ("Config", 1), ("Script", 1), ("Voice", 2)]
+        self.assertEqual(parse_packlist(packlist(names)), [n for n, _ in names])
+        for bad in [b"", packlist([]), packlist(names)[:-1], packlist([("Bad/Name", 0)]),
+                    packlist([("Script", 1), ("script", 1)])]:
+            with self.subTest(raw=bad[-12:]), self.assertRaises(FormatError):
+                parse_packlist(bad)
+
+    def test_default_archives_from_packlist_present_on_disk(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            listing = packlist([("Update3", 0), ("Update2", 0), ("Update", 0), ("Config", 1),
+                                ("Script", 1), ("Voice", 2)])
+            (root / "Config.pac").write_bytes(archive([("packlist.dat", listing)]))
+            (root / "Script.pac").write_bytes(archive([("scene.bin", message_bin())]))
+            (root / "Update3.pac").write_bytes(archive([("scene.bin", message_bin("新")),
+                                                        ("packlist.dat", listing)]))
+            (root / "Voice.pac").write_bytes(archive([("a.ogg", b"x")]))
+            chosen, evidence = default_archives(root)
+            self.assertEqual(chosen, ["Script.pac", "Update3.pac"])
+            self.assertEqual(evidence["absent_on_disk"], ["Update2.pac", "Update.pac"])
+            (root / "Update3.pac").write_bytes(archive([("packlist.dat", packlist([("Script", 1)]))]))
+            with self.assertRaisesRegex(FormatError, "differs from Config.pac"):
+                default_archives(root)
+            (root / "Config.pac").unlink()
+            with self.assertRaisesRegex(FormatError, "--archives"):
+                default_archives(root)
+
+
+class NexasBlockedMemberTests(unittest.TestCase):
+    def test_blocked_member_partial_verbatim_and_refused_on_pack(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            broken = func69_bin("@Hbroken本文")
+            base = archive([("good.bin", func69_bin()), ("bad.bin", broken)])
+            (root / "Script.pac").write_bytes(base)
+            out = root / "extract"
+            report = extract(root, out, ["Script.pac"], verify_edits=True)
+            self.assertEqual(report["status"], "partial")
+            self.assertEqual(report["profile"], F69.profile)
+            self.assertEqual([b["member"] for b in report["blocked"]], ["bad.bin"])
+            self.assertIn("Script.pac:bad.bin", report["blocked"][0]["reason"])
+            self.assertIn("command 2", report["blocked"][0]["reason"])
+            self.assertEqual(report["edit_check"]["members"], 1)
+            self.assertTrue(report["delivery"]["translation_notes"])
+            self.assertEqual(sorted(p.name for p in (out / "gt_input").iterdir()), ["good.json"])
+            rebuilt = (out / "roundtrip/Script.pac").read_bytes()
+            self.assertEqual(rebuilt, pac.rebuild(io.BytesIO(base), pac.read_index(io.BytesIO(base)), {}))
+            idx = pac.read_index(io.BytesIO(rebuilt))
+            self.assertEqual(pac.read_member(io.BytesIO(rebuilt), idx, idx.entries[1]), broken)
+            (out / "gt_output/bad.json").write_bytes(dump_rows([{"message": "x"}]))
+            with self.assertRaisesRegex(FormatError, "blocked"):
+                pack(out, root / "packed")
+            (out / "gt_output/bad.json").unlink()
+            rows = nexas.records(nexas.parse(func69_bin()), F69)[0]
+            translated = [dict(r, message=r["message"] + "訳") for r in rows]
+            (out / "gt_output/good.json").write_bytes(dump_rows(translated))
+            result = pack(out, root / "packed")
+            self.assertEqual(result["copied_blocked_scripts"], ["bad.bin"])
+            built = (root / "packed/Script.pac").read_bytes()
+            idx = pac.read_index(io.BytesIO(built))
+            self.assertEqual(nexas.records(nexas.parse(pac.read_member(io.BytesIO(built), idx, idx.entries[0])),
+                                           F69)[0], translated)
+            self.assertEqual(pac.read_member(io.BytesIO(built), idx, idx.entries[1]), broken)
+
+    def test_no_message_table_is_failure_not_empty_export(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            odd = bin_file([(0, 1), (5, 1), (0, 2), (5, 1), (7, 0x40077)], ["", "名", "本文"])
+            (root / "Script.pac").write_bytes(archive([("a.bin", odd)]))
+            with self.assertRaisesRegex(FormatError, "no single NeXAS FUNC dialect"):
+                extract(root, root / "out", ["Script.pac"])
+            self.assertFalse((root / "out").exists())
+
+    def test_cli_exit_codes(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            (root / "Script.pac").write_bytes(archive([("good.bin", func69_bin()),
+                                                       ("bad.bin", func69_bin("@Hx本文"))]))
+            for argv, code in [(["extract", str(root), "--output", str(root / "a"), "--archives", "Script.pac"], 1),
+                               (["extract", str(root), "--output", str(root / "b"), "--archives", "Missing.pac"], 2),
+                               (["extract", str(root), "--output", str(root / "c")], 2)]:
+                with self.subTest(argv=argv), patch("sys.argv", ["nexas_extract", *argv]), \
+                        patch("sys.stdout", io.StringIO()), patch("sys.stderr", io.StringIO()) as err:
+                    with self.assertRaises(SystemExit) as caught:
+                        main()
+                    self.assertEqual(caught.exception.code, code)
+                    if code == 2:
+                        self.assertIn("error: extract:", err.getvalue())
 
 
 if __name__ == "__main__":
